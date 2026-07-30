@@ -2,6 +2,8 @@
   "name": "@pulse-rn/desktop",
   "version": "0.1.0",
   "description": "PulseRN Electron desktop debugger.",
+  "author": "PulseRN contributors",
+  "desktopName": "dev.pulsern.desktop.desktop",
   "license": "MIT",
   "private": true,
   "type": "module",
@@ -9,7 +11,13 @@
   "scripts": {
     "build": "electron-vite build",
     "dev": "electron-vite dev",
+    "dist": "pnpm build && electron-builder",
+    "dist:linux": "pnpm build && electron-builder --linux AppImage deb --x64",
+    "dist:mac": "pnpm build && electron-builder --mac dmg --universal",
+    "dist:win:arm64": "pnpm build && electron-builder --win nsis --arm64",
+    "dist:win:x64": "pnpm build && electron-builder --win nsis --x64",
     "lint": "eslint src",
+    "pack": "pnpm build && electron-builder --dir",
     "preview": "electron-vite preview",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit"
@@ -30,7 +38,102 @@
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^4.7.0",
     "electron": "^37.2.6",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^4.0.0",
     "vite": "^7.1.1"
+  },
+  "build": {
+    "appId": "dev.pulsern.desktop",
+    "productName": "PulseRN",
+    "copyright": "Copyright © 2026 PulseRN contributors",
+    "asar": true,
+    "directories": {
+      "buildResources": "resources",
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "resources/pulse-rn-app-icon-dark.png",
+      "resources/pulse-rn-app-icon-light.png",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "icon": "resources/icon.icns",
+      "identity": null,
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "artifactName": "PulseRN-${version}-mac-universal.${ext}"
+    },
+    "dmg": {
+      "title": "PulseRN ${version}",
+      "icon": "resources/icon.icns",
+      "backgroundColor": "#0b0d12",
+      "contents": [
+        {
+          "x": 140,
+          "y": 220
+        },
+        {
+          "x": 400,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    },
+    "win": {
+      "icon": "resources/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "artifactName": "PulseRN-${version}-windows-${arch}-setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "PulseRN"
+    },
+    "linux": {
+      "category": "Development",
+      "executableName": "pulsern",
+      "icon": "resources/pulse-rn-app-icon-light.png",
+      "maintainer": "PulseRN contributors",
+      "synopsis": "React Native desktop debugger",
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "PulseRN-${version}-linux-${arch}.${ext}"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "maahibhama",
+      "repo": "PulseRN"
+    }
   }
 }

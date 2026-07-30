@@ -7,6 +7,7 @@ coverage/
 .expo-export-check/
 apps/example-react-native/android/
 apps/example-react-native/ios/
+apps/desktop/release/
 .DS_Store
 *.log
 *.tsbuildinfo
