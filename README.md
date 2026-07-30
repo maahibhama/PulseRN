@@ -2,7 +2,7 @@
 
 PulseRN is an open-source desktop debugging foundation for React Native. Its central idea is a unified, chronological timeline that will correlate app interactions, navigation, Redux, network, rendering, performance, and errors.
 
-> Status: Phase 7. The foundation, Console, Network, Redux, Navigation, Performance, and Storage inspectors are working. Dedicated error instrumentation is scheduled for the next phase.
+> Status: Phase 8. The Foundation, Console, Network, Redux, Navigation, Performance, Storage, and Errors inspectors are working.
 
 ## What works today
 
@@ -23,7 +23,8 @@ PulseRN is an open-source desktop debugging foundation for React Native. Its cen
 - AsyncStorage and MMKV inspection with provider discovery, key search/read/refresh, JSON redaction, type-preserving MMKV edits, and explicitly confirmed update/delete operations
 - Error inspection for uncaught JavaScript failures, unhandled rejections, React error boundaries, network failures, and SDK errors with stack traces and 20 preceding timeline events
 - Persistent desktop settings for system/light/dark themes, interface density, timeline ordering, launch at login, and macOS background behavior
-- Expo-based React Native integration example
+- Compact, rounded light and dark application icons that follow the selected theme, including live macOS system-theme changes
+- Expo development-build example covering Console, Network, Redux, Navigation, Performance, AsyncStorage, MMKV, and Errors
 
 ![Screenshot placeholder](docs/assets/screenshot-placeholder.svg)
 
@@ -48,9 +49,16 @@ pnpm --filter @pulse-rn/example-react-native ios
 pnpm --filter @pulse-rn/example-react-native android
 ```
 
-This first run generates and installs a custom Expo development build containing MMKV and its
-Nitro native module. Expo Go cannot run this example. After the development app is installed, use
-`pnpm --filter @pulse-rn/example-react-native dev` for normal Metro restarts.
+The first `ios` or `android` run generates and installs a custom Expo development build containing
+MMKV and its Nitro native module. Expo Go cannot run this example. After the development app is
+installed, use the following command for normal Metro restarts:
+
+```bash
+pnpm --filter @pulse-rn/example-react-native dev
+```
+
+If native dependencies change, rebuild the development app with the `ios` or `android` command
+instead of only restarting Metro.
 
 Use `10.0.2.2` for the Android emulator, `127.0.0.1` for the iOS simulator, and the desktop machine's LAN address for a physical device:
 
@@ -86,12 +94,25 @@ if (__DEV__) {
 
 See [SDK integration](docs/SDK-INTEGRATION.md), [architecture](docs/ARCHITECTURE.md), and the [roadmap](docs/ROADMAP.md).
 
+## Desktop preferences
+
+Open **Settings** in the Electron sidebar to configure:
+
+- System, dark, or light appearance
+- Comfortable or compact interface density
+- Newest-first or oldest-first timeline ordering
+- Launch at login on packaged macOS builds
+- Whether closing the window keeps PulseRN running in the background
+
+Appearance changes apply immediately to the debugger, header branding, window icon, and macOS Dock
+icon. With **System** selected, PulseRN follows macOS automatically.
+
 ## Known limitations
 
 - The transport only accepts validated JSON and has no authentication UI.
 - The UI keeps the latest 2,000 events in memory; database pagination and list virtualization arrive before high-volume instrumentation.
 - The example uses Expo prebuild; generated `ios/` and `android/` projects stay local and are not committed.
-- Session export/import and later inspection panels are not implemented yet.
+- Session export/import is not implemented yet.
 - Console fields, network headers, URL query parameters, and structured request/response fields are redacted before transmission.
 - Performance FPS, event-loop, and SDK app-start metrics are JavaScript-derived approximations, not native CPU or UI-thread profiling.
 
