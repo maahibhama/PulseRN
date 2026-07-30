@@ -1,4 +1,4 @@
-const { withDangerousMod } = require('@expo/config-plugins');
+const { withDangerousMod } = require('expo/config-plugins');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -23,9 +23,9 @@ module.exports = function withFmtXcode26Fix(config) {
       const podfilePath = path.join(nextConfig.modRequest.platformProjectRoot, 'Podfile');
       const podfile = fs.readFileSync(podfilePath, 'utf8');
       if (podfile.includes(MARKER)) return nextConfig;
-      const anchor = '    # This is necessary for Xcode 14';
+      const anchor = '    react_native_post_install(';
       if (!podfile.includes(anchor)) {
-        throw new Error('PulseRN could not find the expected Expo Podfile post_install anchor.');
+        throw new Error('PulseRN could not find the Expo React Native post-install hook.');
       }
       fs.writeFileSync(podfilePath, podfile.replace(anchor, `${PATCH}${anchor}`));
       return nextConfig;
