@@ -24,7 +24,7 @@ PulseRN is an open-source desktop debugging foundation for React Native. Its cen
 - Error inspection for uncaught JavaScript failures, unhandled rejections, React error boundaries, network failures, and SDK errors with stack traces and 20 preceding timeline events
 - Persistent desktop settings for system/light/dark themes, interface density, timeline ordering, launch at login, and macOS background behavior
 - Compact, rounded light and dark application icons that follow the selected theme, including live macOS system-theme changes
-- Expo development-build example covering Console, Network, Redux, Navigation, Performance, AsyncStorage, MMKV, and Errors
+- Expo development-build and bare React Native Community CLI examples covering Console, Network, Redux, Navigation, Performance, AsyncStorage, MMKV, and Errors
 
 ![Screenshot placeholder](docs/assets/screenshot-placeholder.svg)
 
@@ -44,9 +44,15 @@ pnpm dev:desktop
 In a second terminal:
 
 ```bash
+# Expo development build
 pnpm --filter @pulse-rn/example-react-native ios
 # or
 pnpm --filter @pulse-rn/example-react-native android
+
+# Bare React Native Community CLI
+pnpm --filter @pulse-rn/example-react-native-cli ios
+# or
+pnpm --filter @pulse-rn/example-react-native-cli android
 ```
 
 The first `ios` or `android` run generates and installs a custom Expo development build containing
@@ -111,7 +117,7 @@ icon. With **System** selected, PulseRN follows macOS automatically.
 
 - The transport only accepts validated JSON and has no authentication UI.
 - The UI keeps the latest 2,000 events in memory; database pagination and list virtualization arrive before high-volume instrumentation.
-- The example uses Expo prebuild; generated `ios/` and `android/` projects stay local and are not committed.
+- The Expo example uses prebuild; the Community CLI example includes committed native iOS and Android projects.
 - Session export/import is not implemented yet.
 - Console fields, network headers, URL query parameters, and structured request/response fields are redacted before transmission.
 - Performance FPS, event-loop, and SDK app-start metrics are JavaScript-derived approximations, not native CPU or UI-thread profiling.
