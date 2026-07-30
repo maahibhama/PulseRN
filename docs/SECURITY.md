@@ -10,6 +10,8 @@ Please report vulnerabilities privately to the repository maintainers. Do not op
 - Renderer uses `contextIsolation: true`, `nodeIntegration: false`, and `sandbox: true`.
 - Preload exposes two snapshot operations, not raw Electron IPC or Node APIs.
 - Network and IPC messages are treated as unknown and validated.
+- Desktop preference reads and updates use a fixed schema; settings are stored with user-only file
+  permissions under Electron `userData`.
 - Frames, batches, queues, and event payloads are bounded.
 - Sensitive object fields are redacted before queueing/transmission.
 - Sensitive network headers and URL query parameters are redacted before transmission.

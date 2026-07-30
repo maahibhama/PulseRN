@@ -7,7 +7,10 @@ import { NetworkPanel } from './NetworkPanel.js';
 import { NavigationPanel } from './NavigationPanel.js';
 import { PerformancePanel } from './PerformancePanel.js';
 import { ReduxPanel } from './ReduxPanel.js';
+import { SettingsPanel } from './SettingsPanel.js';
 import { StoragePanel } from './StoragePanel.js';
+import darkAppIcon from '../../../resources/pulse-rn-app-icon-dark.png';
+import lightAppIcon from '../../../resources/pulse-rn-app-icon-light.png';
 import { deviceLabel, findSelectedEvent, useDesktopStore } from './store.js';
 
 type ViewName =
@@ -18,7 +21,8 @@ type ViewName =
   | 'Navigation'
   | 'Performance'
   | 'Storage'
-  | 'Errors';
+  | 'Errors'
+  | 'Settings';
 
 const navItems: { name: ViewName; icon: string; available: boolean }[] = [
   { name: 'Timeline', icon: '⌁', available: true },
@@ -29,6 +33,7 @@ const navItems: { name: ViewName; icon: string; available: boolean }[] = [
   { name: 'Performance', icon: '⌁', available: true },
   { name: 'Storage', icon: '▤', available: true },
   { name: 'Errors', icon: '△', available: true },
+  { name: 'Settings', icon: '⚙', available: true },
 ];
 
 function formatTime(timestamp: number): string {
@@ -45,10 +50,12 @@ function TimelinePanel({
   events,
   selectedEventId,
   onSelect,
+  order,
 }: {
   events: DevToolEventEnvelope[];
   selectedEventId?: string;
   onSelect(id: string): void;
+  order: 'newest' | 'oldest';
 }) {
   const [paused, setPaused] = useState(false);
   const [visibleEvents, setVisibleEvents] = useState(events);
@@ -87,7 +94,7 @@ function TimelinePanel({
             <code>ws://127.0.0.1:9090</code>
           </div>
         ) : (
-          [...displayed].reverse().map((event) => (
+          (order === 'newest' ? [...displayed].reverse() : displayed).map((event) => (
             <button
               className={event.id === selectedEventId ? 'event selected' : 'event'}
               key={event.id}
@@ -123,8 +130,12 @@ function UpcomingPanel({ view }: { view: ViewName }) {
 }
 
 export function App() {
-  const { devices, events, selectedEventId, setSnapshot, selectEvent } = useDesktopStore();
+  const { devices, events, selectedEventId, settings, setSnapshot, setSettings, selectEvent } =
+    useDesktopStore();
   const [activeView, setActiveView] = useState<ViewName>('Timeline');
+  const [systemTheme, setSystemTheme] = useState<'dark' | 'light'>(() =>
+    window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
+  );
   const selected = findSelectedEvent(events, selectedEventId);
   const desktopApi = window.pulseRN;
 
@@ -133,6 +144,25 @@ export function App() {
     void desktopApi.getSnapshot().then(setSnapshot);
     return desktopApi.onSnapshot(setSnapshot);
   }, [desktopApi, setSnapshot]);
+
+  useEffect(() => {
+    if (!desktopApi) return;
+    void desktopApi.getSettings().then(setSettings);
+    return desktopApi.onSettings(setSettings);
+  }, [desktopApi, setSettings]);
+
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const update = () => setSystemTheme(media.matches ? 'dark' : 'light');
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+
+  const resolvedTheme = settings.theme === 'system' ? systemTheme : settings.theme;
+  useEffect(() => {
+    document.documentElement.dataset['theme'] = resolvedTheme;
+    document.documentElement.dataset['density'] = settings.density;
+  }, [resolvedTheme, settings.density]);
 
   if (!desktopApi) {
     return (
@@ -150,7 +180,8 @@ export function App() {
     <div className="shell">
       <header className="topbar">
         <div className="brand">
-          <span className="pulse">◉</span> PulseRN
+          <img alt="" src={resolvedTheme === 'light' ? lightAppIcon : darkAppIcon} />
+          <span>PulseRN</span>
         </div>
         <div className="device-pill">
           <span className={devices.length ? 'status online' : 'status'} />
@@ -181,7 +212,12 @@ export function App() {
         </div>
       </aside>
       {activeView === 'Timeline' ? (
-        <TimelinePanel events={events} selectedEventId={selectedEventId} onSelect={selectEvent} />
+        <TimelinePanel
+          events={events}
+          order={settings.timelineOrder}
+          selectedEventId={selectedEventId}
+          onSelect={selectEvent}
+        />
       ) : activeView === 'Console' ? (
         <ConsolePanel events={events} selectedEventId={selectedEventId} onSelect={selectEvent} />
       ) : activeView === 'Network' ? (
@@ -200,6 +236,12 @@ export function App() {
         <StoragePanel devices={devices} />
       ) : activeView === 'Errors' ? (
         <ErrorsPanel events={events} selectedEventId={selectedEventId} onSelect={selectEvent} />
+      ) : activeView === 'Settings' ? (
+        <SettingsPanel
+          resolvedTheme={resolvedTheme}
+          settings={settings}
+          onChange={async (patch) => setSettings(await desktopApi.updateSettings(patch))}
+        />
       ) : (
         <UpcomingPanel view={activeView} />
       )}
