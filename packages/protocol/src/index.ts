@@ -43,6 +43,37 @@ export const consoleLogPayloadSchema = z.object({
 });
 export type ConsoleLogPayload = z.infer<typeof consoleLogPayloadSchema>;
 
+export const networkHeadersSchema = z.record(z.string().max(100_000));
+export const networkBodySchema = z.object({
+  value: jsonValue,
+  size: z.number().int().nonnegative(),
+  truncated: z.boolean(),
+  contentType: z.string().max(1_024).optional(),
+});
+export const networkEventPayloadSchema = z.object({
+  requestId: identifier,
+  transport: z.enum(['fetch', 'xhr', 'axios']),
+  method: z.string().trim().min(1).max(32),
+  url: z.string().max(100_000),
+  query: z.record(z.union([z.string(), z.array(z.string())])),
+  requestHeaders: networkHeadersSchema,
+  requestBody: networkBodySchema.optional(),
+  status: z.number().int().min(0).max(999).optional(),
+  statusText: z.string().max(4_096).optional(),
+  responseHeaders: networkHeadersSchema.optional(),
+  responseBody: networkBodySchema.optional(),
+  startedAt: z.number().finite().nonnegative(),
+  endedAt: z.number().finite().nonnegative(),
+  duration: z.number().finite().nonnegative(),
+  error: z
+    .object({
+      name: z.string().max(1_024),
+      message: z.string().max(100_000),
+    })
+    .optional(),
+});
+export type NetworkEventPayload = z.infer<typeof networkEventPayloadSchema>;
+
 export const eventEnvelopeSchema = z
   .object({
     id: identifier,
@@ -59,12 +90,17 @@ export const eventEnvelopeSchema = z
     parentId: identifier.optional(),
   })
   .superRefine((event, context) => {
-    if (event.category !== 'console') return;
-    if (!consoleLogPayloadSchema.safeParse(event.payload).success) {
+    const payloadSchema =
+      event.category === 'console'
+        ? consoleLogPayloadSchema
+        : event.category === 'network'
+          ? networkEventPayloadSchema
+          : undefined;
+    if (payloadSchema && !payloadSchema.safeParse(event.payload).success) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['payload'],
-        message: 'Invalid console event payload',
+        message: `Invalid ${event.category} event payload`,
       });
     }
   });

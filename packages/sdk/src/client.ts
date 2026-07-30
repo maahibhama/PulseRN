@@ -5,10 +5,15 @@ import {
   type DevToolEventEnvelope,
   type EventBatch,
   type JsonValue,
+  type NetworkEventPayload,
 } from '@pulse-rn/protocol';
 import { createId, redact } from '@pulse-rn/shared';
+import { installAxiosInterceptor, type AxiosInstanceLike } from './axios-instrumentation';
 import { installConsoleInterceptor } from './console-instrumentation';
+import { installFetchInterceptor } from './fetch-instrumentation';
+import type { NetworkCaptureOptions } from './network-utils';
 import { formatConsoleMessage } from './serialization';
+import { installXhrInterceptor } from './xhr-instrumentation';
 import type { DevToolConfig, TrackEventInput, WebSocketFactory, WebSocketLike } from './types.js';
 
 const SDK_VERSION = '0.1.0';
@@ -50,6 +55,7 @@ export class DevToolClient {
   private manuallyClosed = false;
   private droppedEvents = 0;
   private restoreConsole?: () => void;
+  private networkRestores: (() => void)[] = [];
   readonly deviceId: string;
   readonly sessionId: string;
   readonly appId: string;
@@ -96,6 +102,24 @@ export class DevToolClient {
         { captureStackTrace: this.config.captureConsoleStackTrace ?? true },
       );
     }
+    if (this.config.enableNetwork && this.networkRestores.length === 0) {
+      const emit = (payload: NetworkEventPayload) => {
+        this.track({ category: 'network', type: 'network.request', payload });
+      };
+      if (typeof globalThis.fetch === 'function') {
+        this.networkRestores.push(installFetchInterceptor(globalThis, emit, this.networkOptions()));
+      }
+      const xhr = (globalThis as { XMLHttpRequest?: unknown }).XMLHttpRequest;
+      if (typeof xhr === 'function') {
+        this.networkRestores.push(
+          installXhrInterceptor(
+            xhr as Parameters<typeof installXhrInterceptor>[0],
+            emit,
+            this.networkOptions(),
+          ),
+        );
+      }
+    }
     const scheme = this.config.secure ? 'wss' : 'ws';
     this.socket = this.factory(`${scheme}://${this.config.host}:${this.config.port}`);
     this.socket.onopen = () => this.sendHello();
@@ -112,6 +136,7 @@ export class DevToolClient {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.restoreConsole?.();
     this.restoreConsole = undefined;
+    for (const restore of this.networkRestores.splice(0)) restore();
     this.socket?.close();
     this.socket = undefined;
   }
@@ -164,6 +189,27 @@ export class DevToolClient {
       queuedEvents: this.queue.length,
       droppedEvents: this.droppedEvents,
       connected: this.negotiated,
+    };
+  }
+
+  attachAxios(instance: AxiosInstanceLike): () => void {
+    return installAxiosInterceptor(
+      instance,
+      (payload) => this.track({ category: 'network', type: 'network.request', payload }),
+      this.networkOptions(),
+    );
+  }
+
+  private networkOptions(): Partial<NetworkCaptureOptions> {
+    return {
+      captureRequestBodies: this.config.captureRequestBodies ?? true,
+      captureResponseBodies: this.config.captureResponseBodies ?? true,
+      maxBodyBytes: this.config.maxNetworkBodyBytes ?? 100 * 1024,
+      redactedHeaders: this.config.redaction?.headers ?? [],
+      redactedQueryParameters: [
+        ...(this.config.redaction?.fields ?? []),
+        ...(this.config.redaction?.queryParameters ?? []),
+      ],
     };
   }
 

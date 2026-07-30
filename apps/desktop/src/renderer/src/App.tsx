@@ -2,6 +2,7 @@ import type { DevToolEventEnvelope } from '@pulse-rn/protocol';
 import { useEffect, useState } from 'react';
 import { ConsolePanel } from './ConsolePanel.js';
 import { EventDetails } from './EventDetails.js';
+import { NetworkPanel } from './NetworkPanel.js';
 import { deviceLabel, findSelectedEvent, useDesktopStore } from './store.js';
 
 type ViewName =
@@ -17,7 +18,7 @@ type ViewName =
 const navItems: { name: ViewName; icon: string; available: boolean }[] = [
   { name: 'Timeline', icon: '⌁', available: true },
   { name: 'Console', icon: '>_', available: true },
-  { name: 'Network', icon: '⇄', available: false },
+  { name: 'Network', icon: '⇄', available: true },
   { name: 'Redux', icon: '◇', available: false },
   { name: 'Navigation', icon: '→', available: false },
   { name: 'Performance', icon: '⌁', available: false },
@@ -154,7 +155,7 @@ export function App() {
               ? deviceLabel(devices[0]!)
               : `${devices.length} devices connected`}
         </div>
-        <div className="phase-pill">Phase 2 · Console</div>
+        <div className="phase-pill">Phase 3 · Network</div>
       </header>
       <aside className="sidebar">
         <div className="section-label">Inspect</div>
@@ -178,6 +179,8 @@ export function App() {
         <TimelinePanel events={events} selectedEventId={selectedEventId} onSelect={selectEvent} />
       ) : activeView === 'Console' ? (
         <ConsolePanel events={events} selectedEventId={selectedEventId} onSelect={selectEvent} />
+      ) : activeView === 'Network' ? (
+        <NetworkPanel events={events} selectedEventId={selectedEventId} onSelect={selectEvent} />
       ) : (
         <UpcomingPanel view={activeView} />
       )}

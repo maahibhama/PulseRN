@@ -3,6 +3,7 @@ import {
   PROTOCOL_VERSION,
   consoleLogPayloadSchema,
   eventEnvelopeSchema,
+  networkEventPayloadSchema,
   negotiateProtocolVersion,
   parseClientMessage,
 } from '../src/index.js';
@@ -33,5 +34,23 @@ describe('protocol', () => {
         message: '',
       }).success,
     ).toBe(false);
+  });
+
+  it('validates completed network requests', () => {
+    expect(
+      networkEventPayloadSchema.safeParse({
+        requestId: 'request-1',
+        transport: 'fetch',
+        method: 'GET',
+        url: 'https://example.com/users',
+        query: {},
+        requestHeaders: {},
+        status: 200,
+        responseHeaders: { 'content-type': 'application/json' },
+        startedAt: 100,
+        endedAt: 140,
+        duration: 40,
+      }).success,
+    ).toBe(true);
   });
 });

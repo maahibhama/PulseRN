@@ -18,5 +18,7 @@ export const ReactNativeDevTool = {
 };
 
 export { DevToolClient };
+export { installAxiosInterceptor } from './axios-instrumentation.js';
+export type { AxiosInstanceLike } from './axios-instrumentation.js';
 export { serializeConsoleValue } from './serialization.js';
 export type { DevToolConfig, TrackEventInput, WebSocketFactory, WebSocketLike } from './types.js';

@@ -11,6 +11,7 @@ const host =
 
 export default function HomeScreen() {
   const [sent, setSent] = useState(0);
+  const [networkSent, setNetworkSent] = useState(0);
 
   useEffect(() => {
     if (!__DEV__) return;
@@ -31,6 +32,10 @@ export default function HomeScreen() {
       },
       enableConsole: true,
       captureConsoleStackTrace: true,
+      enableNetwork: true,
+      captureRequestBodies: true,
+      captureResponseBodies: true,
+      maxNetworkBodyBytes: 100 * 1024,
     }).connect();
     client.track({
       category: 'system',
@@ -60,6 +65,30 @@ export default function HomeScreen() {
     setSent((value) => value + 1);
   };
 
+  const sendNetworkDemo = async () => {
+    const attempt = networkSent + 1;
+    setNetworkSent(attempt);
+    try {
+      await fetch(
+        `https://jsonplaceholder.typicode.com/posts/1?token=demo-secret&attempt=${attempt}`,
+      );
+      await fetch('https://jsonplaceholder.typicode.com/posts', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: 'Bearer demo-secret',
+        },
+        body: JSON.stringify({
+          title: 'PulseRN network demo',
+          token: 'request-secret',
+          attempt,
+        }),
+      });
+    } catch (error) {
+      console.warn('Network demo failed', error);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="light" />
@@ -71,6 +100,10 @@ export default function HomeScreen() {
           <Text style={styles.buttonText}>Emit console demo</Text>
         </Pressable>
         <Text style={styles.counter}>{sent} console demos emitted</Text>
+        <Pressable style={[styles.button, styles.secondaryButton]} onPress={sendNetworkDemo}>
+          <Text style={styles.buttonText}>Run network demo</Text>
+        </Pressable>
+        <Text style={styles.counter}>{networkSent} network demos requested</Text>
       </View>
     </SafeAreaView>
   );
@@ -85,4 +118,5 @@ const styles = StyleSheet.create({
   button: { alignItems: 'center', backgroundColor: '#745cff', borderRadius: 10, padding: 16 },
   buttonText: { color: '#ffffff', fontSize: 15, fontWeight: '700' },
   counter: { color: '#687085', marginTop: 16, textAlign: 'center' },
+  secondaryButton: { backgroundColor: '#247b65', marginTop: 24 },
 });

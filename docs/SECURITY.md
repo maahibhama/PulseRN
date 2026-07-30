@@ -12,6 +12,8 @@ Please report vulnerabilities privately to the repository maintainers. Do not op
 - Network and IPC messages are treated as unknown and validated.
 - Frames, batches, queues, and event payloads are bounded.
 - Sensitive object fields are redacted before queueing/transmission.
+- Sensitive network headers and URL query parameters are redacted before transmission.
+- Binary bodies are excluded and captured text/JSON bodies are size-limited.
 - No `eval`, remote content, navigation, or arbitrary window opening is allowed.
 
-Header and URL redaction configuration is accepted for forward compatibility but will only be applied when Phase 3 adds network interception. Do not bind the server to a LAN interface until authentication and origin controls are implemented.
+Do not bind the server to a LAN interface until authentication and origin controls are implemented.
