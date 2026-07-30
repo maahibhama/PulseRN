@@ -78,17 +78,30 @@ Before the first release, create or claim the `@pulse-rn` npm scope and configur
 Publishing for the `maahibhama/PulseRN` repository, the `release-sdk.yml` workflow, and the `npm`
 GitHub environment.
 
-Prepare and validate a release:
+Prepare, validate, commit, tag, and push a release with one command:
 
 ```bash
-pnpm --filter @pulse-rn/sdk build
-pnpm release:verify:sdk sdk-v0.2.0
-git add packages/sdk package.json pnpm-lock.yaml .github/workflows/release-sdk.yml
-git commit -m "feat(sdk): publish the single-entry React Native SDK"
-git tag -a sdk-v0.2.0 -m "PulseRN SDK 0.2.0"
-git push origin HEAD
-git push origin sdk-v0.2.0
+pnpm release:sdk 0.2.1
 ```
+
+The script requires a clean working tree, updates the package and runtime SDK versions, refreshes the
+lockfile, validates the packed npm artifact, runs repository checks, creates the release commit, and
+pushes the current branch and `sdk-vX.Y.Z` tag.
+
+Preview without changing anything:
+
+```bash
+pnpm release:sdk 0.2.1 --dry-run
+```
+
+To recover a tag that failed before its npm version was published:
+
+```bash
+pnpm release:sdk 0.2.1 --replace-tag
+```
+
+Tag replacement is rejected if that version already exists on npm. Use `--yes` for a non-interactive
+run and reserve `--skip-checks` for emergencies because the packed-package validator always runs.
 
 Stable tags publish to npm's `latest` channel. Tags containing a prerelease suffix, such as
 `sdk-v0.2.0-beta.1`, publish to `next`. The workflow rejects a tag that does not exactly match the
