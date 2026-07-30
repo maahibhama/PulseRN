@@ -1,4 +1,4 @@
-import type { JsonValue, ReduxEventPayload, ReduxStateDiff } from '@pulse-rn/protocol';
+import type { JsonValue, ReduxEventPayload, ReduxStateDiff } from './protocol-types.js';
 import { redact } from '@pulse-rn/shared';
 
 export interface ReduxTrackTarget {

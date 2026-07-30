@@ -36,8 +36,8 @@ SQLite writes use WAL mode and batched transactions. A small in-memory projectio
 - `packages/protocol`: message types, schemas, negotiation, and JSON decoding boundary.
 - `packages/sdk`: development-only transport client and event queue.
 - `packages/shared`: runtime-neutral IDs and recursive redaction.
-- `packages/redux-plugin`: Redux/RTK middleware and state-diff capture.
-- `packages/navigation-plugin`: React Navigation lifecycle and manual route instrumentation.
+- `packages/sdk`: Single-entry React Native client, Redux/RTK middleware, navigation tracking,
+  storage adapters, instrumentation, and the bundled client-side protocol runtime.
 
 ## Data flow
 

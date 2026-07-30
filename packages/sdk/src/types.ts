@@ -1,4 +1,4 @@
-import type { DeviceInfo, DevToolEventCategory, JsonValue } from '@pulse-rn/protocol';
+import type { DeviceInfo, DevToolEventCategory, JsonValue } from './protocol-types.js';
 
 export interface DevToolConfig {
   host?: string;

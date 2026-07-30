@@ -1,4 +1,4 @@
-import type { NetworkEventPayload } from '@pulse-rn/protocol';
+import type { NetworkEventPayload } from './protocol-types.js';
 import { createId } from '@pulse-rn/shared';
 import {
   captureTextBody,
@@ -51,7 +51,7 @@ export function installFetchInterceptor(
         normalizeHeaders(response.headers),
         options.redactedHeaders,
       );
-      const completed: Omit<NetworkEventPayload, 'responseBody'> = {
+      const completed: NetworkEventPayload = {
         requestId,
         transport: 'fetch',
         method,

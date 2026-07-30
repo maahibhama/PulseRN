@@ -1,4 +1,4 @@
-import type { NetworkEventPayload } from '@pulse-rn/protocol';
+import type { NetworkEventPayload } from './protocol-types.js';
 import { createId } from '@pulse-rn/shared';
 import {
   captureTextBody,

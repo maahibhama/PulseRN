@@ -1,4 +1,4 @@
-import type { JsonValue } from '@pulse-rn/protocol';
+import type { JsonValue } from './protocol-types.js';
 
 export interface SerializationOptions {
   maxDepth?: number;

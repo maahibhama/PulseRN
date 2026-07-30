@@ -134,8 +134,18 @@ pnpm lint
 
 ## SDK setup
 
+Install one package:
+
+```bash
+npm install @pulse-rn/sdk
+```
+
 ```ts
-import { ReactNativeDevTool } from '@pulse-rn/sdk';
+import {
+  createDevToolMiddleware,
+  createNavigationTracker,
+  ReactNativeDevTool,
+} from '@pulse-rn/sdk';
 
 if (__DEV__) {
   ReactNativeDevTool.configure({

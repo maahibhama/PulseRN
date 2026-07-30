@@ -4,11 +4,14 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ReactNativeDevTool } from '@pulse-rn/sdk';
-import { createAsyncStorageProvider, createMMKVStorageProvider } from '@pulse-rn/sdk';
+import {
+  createAsyncStorageProvider,
+  createDevToolMiddleware,
+  createMMKVStorageProvider,
+  ReactNativeDevTool,
+} from '@pulse-rn/sdk';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createMMKV } from 'react-native-mmkv';
-import { createDevToolMiddleware } from '@pulse-rn/redux-plugin';
 import { applyMiddleware, createStore } from 'redux';
 import { navigationTracker } from '../navigation';
 import { runLineDebuggerDemo, runUnhandledDebuggerDemo } from '../debugger-demo';

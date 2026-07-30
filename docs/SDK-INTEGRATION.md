@@ -1,6 +1,13 @@
 # SDK integration
 
-Install `@pulse-rn/sdk` in a React Native CLI app or Expo development build and configure it once during development startup.
+Install the single PulseRN package in a React Native CLI app or Expo development build:
+
+```bash
+npm install @pulse-rn/sdk
+```
+
+All PulseRN APIs are exported from `@pulse-rn/sdk`; there are no separate Redux, navigation, or
+storage packages. Configure it once during development startup.
 
 ```ts
 if (__DEV__) {
@@ -47,11 +54,10 @@ Call the returned function when disposing the Axios instance. Do not enable both
 
 ## Redux capture
 
-Install `@pulse-rn/redux-plugin` and add its middleware to Redux or Redux Toolkit:
+Add the SDK middleware to Redux or Redux Toolkit:
 
 ```ts
-import { createDevToolMiddleware } from '@pulse-rn/redux-plugin';
-import { ReactNativeDevTool } from '@pulse-rn/sdk';
+import { createDevToolMiddleware, ReactNativeDevTool } from '@pulse-rn/sdk';
 
 const pulseRNMiddleware = createDevToolMiddleware({
   client: ReactNativeDevTool,
@@ -70,9 +76,11 @@ dispatch without mutating actions or state and does not implement state replay o
 
 ## Navigation capture
 
-Install `@pulse-rn/navigation-plugin` and connect its tracker to React Navigation:
+Connect the SDK tracker to React Navigation:
 
 ```tsx
+import { createNavigationTracker, ReactNativeDevTool } from '@pulse-rn/sdk';
+
 const tracker = createNavigationTracker({
   client: ReactNativeDevTool,
   navigatorId: 'root',

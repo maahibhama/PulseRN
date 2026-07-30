@@ -1,5 +1,4 @@
-import { createNavigationTracker } from '@pulse-rn/navigation-plugin';
-import { ReactNativeDevTool } from '@pulse-rn/sdk';
+import { createNavigationTracker, ReactNativeDevTool } from '@pulse-rn/sdk';
 
 export const navigationTracker = createNavigationTracker({
   client: ReactNativeDevTool,

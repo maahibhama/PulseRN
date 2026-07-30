@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createNavigationTracker, getActiveRoute } from '../src/index.js';
+import { createNavigationTracker, getActiveRoute } from '../src/navigation.js';
 
 describe('navigation tracker', () => {
   it('finds the deepest active route', () => {

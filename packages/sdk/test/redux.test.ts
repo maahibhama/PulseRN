@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createDevToolMiddleware, diffStates } from '../src/index.js';
+import { createDevToolMiddleware, diffStates } from '../src/redux.js';
 
 describe('Redux middleware', () => {
   it('captures a redacted action, state transition, diff, and reducer duration', () => {
