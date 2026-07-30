@@ -3,15 +3,22 @@ name: Release desktop
 on:
   push:
     tags:
-      - "v[0-9]+.[0-9]+.[0-9]+"
-      - "v[0-9]+.[0-9]+.[0-9]+-*"
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-*'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing version tag to build and publish
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 env:
-  NODE_VERSION: "22"
-  PNPM_VERSION: "10.14.0"
+  NODE_VERSION: '22'
+  PNPM_VERSION: '10.14.0'
+  RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
 
 jobs:
   verify:
@@ -26,7 +33,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm release:verify "${GITHUB_REF_NAME}"
+      - run: pnpm release:verify "${RELEASE_TAG}"
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm lint
@@ -45,10 +52,11 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @pulse-rn/desktop build
+      - name: Build desktop and workspace dependencies
+        run: pnpm exec turbo run build --filter=@pulse-rn/desktop...
       - name: Package universal DMG
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: pnpm --filter @pulse-rn/desktop exec electron-builder --mac dmg --universal --publish never
       - name: Verify universal application
         run: |
@@ -57,7 +65,7 @@ jobs:
           echo "$architectures"
           grep -q "arm64" <<<"$architectures"
           grep -q "x86_64" <<<"$architectures"
-          test -f "apps/desktop/release/PulseRN-${GITHUB_REF_NAME#v}-mac-universal.dmg"
+          test -f "apps/desktop/release/PulseRN-${RELEASE_TAG#v}-mac-universal.dmg"
       - uses: actions/upload-artifact@v4
         with:
           name: desktop-macos
@@ -81,11 +89,12 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @pulse-rn/desktop build
+      - name: Build desktop and workspace dependencies
+        run: pnpm exec turbo run build --filter=@pulse-rn/desktop...
       - name: Package NSIS installer
         shell: bash
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: pnpm --filter @pulse-rn/desktop exec electron-builder --win nsis --${{ matrix.arch }} --publish never
       - name: Verify Windows architecture and artifact
         shell: pwsh
@@ -95,7 +104,7 @@ jobs:
             Select-Object -First 1
           if (-not $exe) { throw "Packaged PulseRN.exe was not found." }
           node scripts/verify-pe-architecture.mjs $exe.FullName "${{ matrix.arch }}"
-          $version = $env:GITHUB_REF_NAME.Substring(1)
+          $version = $env:RELEASE_TAG.Substring(1)
           $installer = "apps/desktop/release/PulseRN-$version-windows-${{ matrix.arch }}-setup.exe"
           if (-not (Test-Path $installer)) { throw "Missing $installer" }
       - uses: actions/upload-artifact@v4
@@ -117,12 +126,13 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @pulse-rn/desktop build
+      - name: Build desktop and workspace dependencies
+        run: pnpm exec turbo run build --filter=@pulse-rn/desktop...
       - name: Package AppImage and Debian installer
         run: pnpm --filter @pulse-rn/desktop exec electron-builder --linux AppImage deb --x64 --publish never
       - name: Verify Linux artifacts
         run: |
-          version="${GITHUB_REF_NAME#v}"
+          version="${RELEASE_TAG#v}"
           appimage="apps/desktop/release/PulseRN-${version}-linux-x64.AppImage"
           deb="apps/desktop/release/PulseRN-${version}-linux-x64.deb"
           test -x "$appimage"
@@ -151,7 +161,7 @@ jobs:
           merge-multiple: true
       - name: Verify release set and create checksums
         run: |
-          version="${GITHUB_REF_NAME#v}"
+          version="${RELEASE_TAG#v}"
           expected=(
             "PulseRN-${version}-mac-universal.dmg"
             "PulseRN-${version}-windows-x64-setup.exe"
@@ -172,11 +182,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           prerelease=()
-          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+          if [[ "$RELEASE_TAG" == *-* ]]; then
             prerelease=(--prerelease)
           fi
-          gh release create "$GITHUB_REF_NAME" release/* \
+          gh release create "$RELEASE_TAG" release/* \
             --repo "$GITHUB_REPOSITORY" \
-            --title "PulseRN ${GITHUB_REF_NAME#v}" \
+            --title "PulseRN ${RELEASE_TAG#v}" \
             --generate-notes \
             "${prerelease[@]}"
