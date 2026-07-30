@@ -2,7 +2,9 @@ cask "pulsern" do
   version "0.1.2"
   sha256 :no_check
 
-  url "https://github.com/maahibhama/PulseRN/releases/download/v#{version}/PulseRN-#{version}-mac-universal.dmg"
+  arch arm: "arm64", intel: "x64"
+
+  url "https://github.com/maahibhama/PulseRN/releases/download/v#{version}/PulseRN-#{version}-mac-#{arch}.dmg"
   name "PulseRN"
   desc "Open-source React Native desktop debugger"
   homepage "https://github.com/maahibhama/PulseRN"

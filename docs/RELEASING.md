@@ -1,7 +1,8 @@
 # Desktop releases
 
-Desktop releases are built only from version tags. GitHub Actions creates a macOS universal DMG,
-Windows x64 and ARM64 NSIS installers, Linux x64 AppImage and Debian packages, and a checksum file.
+Desktop releases are built only from version tags. GitHub Actions creates separate macOS Apple
+Silicon and Intel DMGs, Windows x64 and ARM64 NSIS installers, Linux x64 AppImage and Debian
+packages, and a checksum file.
 
 ## Prepare a release
 
@@ -36,7 +37,8 @@ any mismatch between the tag, package versions, and Homebrew Cask version.
 Stable artifact names are part of the release interface:
 
 ```text
-PulseRN-<version>-mac-universal.dmg
+PulseRN-<version>-mac-arm64.dmg
+PulseRN-<version>-mac-x64.dmg
 PulseRN-<version>-windows-x64-setup.exe
 PulseRN-<version>-windows-arm64-setup.exe
 PulseRN-<version>-linux-x64.AppImage

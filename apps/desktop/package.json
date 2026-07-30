@@ -3,6 +3,7 @@
   "version": "0.1.2",
   "description": "PulseRN Electron desktop debugger.",
   "author": "PulseRN contributors",
+  "homepage": "https://github.com/maahibhama/PulseRN",
   "desktopName": "dev.pulsern.desktop.desktop",
   "license": "MIT",
   "private": true,
@@ -65,11 +66,12 @@
         {
           "target": "dmg",
           "arch": [
-            "universal"
+            "arm64",
+            "x64"
           ]
         }
       ],
-      "artifactName": "PulseRN-${version}-mac-universal.${ext}"
+      "artifactName": "PulseRN-${version}-mac-${arch}.${ext}"
     },
     "dmg": {
       "title": "PulseRN ${version}",
@@ -127,8 +129,13 @@
             "x64"
           ]
         }
-      ],
-      "artifactName": "PulseRN-${version}-linux-${arch}.${ext}"
+      ]
+    },
+    "appImage": {
+      "artifactName": "PulseRN-${version}-linux-x64.${ext}"
+    },
+    "deb": {
+      "artifactName": "PulseRN-${version}-linux-x64.${ext}"
     },
     "publish": {
       "provider": "github",

@@ -30,12 +30,13 @@ database.
 
 ## macOS DMG
 
-1. Download `PulseRN-<version>-mac-universal.dmg`.
+1. Download the DMG matching the Mac:
+   - `PulseRN-<version>-mac-arm64.dmg` for Apple Silicon (M1 and newer).
+   - `PulseRN-<version>-mac-x64.dmg` for Intel.
 2. Open the DMG and drag `PulseRN.app` to Applications.
 3. Right-click PulseRN and choose **Open** the first time if Gatekeeper blocks the unsigned preview.
 
-The DMG contains a universal application for both Apple Silicon and Intel. Remove PulseRN by moving
-it from Applications to Trash. Its local settings and event database remain under
+Remove PulseRN by moving it from Applications to Trash. Its local settings and event database remain under
 `~/Library/Application Support/PulseRN` unless removed manually.
 
 ## Windows

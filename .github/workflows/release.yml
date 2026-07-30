@@ -54,22 +54,24 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Build desktop and workspace dependencies
         run: pnpm exec turbo run build --filter=@pulse-rn/desktop...
-      - name: Package universal DMG
+      - name: Package Apple Silicon and Intel DMGs
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: pnpm --filter @pulse-rn/desktop exec electron-builder --mac dmg --universal --publish never
-      - name: Verify universal application
+        run: pnpm --filter @pulse-rn/desktop exec electron-builder --mac dmg --arm64 --x64 --publish never
+      - name: Verify Apple Silicon and Intel applications
         run: |
-          framework="apps/desktop/release/mac-universal/PulseRN.app/Contents/Frameworks/Electron Framework.framework/Versions/A/Electron Framework"
-          architectures="$(lipo -archs "$framework")"
-          echo "$architectures"
-          grep -q "arm64" <<<"$architectures"
-          grep -q "x86_64" <<<"$architectures"
-          test -f "apps/desktop/release/PulseRN-${RELEASE_TAG#v}-mac-universal.dmg"
+          arm_framework="apps/desktop/release/mac-arm64/PulseRN.app/Contents/Frameworks/Electron Framework.framework/Versions/A/Electron Framework"
+          intel_framework="apps/desktop/release/mac/PulseRN.app/Contents/Frameworks/Electron Framework.framework/Versions/A/Electron Framework"
+          test "$(lipo -archs "$arm_framework")" = "arm64"
+          test "$(lipo -archs "$intel_framework")" = "x86_64"
+          test -f "apps/desktop/release/PulseRN-${RELEASE_TAG#v}-mac-arm64.dmg"
+          test -f "apps/desktop/release/PulseRN-${RELEASE_TAG#v}-mac-x64.dmg"
       - uses: actions/upload-artifact@v4
         with:
           name: desktop-macos
-          path: apps/desktop/release/PulseRN-*-mac-universal.dmg
+          path: |
+            apps/desktop/release/PulseRN-*-mac-arm64.dmg
+            apps/desktop/release/PulseRN-*-mac-x64.dmg
           if-no-files-found: error
 
   windows:
@@ -163,7 +165,8 @@ jobs:
         run: |
           version="${RELEASE_TAG#v}"
           expected=(
-            "PulseRN-${version}-mac-universal.dmg"
+            "PulseRN-${version}-mac-arm64.dmg"
+            "PulseRN-${version}-mac-x64.dmg"
             "PulseRN-${version}-windows-x64-setup.exe"
             "PulseRN-${version}-windows-arm64-setup.exe"
             "PulseRN-${version}-linux-x64.AppImage"

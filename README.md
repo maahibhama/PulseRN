@@ -49,9 +49,9 @@ brew install --cask --no-quarantine pulsern
 
 ### macOS DMG
 
-Download `PulseRN-<version>-mac-universal.dmg`, open it, and drag PulseRN to Applications. The
-universal application runs natively on Intel and Apple Silicon Macs. If Gatekeeper blocks the
-preview, right-click PulseRN and choose **Open**.
+Download `PulseRN-<version>-mac-arm64.dmg` for Apple Silicon (M1 and newer), or
+`PulseRN-<version>-mac-x64.dmg` for Intel. Open it and drag PulseRN to Applications. If Gatekeeper
+blocks the preview, right-click PulseRN and choose **Open**.
 
 ### Windows
 
