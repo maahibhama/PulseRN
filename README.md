@@ -1,10 +1,12 @@
 # PulseRN
 
 [![npm version](https://img.shields.io/npm/v/@pulse-rn/sdk.svg)](https://www.npmjs.com/package/@pulse-rn/sdk)
+[![GitHub release](https://img.shields.io/github/v/release/maahibhama/PulseRN?label=desktop)](https://github.com/maahibhama/PulseRN/releases)
+[![license](https://img.shields.io/github/license/maahibhama/PulseRN)](LICENSE)
 
 PulseRN is an open-source desktop debugging foundation for React Native. Its central idea is a unified, chronological timeline that will correlate app interactions, navigation, Redux, network, rendering, performance, and errors.
 
-> Status: Phase 8. The Foundation, Console, Network, Redux, Navigation, Performance, Storage, and Errors inspectors are working.
+> Status: Phase 9. The Foundation, Console, Network, Redux, Navigation, Performance, Storage, Errors, and JavaScript Debugger inspectors are working.
 
 ## What works today
 
@@ -136,10 +138,20 @@ pnpm lint
 
 ## SDK setup
 
-Install one package:
+The React Native SDK is published publicly on
+[npm](https://www.npmjs.com/package/@pulse-rn/sdk). npm is the official package registry; no
+GitHub Packages configuration or authentication token is required.
 
 ```bash
 npm install @pulse-rn/sdk
+```
+
+Equivalent commands:
+
+```bash
+pnpm add @pulse-rn/sdk
+# or
+yarn add @pulse-rn/sdk
 ```
 
 ```ts
@@ -159,7 +171,10 @@ if (__DEV__) {
 }
 ```
 
-See [SDK integration](docs/SDK-INTEGRATION.md), [architecture](docs/ARCHITECTURE.md), and the [roadmap](docs/ROADMAP.md).
+See [SDK integration](docs/SDK-INTEGRATION.md), [architecture](docs/ARCHITECTURE.md), and the
+[roadmap](docs/ROADMAP.md). Source code, issues, and contributions live in the
+[GitHub repository](https://github.com/maahibhama/PulseRN); downloadable desktop builds are
+published through [GitHub Releases](https://github.com/maahibhama/PulseRN/releases).
 
 ## Desktop preferences
 
