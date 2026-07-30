@@ -22,9 +22,14 @@ export interface DevToolConfig {
   isDevelopment?: boolean;
   enableConsole?: boolean;
   captureConsoleStackTrace?: boolean;
+  enableNetwork?: boolean;
+  captureRequestBodies?: boolean;
+  captureResponseBodies?: boolean;
+  maxNetworkBodyBytes?: number;
   redaction?: {
     fields?: readonly string[];
     headers?: readonly string[];
+    queryParameters?: readonly string[];
   };
 }
 

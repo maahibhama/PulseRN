@@ -8,6 +8,8 @@ Every event contains an ID, negotiated protocol version, session/device/app IDs,
 
 Console events use types `console.log`, `console.info`, `console.warn`, `console.error`, and `console.debug`. Their payload includes a validated level, JSON-safe arguments, display message, and optional stack/source location.
 
+Network events use type `network.request`. Each completed payload contains a request ID, transport, method, redacted URL/query/headers, optional bounded bodies, status, start/end timestamps, duration, and optional error. Binary bodies are excluded.
+
 Limits in Phase 1:
 
 - WebSocket frame: 2 MiB
