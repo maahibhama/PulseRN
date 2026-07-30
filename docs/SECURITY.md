@@ -16,6 +16,10 @@ Please report vulnerabilities privately to the repository maintainers. Do not op
 - Binary bodies are excluded and captured text/JSON bodies are size-limited.
 - Redux actions and state snapshots are depth-bounded and configurable sensitive fields are redacted.
 - Navigation parameters are depth-bounded and configurable sensitive fields are redacted.
+- Custom performance metadata passes through the SDK's normal recursive field redaction.
+- Storage commands are schema-validated, bounded, device-scoped, and time-limited.
+- Storage updates and deletes require explicit desktop confirmation; redacted JSON cannot be updated.
+- Storage audit events never contain stored values.
 - No `eval`, remote content, navigation, or arbitrary window opening is allowed.
 
 Do not bind the server to a LAN interface until authentication and origin controls are implemented.

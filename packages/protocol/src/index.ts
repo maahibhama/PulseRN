@@ -110,6 +110,45 @@ export const navigationEventPayloadSchema = z.object({
 export type NavigationRoute = z.infer<typeof navigationRouteSchema>;
 export type NavigationEventPayload = z.infer<typeof navigationEventPayloadSchema>;
 
+export const performanceMetricSchema = z.enum([
+  'js_fps',
+  'event_loop_lag',
+  'js_stall',
+  'long_task',
+  'app_start',
+  'screen_mount',
+  'screen_interactive',
+  'screen_duration',
+  'custom_measure',
+  'memory',
+]);
+export type PerformanceMetric = z.infer<typeof performanceMetricSchema>;
+export const performanceEventPayloadSchema = z.object({
+  metric: performanceMetricSchema,
+  name: z.string().min(1).max(4_096),
+  value: z.number().finite().nonnegative(),
+  unit: z.enum(['ms', 'fps', 'bytes']),
+  approximate: z.boolean(),
+  startedAt: z.number().finite().nonnegative().optional(),
+  endedAt: z.number().finite().nonnegative().optional(),
+  metadata: jsonValue.optional(),
+});
+export type PerformanceEventPayload = z.infer<typeof performanceEventPayloadSchema>;
+
+export const storageOperationSchema = z.enum(['providers', 'list', 'get', 'set', 'delete']);
+export type StorageOperation = z.infer<typeof storageOperationSchema>;
+export const storageEventPayloadSchema = z.object({
+  requestId: identifier,
+  providerId: identifier,
+  operation: storageOperationSchema,
+  key: z.string().max(10_000).optional(),
+  success: z.boolean(),
+  mutation: z.boolean(),
+  duration: z.number().finite().nonnegative(),
+  error: z.string().max(10_000).optional(),
+});
+export type StorageEventPayload = z.infer<typeof storageEventPayloadSchema>;
+
 export const eventEnvelopeSchema = z
   .object({
     id: identifier,
@@ -135,7 +174,11 @@ export const eventEnvelopeSchema = z
             ? reduxEventPayloadSchema
             : event.category === 'navigation'
               ? navigationEventPayloadSchema
-              : undefined;
+              : event.category === 'performance'
+                ? performanceEventPayloadSchema
+                : event.category === 'storage'
+                  ? storageEventPayloadSchema
+                  : undefined;
     if (payloadSchema && !payloadSchema.safeParse(event.payload).success) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -182,16 +225,46 @@ export const serverHelloSchema = z.object({
 });
 export type ServerHello = z.infer<typeof serverHelloSchema>;
 
+export const storageCommandSchema = z.object({
+  kind: z.literal('storage-command'),
+  requestId: identifier,
+  providerId: identifier,
+  operation: storageOperationSchema,
+  key: z.string().max(10_000).optional(),
+  value: z.string().max(1_000_000).optional(),
+});
+export type StorageCommand = z.infer<typeof storageCommandSchema>;
+
+export const storageResultSchema = z.object({
+  kind: z.literal('storage-result'),
+  requestId: identifier,
+  providerId: identifier,
+  operation: storageOperationSchema,
+  success: z.boolean(),
+  providers: z
+    .array(z.object({ id: identifier, name: z.string().min(1).max(1_024) }))
+    .max(100)
+    .optional(),
+  keys: z.array(z.string().max(10_000)).max(100_000).optional(),
+  value: z.string().max(1_000_000).nullable().optional(),
+  error: z.string().max(10_000).optional(),
+});
+export type StorageResult = z.infer<typeof storageResultSchema>;
+
 export const eventBatchSchema = z.object({
   kind: z.literal('event-batch'),
   events: z.array(eventEnvelopeSchema).min(1).max(500),
 });
 export type EventBatch = z.infer<typeof eventBatchSchema>;
 
-export const serverMessageSchema = serverHelloSchema;
+export const serverMessageSchema = z.discriminatedUnion('kind', [
+  serverHelloSchema,
+  storageCommandSchema,
+]);
 export const clientMessageSchema = z.discriminatedUnion('kind', [
   clientHelloSchema,
   eventBatchSchema,
+  storageResultSchema,
 ]);
 
 export type ClientMessage = z.infer<typeof clientMessageSchema>;

@@ -4,11 +4,12 @@
   "private": true,
   "main": "expo-router/entry",
   "scripts": {
-    "android": "expo start --android",
+    "android": "expo run:android",
     "build": "tsc -p tsconfig.json --noEmit",
-    "dev": "expo start",
-    "ios": "expo start --ios",
+    "dev": "expo start --dev-client",
+    "ios": "expo run:ios",
     "lint": "eslint app",
+    "prebuild": "expo prebuild",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
@@ -16,17 +17,23 @@
     "@pulse-rn/navigation-plugin": "workspace:*",
     "@pulse-rn/redux-plugin": "workspace:*",
     "@pulse-rn/sdk": "workspace:*",
+    "@react-native-async-storage/async-storage": "2.1.2",
     "expo": "^53.0.20",
     "expo-constants": "^17.1.7",
+    "expo-dev-client": "~5.2.4",
+    "expo-linking": "~7.1.7",
     "expo-router": "^5.1.4",
     "expo-status-bar": "^2.2.3",
     "react": "19.0.0",
     "react-native": "0.79.6",
+    "react-native-mmkv": "^4.3.2",
+    "react-native-nitro-modules": "^0.36.4",
     "react-native-safe-area-context": "5.4.0",
     "react-native-screens": "~4.11.1",
     "redux": "^5.0.1"
   },
   "devDependencies": {
+    "@expo/config-plugins": "~10.1.2",
     "@types/react": "~19.0.10"
   }
 }

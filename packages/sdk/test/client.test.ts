@@ -66,4 +66,50 @@ describe('DevToolClient', () => {
     expect(client.getStats()).toMatchObject({ queuedEvents: 2, droppedEvents: 1 });
     client.disconnect();
   });
+
+  it('handles storage requests and redacts structured values', async () => {
+    const socket = createSocket();
+    const client = new DevToolClient(
+      { appName: 'Example', isDevelopment: true, enableStorage: true },
+      () => socket,
+    );
+    client.registerStorageProvider({
+      id: 'async-storage',
+      name: 'AsyncStorage',
+      getAllKeys: async () => ['session'],
+      getItem: async () => JSON.stringify({ user: 'developer', token: 'secret' }),
+      setItem: async () => undefined,
+      removeItem: async () => undefined,
+    });
+    client.connect();
+    socket.onopen?.();
+    socket.onmessage?.({
+      data: JSON.stringify({
+        kind: 'server-hello',
+        accepted: true,
+        protocolVersion: PROTOCOL_VERSION,
+        connectionId: 'connection-1',
+        serverTime: Date.now(),
+      }),
+    });
+    socket.onmessage?.({
+      data: JSON.stringify({
+        kind: 'storage-command',
+        requestId: 'storage-1',
+        providerId: 'async-storage',
+        operation: 'get',
+        key: 'session',
+      }),
+    });
+    await vi.waitFor(() => expect(socket.sent).toHaveLength(2));
+    expect(JSON.parse(socket.sent[1] ?? '{}')).toMatchObject({
+      kind: 'storage-result',
+      success: true,
+    });
+    expect(JSON.parse(JSON.parse(socket.sent[1] ?? '{}').value)).toEqual({
+      user: 'developer',
+      token: '[REDACTED]',
+    });
+    client.disconnect();
+  });
 });

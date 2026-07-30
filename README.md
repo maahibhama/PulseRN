@@ -2,7 +2,7 @@
 
 PulseRN is an open-source desktop debugging foundation for React Native. Its central idea is a unified, chronological timeline that will correlate app interactions, navigation, Redux, network, rendering, performance, and errors.
 
-> Status: Phase 5. The foundation, Console, Network, Redux, and Navigation inspectors are working. Performance, storage, and dedicated error instrumentation are scheduled for later phases.
+> Status: Phase 7. The foundation, Console, Network, Redux, Navigation, Performance, and Storage inspectors are working. Dedicated error instrumentation is scheduled for the next phase.
 
 ## What works today
 
@@ -19,6 +19,8 @@ PulseRN is an open-source desktop debugging foundation for React Native. Its cen
 - Network status/method filters, URL search, failed-request highlighting, body truncation, and detail tabs
 - Redux/Redux Toolkit middleware with action, state, diff, reducer timing, redaction, and multi-store inspection
 - React Navigation and manual route instrumentation with lifecycle events, nested routes, parameter redaction, and route timing
+- Performance monitoring with approximate JS FPS, event-loop lag/stalls, startup/screen/custom timing, optional available heap metrics, and correlated slow-operation views
+- AsyncStorage and MMKV inspection with provider discovery, key search/read/refresh, JSON redaction, type-preserving MMKV edits, and explicitly confirmed update/delete operations
 - Expo-based React Native integration example
 
 ![Screenshot placeholder](docs/assets/screenshot-placeholder.svg)
@@ -39,8 +41,14 @@ pnpm dev:desktop
 In a second terminal:
 
 ```bash
-pnpm --filter @pulse-rn/example-react-native dev
+pnpm --filter @pulse-rn/example-react-native ios
+# or
+pnpm --filter @pulse-rn/example-react-native android
 ```
+
+This first run generates and installs a custom Expo development build containing MMKV and its
+Nitro native module. Expo Go cannot run this example. After the development app is installed, use
+`pnpm --filter @pulse-rn/example-react-native dev` for normal Metro restarts.
 
 Use `10.0.2.2` for the Android emulator, `127.0.0.1` for the iOS simulator, and the desktop machine's LAN address for a physical device:
 
@@ -80,9 +88,10 @@ See [SDK integration](docs/SDK-INTEGRATION.md), [architecture](docs/ARCHITECTURE
 
 - The transport only accepts validated JSON and has no authentication UI.
 - The UI keeps the latest 2,000 events in memory; database pagination and list virtualization arrive before high-volume instrumentation.
-- The example uses Expo and does not commit generated `ios/` or `android/` projects.
+- The example uses Expo prebuild; generated `ios/` and `android/` projects stay local and are not committed.
 - Session export/import and later inspection panels are not implemented yet.
 - Console fields, network headers, URL query parameters, and structured request/response fields are redacted before transmission.
+- Performance FPS, event-loop, and SDK app-start metrics are JavaScript-derived approximations, not native CPU or UI-thread profiling.
 
 ## Contributing
 

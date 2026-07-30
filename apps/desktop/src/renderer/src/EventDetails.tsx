@@ -1,6 +1,7 @@
 import { consoleLogPayloadSchema, type DevToolEventEnvelope } from '@pulse-rn/protocol';
 import { NetworkEventDetails } from './NetworkEventDetails.js';
 import { NavigationEventDetails } from './NavigationEventDetails.js';
+import { PerformanceEventDetails } from './PerformanceEventDetails.js';
 import { ReduxEventDetails } from './ReduxEventDetails.js';
 
 interface EventDetailsProps {
@@ -77,6 +78,8 @@ export function EventDetails({ event }: EventDetailsProps) {
             <ReduxEventDetails event={event} />
           ) : event.category === 'navigation' ? (
             <NavigationEventDetails event={event} />
+          ) : event.category === 'performance' ? (
+            <PerformanceEventDetails event={event} />
           ) : (
             <StandardDetails event={event} />
           )}

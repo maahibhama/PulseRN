@@ -6,6 +6,11 @@ PulseRN is a pnpm/Turborepo monorepo. The wire contract is independent of Electr
 
 Electron main is the trusted desktop boundary. It owns WebSocket connections, session state, SQLite, and operating-system integration. Preload exposes only typed snapshot reads/subscriptions. The renderer has `contextIsolation`, `sandbox`, and disabled Node integration.
 
+Storage inspection uses a narrow request/response path from renderer IPC through Electron main to a
+specific negotiated WebSocket connection. The SDK dispatches commands only to registered providers
+and returns bounded results. This provider boundary supports AsyncStorage now and future MMKV/custom
+adapters without coupling the transport to a storage library.
+
 SQLite writes use WAL mode and batched transactions. A small in-memory projection feeds the Phase 1 UI; later phases will use paginated queries and TanStack Virtual for 100,000-event sessions.
 
 ## Package responsibilities

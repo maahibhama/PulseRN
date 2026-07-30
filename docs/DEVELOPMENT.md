@@ -5,6 +5,20 @@ Use Node 22 LTS and pnpm 10.14.
 ```bash
 pnpm install
 pnpm dev:desktop
+```
+
+In another terminal, generate, compile, and install the custom native example:
+
+```bash
+pnpm --filter @pulse-rn/example-react-native ios
+# or
+pnpm --filter @pulse-rn/example-react-native android
+```
+
+The example contains MMKV/Nitro native modules and therefore cannot run in Expo Go. Once the
+development app is installed, start subsequent Metro sessions with:
+
+```bash
 pnpm --filter @pulse-rn/example-react-native dev
 ```
 

@@ -2,8 +2,11 @@ import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { Platform, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text } from 'react-native';
 import { ReactNativeDevTool } from '@pulse-rn/sdk';
+import { createAsyncStorageProvider, createMMKVStorageProvider } from '@pulse-rn/sdk';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createMMKV } from 'react-native-mmkv';
 import { createDevToolMiddleware } from '@pulse-rn/redux-plugin';
 import { applyMiddleware, createStore } from 'redux';
 import { navigationTracker } from '../navigation';
@@ -12,6 +15,7 @@ import { navigationTracker } from '../navigation';
 // to the development machine's LAN address for physical devices.
 const host =
   process.env.EXPO_PUBLIC_PULSE_RN_HOST ?? (Platform.OS === 'android' ? '10.0.2.2' : '127.0.0.1');
+const mmkv = createMMKV({ id: 'pulse-rn-example' });
 
 interface DemoState {
   count: number;
@@ -70,7 +74,39 @@ export default function HomeScreen() {
       captureRequestBodies: true,
       captureResponseBodies: true,
       maxNetworkBodyBytes: 100 * 1024,
-    }).connect();
+      enablePerformance: true,
+      performanceSampleIntervalMs: 1_000,
+      javascriptStallThresholdMs: 100,
+      captureMemory: true,
+      enableStorage: true,
+    });
+    const unregisterStorage = client.registerStorageProvider(
+      createAsyncStorageProvider(AsyncStorage),
+    );
+    const unregisterMMKV = client.registerStorageProvider(
+      createMMKVStorageProvider(mmkv, {
+        id: 'mmkv-example',
+        name: 'MMKV · example',
+      }),
+    );
+    client.connect();
+    void AsyncStorage.multiSet([
+      ['pulse-rn:theme', 'dark'],
+      ['pulse-rn:session', JSON.stringify({ user: 'example-developer', token: 'storage-secret' })],
+    ]);
+    mmkv.set('pulse-rn:launch-count', (mmkv.getNumber('pulse-rn:launch-count') ?? 0) + 1);
+    mmkv.set('pulse-rn:feature-enabled', true);
+    mmkv.set(
+      'pulse-rn:profile',
+      JSON.stringify({ user: 'mmkv-developer', token: 'mmkv-storage-secret' }),
+    );
+    ReactNativeDevTool.performance.appStarted();
+    ReactNativeDevTool.performance.startScreen('Home');
+    ReactNativeDevTool.performance.screenMounted('Home');
+    const interactiveTimer = setTimeout(
+      () => ReactNativeDevTool.performance.screenInteractive('Home'),
+      250,
+    );
     client.track({
       category: 'system',
       type: 'example.started',
@@ -82,6 +118,10 @@ export default function HomeScreen() {
     });
     const unsubscribe = demoStore.subscribe(() => setReduxCount(demoStore.getState().count));
     return () => {
+      clearTimeout(interactiveTimer);
+      ReactNativeDevTool.performance.endScreen('Home');
+      unregisterStorage();
+      unregisterMMKV();
       unsubscribe();
       client.disconnect();
     };
@@ -145,10 +185,20 @@ export default function HomeScreen() {
     router.push('/details');
   };
 
+  const runPerformanceDemo = () => {
+    ReactNativeDevTool.performance.mark('demo-start');
+    const blockedUntil = Date.now() + 140;
+    while (Date.now() < blockedUntil) {
+      // Deliberately creates a visible custom long-task measurement in the example.
+    }
+    ReactNativeDevTool.performance.mark('demo-complete');
+    ReactNativeDevTool.performance.measure('Example long task', 'demo-start', 'demo-complete');
+  };
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="light" />
-      <View style={styles.container}>
+      <ScrollView contentContainerStyle={styles.container}>
         <Text style={styles.eyebrow}>PULSERN SDK</Text>
         <Text style={styles.title}>PulseRN phase demos</Text>
         <Text style={styles.body}>Desktop endpoint: ws://{host}:9090</Text>
@@ -167,14 +217,17 @@ export default function HomeScreen() {
         <Pressable style={[styles.button, styles.navigationButton]} onPress={openDetails}>
           <Text style={styles.buttonText}>Open navigation demo</Text>
         </Pressable>
-      </View>
+        <Pressable style={[styles.button, styles.performanceButton]} onPress={runPerformanceDemo}>
+          <Text style={styles.buttonText}>Run performance demo</Text>
+        </Pressable>
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#0b0d12' },
-  container: { flex: 1, justifyContent: 'center', padding: 28 },
+  container: { flexGrow: 1, justifyContent: 'center', padding: 28 },
   eyebrow: { color: '#8d75ff', fontSize: 12, fontWeight: '700', letterSpacing: 2 },
   title: { color: '#f1f3f8', fontSize: 30, fontWeight: '700', marginTop: 10 },
   body: { color: '#8e97a9', fontSize: 15, marginTop: 12, marginBottom: 30 },
@@ -184,4 +237,5 @@ const styles = StyleSheet.create({
   secondaryButton: { backgroundColor: '#247b65', marginTop: 24 },
   reduxButton: { backgroundColor: '#5e46b5', marginTop: 24 },
   navigationButton: { backgroundColor: '#326d91', marginTop: 24 },
+  performanceButton: { backgroundColor: '#8a5c27', marginTop: 24 },
 });

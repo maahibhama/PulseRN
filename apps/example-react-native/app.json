@@ -3,9 +3,10 @@
     "name": "PulseRN Example",
     "slug": "pulse-rn-example",
     "version": "0.1.0",
+    "newArchEnabled": true,
     "orientation": "portrait",
     "scheme": "pulsern-example",
-    "plugins": ["expo-router"],
+    "plugins": ["expo-router", "expo-dev-client", "./plugins/with-fmt-xcode-26-fix.cjs"],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "dev.pulsern.example"
