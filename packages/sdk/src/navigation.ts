@@ -1,4 +1,4 @@
-import type { JsonValue, NavigationEventPayload, NavigationRoute } from '@pulse-rn/protocol';
+import type { JsonValue, NavigationEventPayload, NavigationRoute } from './protocol-types.js';
 import { redact } from '@pulse-rn/shared';
 
 export interface NavigationTrackTarget {

@@ -68,3 +68,28 @@ pnpm dist:linux
 
 macOS and Windows output is intentionally unsigned in the preview phase. Do not enable automatic
 updates until Apple Developer ID notarization and Windows code-signing secrets are configured.
+
+# SDK releases
+
+The React Native SDK is published independently from desktop releases. All SDK functionality is
+available through the single `@pulse-rn/sdk` package entry point.
+
+Before the first release, create or claim the `@pulse-rn` npm scope and configure npm Trusted
+Publishing for the `maahibhama/PulseRN` repository, the `release-sdk.yml` workflow, and the `npm`
+GitHub environment.
+
+Prepare and validate a release:
+
+```bash
+pnpm --filter @pulse-rn/sdk build
+pnpm release:verify:sdk sdk-v0.2.0
+git add packages/sdk package.json pnpm-lock.yaml .github/workflows/release-sdk.yml
+git commit -m "feat(sdk): publish the single-entry React Native SDK"
+git tag -a sdk-v0.2.0 -m "PulseRN SDK 0.2.0"
+git push origin HEAD
+git push origin sdk-v0.2.0
+```
+
+Stable tags publish to npm's `latest` channel. Tags containing a prerelease suffix, such as
+`sdk-v0.2.0-beta.1`, publish to `next`. The workflow rejects a tag that does not exactly match the
+SDK package version or a tarball that leaks internal workspace packages.

@@ -15,8 +15,6 @@
   },
   "dependencies": {
     "@expo/metro-runtime": "~57.0.8",
-    "@pulse-rn/navigation-plugin": "workspace:*",
-    "@pulse-rn/redux-plugin": "workspace:*",
     "@pulse-rn/sdk": "workspace:*",
     "@react-native-async-storage/async-storage": "2.2.0",
     "expo": "^57.0.9",

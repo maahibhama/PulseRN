@@ -1,4 +1,4 @@
-import type { ConsoleLogLevel, ConsoleLogPayload, JsonValue } from '@pulse-rn/protocol';
+import type { ConsoleLogLevel, ConsoleLogPayload, JsonValue } from './protocol-types.js';
 import { formatConsoleMessage, serializeConsoleValue } from './serialization';
 
 type ConsoleMethod = (...arguments_: unknown[]) => void;

@@ -1,4 +1,4 @@
-import type { ErrorSource, JsonValue } from '@pulse-rn/protocol';
+import type { ErrorSource, JsonValue } from './protocol-types.js';
 
 export interface CapturedError {
   source: ErrorSource;

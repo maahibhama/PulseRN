@@ -1,19 +1,18 @@
-import {
-  PROTOCOL_VERSION,
-  parseServerMessage,
-  type ClientHello,
-  type DevToolEventEnvelope,
-  type EventBatch,
-  type ErrorContextEvent,
-  type ErrorEventPayload,
-  type JsonValue,
-  type NetworkEventPayload,
-  type PerformanceEventPayload,
-  type StorageCommand,
-  type StorageEventPayload,
-  type StorageResult,
-} from '@pulse-rn/protocol';
+import { PROTOCOL_VERSION, parseServerMessage } from '@pulse-rn/protocol';
 import { createId, redact } from '@pulse-rn/shared';
+import type {
+  ClientHello,
+  DevToolEventEnvelope,
+  EventBatch,
+  ErrorContextEvent,
+  ErrorEventPayload,
+  JsonValue,
+  NetworkEventPayload,
+  PerformanceEventPayload,
+  StorageCommand,
+  StorageEventPayload,
+  StorageResult,
+} from './protocol-types.js';
 import { installAxiosInterceptor, type AxiosInstanceLike } from './axios-instrumentation';
 import { installConsoleInterceptor } from './console-instrumentation';
 import { installFetchInterceptor } from './fetch-instrumentation';
@@ -35,7 +34,7 @@ import type {
   WebSocketLike,
 } from './types.js';
 
-const SDK_VERSION = '0.1.0';
+const SDK_VERSION = '0.2.0';
 const CONNECTING = 0;
 const OPEN = 1;
 

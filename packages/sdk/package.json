@@ -1,31 +1,63 @@
 {
   "name": "@pulse-rn/sdk",
-  "version": "0.1.0",
-  "description": "Development-only React Native client for PulseRN.",
+  "version": "0.2.0",
+  "description": "Single-package React Native instrumentation SDK for the PulseRN desktop debugger.",
+  "author": "PulseRN contributors",
+  "homepage": "https://github.com/maahibhama/PulseRN",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/maahibhama/PulseRN.git",
+    "directory": "packages/sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/maahibhama/PulseRN/issues"
+  },
+  "keywords": [
+    "react-native",
+    "debugger",
+    "developer-tools",
+    "redux",
+    "react-navigation",
+    "expo",
+    "hermes"
+  ],
   "license": "MIT",
   "type": "module",
-  "main": "./dist/index.js",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "react-native": "./src/index.native.ts",
+  "react-native": "./dist/index.js",
   "exports": {
     ".": {
-      "react-native": "./src/index.native.ts",
       "types": "./dist/index.d.ts",
+      "react-native": "./dist/index.js",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs",
       "default": "./dist/index.js"
     }
   },
+  "sideEffects": false,
   "files": [
     "dist",
-    "src"
+    "README.md"
   ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "engines": {
+    "node": ">=20.19"
+  },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsup src/index.ts --format esm,cjs --dts --clean --sourcemap --target es2022 --no-splitting",
     "lint": "eslint src test",
+    "prepack": "pnpm build",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
-  "dependencies": {
+  "devDependencies": {
     "@pulse-rn/protocol": "workspace:*",
-    "@pulse-rn/shared": "workspace:*"
+    "@pulse-rn/shared": "workspace:*",
+    "tsup": "^8.5.1"
   }
 }

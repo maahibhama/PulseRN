@@ -3,6 +3,10 @@ import type { CaptureErrorOptions, DevToolConfig, TrackEventInput } from './type
 
 let activeClient: DevToolClient | undefined;
 
+export function createPulseRNClient(config: DevToolConfig): DevToolClient {
+  return new DevToolClient(config);
+}
+
 export const ReactNativeDevTool = {
   configure(config: DevToolConfig): DevToolClient {
     activeClient?.disconnect();
@@ -51,6 +55,18 @@ export { PerformanceMonitor } from './performance-monitor.js';
 export { installErrorInterceptor, toCapturedError } from './error-instrumentation.js';
 export { createAsyncStorageProvider, createMMKVStorageProvider } from './storage-provider.js';
 export type { AsyncStorageLike, MMKVLike, StorageProvider } from './storage-provider.js';
+export { createDevToolMiddleware, diffStates } from './redux.js';
+export type { DevToolMiddlewareOptions, ReduxTrackTarget } from './redux.js';
+export { createNavigationTracker, getActiveRoute } from './navigation.js';
+export type {
+  ManualNavigationInput,
+  NavigationAction,
+  NavigationRefLike,
+  NavigationRouteLike,
+  NavigationStateLike,
+  NavigationTrackerOptions,
+  NavigationTrackTarget,
+} from './navigation.js';
 export type {
   CaptureErrorOptions,
   DevToolConfig,

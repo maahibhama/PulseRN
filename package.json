@@ -23,8 +23,10 @@
     "typecheck": "turbo run typecheck",
     "lint": "turbo run lint",
     "pack:desktop": "pnpm --filter @pulse-rn/desktop run pack",
+    "pack:sdk": "pnpm --filter @pulse-rn/sdk pack",
     "release:desktop": "node scripts/release.mjs",
-    "release:verify": "node scripts/verify-release-version.mjs"
+    "release:verify": "node scripts/verify-release-version.mjs",
+    "release:verify:sdk": "node scripts/verify-sdk-package.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",

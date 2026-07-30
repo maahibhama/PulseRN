@@ -1,4 +1,4 @@
-import type { JsonValue, NetworkEventPayload } from '@pulse-rn/protocol';
+import type { JsonValue, NetworkEventPayload } from './protocol-types.js';
 import { serializeConsoleValue } from './serialization';
 
 const DEFAULT_SENSITIVE_KEYS = [

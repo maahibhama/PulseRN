@@ -1,4 +1,4 @@
-import type { JsonValue, PerformanceEventPayload, PerformanceMetric } from '@pulse-rn/protocol';
+import type { JsonValue, PerformanceEventPayload, PerformanceMetric } from './protocol-types.js';
 
 interface AnimationFrameRuntime {
   requestAnimationFrame?(callback: (timestamp: number) => void): number;

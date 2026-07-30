@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createNavigationTracker } from '@pulse-rn/navigation-plugin';
-import { createDevToolMiddleware } from '@pulse-rn/redux-plugin';
 import {
+  createDevToolMiddleware,
+  createNavigationTracker,
   createAsyncStorageProvider,
   createMMKVStorageProvider,
   ReactNativeDevTool,
