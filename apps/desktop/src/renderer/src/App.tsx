@@ -6,6 +6,7 @@ import { NetworkPanel } from './NetworkPanel.js';
 import { NavigationPanel } from './NavigationPanel.js';
 import { PerformancePanel } from './PerformancePanel.js';
 import { ReduxPanel } from './ReduxPanel.js';
+import { StoragePanel } from './StoragePanel.js';
 import { deviceLabel, findSelectedEvent, useDesktopStore } from './store.js';
 
 type ViewName =
@@ -25,7 +26,7 @@ const navItems: { name: ViewName; icon: string; available: boolean }[] = [
   { name: 'Redux', icon: '◇', available: true },
   { name: 'Navigation', icon: '→', available: true },
   { name: 'Performance', icon: '⌁', available: true },
-  { name: 'Storage', icon: '▤', available: false },
+  { name: 'Storage', icon: '▤', available: true },
   { name: 'Errors', icon: '△', available: false },
 ];
 
@@ -158,7 +159,7 @@ export function App() {
               ? deviceLabel(devices[0]!)
               : `${devices.length} devices connected`}
         </div>
-        <div className="phase-pill">Phase 6 · Performance</div>
+        <div className="phase-pill">Phase 7 · Storage</div>
       </header>
       <aside className="sidebar">
         <div className="section-label">Inspect</div>
@@ -194,6 +195,8 @@ export function App() {
           selectedEventId={selectedEventId}
           onSelect={selectEvent}
         />
+      ) : activeView === 'Storage' ? (
+        <StoragePanel devices={devices} />
       ) : (
         <UpcomingPanel view={activeView} />
       )}

@@ -30,6 +30,7 @@ export interface DevToolConfig {
   performanceSampleIntervalMs?: number;
   javascriptStallThresholdMs?: number;
   captureMemory?: boolean;
+  enableStorage?: boolean;
   redaction?: {
     fields?: readonly string[];
     headers?: readonly string[];

@@ -22,6 +22,12 @@ unit, explicit approximation flag, optional monotonic start/end values, and opti
 Approximate JavaScript FPS, timer-derived event-loop lag/stalls, startup and screen milestones,
 custom measures, and runtime-exposed heap samples share this contract.
 
+Storage inspection adds a validated request/response channel. Electron sends `storage-command`
+messages for provider discovery, list, get, set, or delete; the SDK responds with a matching
+`storage-result`. Requests carry bounded IDs/keys/values, time out on the desktop, and are tied to
+one connected device. `storage.<operation>` audit events enter the unified timeline without
+including stored values.
+
 Limits in Phase 1:
 
 - WebSocket frame: 2 MiB

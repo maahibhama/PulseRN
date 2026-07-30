@@ -45,4 +45,6 @@ export { installAxiosInterceptor } from './axios-instrumentation';
 export type { AxiosInstanceLike } from './axios-instrumentation';
 export { serializeConsoleValue } from './serialization';
 export { PerformanceMonitor } from './performance-monitor';
+export { createAsyncStorageProvider, createMMKVStorageProvider } from './storage-provider';
+export type { AsyncStorageLike, MMKVLike, StorageProvider } from './storage-provider';
 export type { DevToolConfig, TrackEventInput, WebSocketFactory, WebSocketLike } from './types';

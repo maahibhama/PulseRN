@@ -7,6 +7,9 @@ import {
   type JsonValue,
   type NetworkEventPayload,
   type PerformanceEventPayload,
+  type StorageCommand,
+  type StorageEventPayload,
+  type StorageResult,
 } from '@pulse-rn/protocol';
 import { createId, redact } from '@pulse-rn/shared';
 import { installAxiosInterceptor, type AxiosInstanceLike } from './axios-instrumentation';
@@ -16,6 +19,7 @@ import type { NetworkCaptureOptions } from './network-utils';
 import { formatConsoleMessage } from './serialization';
 import { installXhrInterceptor } from './xhr-instrumentation';
 import { PerformanceMonitor } from './performance-monitor';
+import type { StorageProvider } from './storage-provider';
 import type { DevToolConfig, TrackEventInput, WebSocketFactory, WebSocketLike } from './types.js';
 
 const SDK_VERSION = '0.1.0';
@@ -58,6 +62,7 @@ export class DevToolClient {
   private droppedEvents = 0;
   private restoreConsole?: () => void;
   private networkRestores: (() => void)[] = [];
+  private readonly storageProviders = new Map<string, StorageProvider>();
   readonly performance: PerformanceMonitor;
   readonly deviceId: string;
   readonly sessionId: string;
@@ -214,6 +219,15 @@ export class DevToolClient {
     );
   }
 
+  registerStorageProvider(provider: StorageProvider): () => void {
+    if (!provider.id.trim()) throw new Error('Storage provider ID must not be empty.');
+    this.storageProviders.set(provider.id, provider);
+    return () => {
+      if (this.storageProviders.get(provider.id) === provider)
+        this.storageProviders.delete(provider.id);
+    };
+  }
+
   private networkOptions(): Partial<NetworkCaptureOptions> {
     return {
       captureRequestBodies: this.config.captureRequestBodies ?? true,
@@ -254,7 +268,12 @@ export class DevToolClient {
     if (typeof data !== 'string') return;
     try {
       const result = parseServerMessage(JSON.parse(data) as unknown);
-      if (!result.success || !result.data.accepted) {
+      if (!result.success) return;
+      if (result.data.kind === 'storage-command') {
+        if (this.negotiated) void this.handleStorageCommand(result.data);
+        return;
+      }
+      if (!result.data.accepted) {
         this.disconnect();
         return;
       }
@@ -263,6 +282,99 @@ export class DevToolClient {
       this.flush();
     } catch {
       // The SDK ignores malformed server input and never forwards it to the app.
+    }
+  }
+
+  private async handleStorageCommand(command: StorageCommand): Promise<void> {
+    const startedAt = globalThis.performance?.now?.() ?? Date.now();
+    let response: StorageResult;
+    try {
+      if (!this.config.enableStorage) throw new Error('Storage inspection is disabled.');
+      if (command.operation === 'providers') {
+        response = {
+          kind: 'storage-result',
+          requestId: command.requestId,
+          providerId: command.providerId,
+          operation: command.operation,
+          success: true,
+          providers: [...this.storageProviders.values()].map(({ id, name }) => ({ id, name })),
+        };
+      } else {
+        const provider = this.storageProviders.get(command.providerId);
+        if (!provider) throw new Error(`Unknown storage provider: ${command.providerId}`);
+        if (command.operation === 'list') {
+          response = {
+            kind: 'storage-result',
+            requestId: command.requestId,
+            providerId: command.providerId,
+            operation: command.operation,
+            success: true,
+            keys: [...(await provider.getAllKeys())].sort(),
+          };
+        } else if (command.operation === 'get') {
+          if (command.key === undefined) throw new Error('A key is required.');
+          response = {
+            kind: 'storage-result',
+            requestId: command.requestId,
+            providerId: command.providerId,
+            operation: command.operation,
+            success: true,
+            value: this.sanitizeStorageValue(await provider.getItem(command.key)),
+          };
+        } else if (command.operation === 'set') {
+          if (command.key === undefined || command.value === undefined)
+            throw new Error('A key and value are required.');
+          await provider.setItem(command.key, command.value);
+          response = {
+            kind: 'storage-result',
+            requestId: command.requestId,
+            providerId: command.providerId,
+            operation: command.operation,
+            success: true,
+          };
+        } else {
+          if (command.key === undefined) throw new Error('A key is required.');
+          await provider.removeItem(command.key);
+          response = {
+            kind: 'storage-result',
+            requestId: command.requestId,
+            providerId: command.providerId,
+            operation: command.operation,
+            success: true,
+          };
+        }
+      }
+    } catch (error) {
+      response = {
+        kind: 'storage-result',
+        requestId: command.requestId,
+        providerId: command.providerId,
+        operation: command.operation,
+        success: false,
+        error: error instanceof Error ? error.message : 'Storage operation failed.',
+      };
+    }
+    this.socket?.send(JSON.stringify(response));
+    const payload: StorageEventPayload = {
+      requestId: command.requestId,
+      providerId: command.providerId,
+      operation: command.operation,
+      ...(command.key === undefined ? {} : { key: command.key }),
+      success: response.success,
+      mutation: command.operation === 'set' || command.operation === 'delete',
+      duration: Math.max(0, (globalThis.performance?.now?.() ?? Date.now()) - startedAt),
+      ...(response.error ? { error: response.error } : {}),
+    };
+    this.track({ category: 'storage', type: `storage.${command.operation}`, payload });
+  }
+
+  private sanitizeStorageValue(value: string | null): string | null {
+    if (value === null) return null;
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      return JSON.stringify(redact(parsed, { fields: this.config.redaction?.fields }), null, 2);
+    } catch {
+      return value;
     }
   }
 

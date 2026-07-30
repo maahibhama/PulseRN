@@ -4,6 +4,9 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text } from 'react-native';
 import { ReactNativeDevTool } from '@pulse-rn/sdk';
+import { createAsyncStorageProvider, createMMKVStorageProvider } from '@pulse-rn/sdk';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createMMKV } from 'react-native-mmkv';
 import { createDevToolMiddleware } from '@pulse-rn/redux-plugin';
 import { applyMiddleware, createStore } from 'redux';
 import { navigationTracker } from '../navigation';
@@ -12,6 +15,7 @@ import { navigationTracker } from '../navigation';
 // to the development machine's LAN address for physical devices.
 const host =
   process.env.EXPO_PUBLIC_PULSE_RN_HOST ?? (Platform.OS === 'android' ? '10.0.2.2' : '127.0.0.1');
+const mmkv = createMMKV({ id: 'pulse-rn-example' });
 
 interface DemoState {
   count: number;
@@ -74,7 +78,28 @@ export default function HomeScreen() {
       performanceSampleIntervalMs: 1_000,
       javascriptStallThresholdMs: 100,
       captureMemory: true,
-    }).connect();
+      enableStorage: true,
+    });
+    const unregisterStorage = client.registerStorageProvider(
+      createAsyncStorageProvider(AsyncStorage),
+    );
+    const unregisterMMKV = client.registerStorageProvider(
+      createMMKVStorageProvider(mmkv, {
+        id: 'mmkv-example',
+        name: 'MMKV · example',
+      }),
+    );
+    client.connect();
+    void AsyncStorage.multiSet([
+      ['pulse-rn:theme', 'dark'],
+      ['pulse-rn:session', JSON.stringify({ user: 'example-developer', token: 'storage-secret' })],
+    ]);
+    mmkv.set('pulse-rn:launch-count', (mmkv.getNumber('pulse-rn:launch-count') ?? 0) + 1);
+    mmkv.set('pulse-rn:feature-enabled', true);
+    mmkv.set(
+      'pulse-rn:profile',
+      JSON.stringify({ user: 'mmkv-developer', token: 'mmkv-storage-secret' }),
+    );
     ReactNativeDevTool.performance.appStarted();
     ReactNativeDevTool.performance.startScreen('Home');
     ReactNativeDevTool.performance.screenMounted('Home');
@@ -95,6 +120,8 @@ export default function HomeScreen() {
     return () => {
       clearTimeout(interactiveTimer);
       ReactNativeDevTool.performance.endScreen('Home');
+      unregisterStorage();
+      unregisterMMKV();
       unsubscribe();
       client.disconnect();
     };

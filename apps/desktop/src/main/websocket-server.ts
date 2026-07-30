@@ -4,6 +4,9 @@ import {
   negotiateProtocolVersion,
   parseClientMessage,
   type DevToolEventEnvelope,
+  type StorageCommand,
+  type StorageOperation,
+  type StorageResult,
 } from '@pulse-rn/protocol';
 import { WebSocketServer, type WebSocket } from 'ws';
 import type { ConnectedDevice } from './session-manager.js';
@@ -17,6 +20,16 @@ interface Callbacks {
 
 export class DevToolWebSocketServer {
   private server?: WebSocketServer;
+  private readonly sockets = new Map<string, WebSocket>();
+  private readonly pendingStorage = new Map<
+    string,
+    {
+      connectionId: string;
+      resolve(value: StorageResult): void;
+      reject(error: Error): void;
+      timer: ReturnType<typeof setTimeout>;
+    }
+  >();
 
   constructor(
     private readonly port: number,
@@ -44,6 +57,38 @@ export class DevToolWebSocketServer {
       if (!this.server) return resolve();
       for (const client of this.server.clients) client.close(1001, 'Server shutting down');
       this.server.close(() => resolve());
+    });
+  }
+
+  requestStorage(
+    connectionId: string,
+    input: {
+      providerId: string;
+      operation: StorageOperation;
+      key?: string;
+      value?: string;
+    },
+  ): Promise<StorageResult> {
+    const socket = this.sockets.get(connectionId);
+    if (!socket || socket.readyState !== socket.OPEN) {
+      return Promise.reject(new Error('The selected device is no longer connected.'));
+    }
+    const requestId = createId('storage');
+    const command: StorageCommand = {
+      kind: 'storage-command',
+      requestId,
+      providerId: input.providerId,
+      operation: input.operation,
+      ...(input.key === undefined ? {} : { key: input.key }),
+      ...(input.value === undefined ? {} : { value: input.value }),
+    };
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingStorage.delete(requestId);
+        reject(new Error('Storage request timed out.'));
+      }, 10_000);
+      this.pendingStorage.set(requestId, { connectionId, resolve, reject, timer });
+      socket.send(JSON.stringify(command));
     });
   }
 
@@ -76,6 +121,7 @@ export class DevToolWebSocketServer {
             return socket.close(1002, 'Unsupported protocol');
           }
           negotiated = true;
+          this.sockets.set(connectionId, socket);
           clearTimeout(handshakeTimeout);
           this.callbacks.onConnected({
             connectionId,
@@ -97,12 +143,27 @@ export class DevToolWebSocketServer {
           return;
         }
         if (message.kind === 'event-batch') this.callbacks.onEvents(message.events);
+        if (message.kind === 'storage-result') {
+          const pending = this.pendingStorage.get(message.requestId);
+          if (pending?.connectionId === connectionId) {
+            clearTimeout(pending.timer);
+            this.pendingStorage.delete(message.requestId);
+            pending.resolve(message);
+          }
+        }
       } catch (error) {
         this.callbacks.onInvalidMessage(error instanceof Error ? error.message : 'Invalid JSON');
       }
     });
     socket.once('close', () => {
       clearTimeout(handshakeTimeout);
+      this.sockets.delete(connectionId);
+      for (const [requestId, pending] of this.pendingStorage) {
+        if (pending.connectionId !== connectionId) continue;
+        clearTimeout(pending.timer);
+        pending.reject(new Error('Device disconnected during storage request.'));
+        this.pendingStorage.delete(requestId);
+      }
       if (negotiated) this.callbacks.onDisconnected(connectionId);
     });
   }

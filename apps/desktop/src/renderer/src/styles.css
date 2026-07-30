@@ -1004,3 +1004,141 @@ pre {
     21px ui-monospace,
     monospace;
 }
+.storage-toolbar {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border-bottom: 1px solid #252a35;
+  background: #10131a;
+}
+.storage-toolbar select,
+.storage-toolbar input {
+  height: 30px;
+  border: 1px solid #2b3140;
+  border-radius: 6px;
+  outline: none;
+  background: #0c0f15;
+  color: #9da5b5;
+  font-size: 10px;
+}
+.storage-toolbar select {
+  max-width: 160px;
+  padding: 0 7px;
+}
+.storage-toolbar input {
+  width: min(260px, 40%);
+  margin-left: auto;
+  padding: 0 10px;
+}
+.storage-error,
+.storage-warning {
+  padding: 8px 14px;
+  border-bottom: 1px solid #5a2930;
+  background: #301a1e;
+  color: #ec858d;
+  font-size: 9px;
+}
+.storage-workspace {
+  display: grid;
+  height: calc(100vh - 177px);
+  grid-template-columns: minmax(150px, 34%) minmax(240px, 1fr);
+}
+.storage-keys {
+  overflow: auto;
+  border-right: 1px solid #252a35;
+  background: #0e1117;
+}
+.storage-keys button {
+  width: 100%;
+  padding: 10px 13px;
+  overflow: hidden;
+  border: 0;
+  border-bottom: 1px solid #1a1f28;
+  background: transparent;
+  color: #a6adba;
+  cursor: pointer;
+  font:
+    10px ui-monospace,
+    monospace;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.storage-keys button:hover,
+.storage-keys button.selected {
+  background: #171b25;
+  color: #c9bdf4;
+}
+.storage-editor {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  background: #0c0f15;
+}
+.storage-editor-header {
+  display: flex;
+  min-height: 46px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #252a35;
+}
+.storage-editor-header strong {
+  overflow: hidden;
+  color: #c9ced8;
+  font:
+    10px ui-monospace,
+    monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.storage-editor-header div {
+  display: flex;
+  gap: 6px;
+}
+.storage-editor-header button {
+  padding: 5px 8px;
+  border: 1px solid #343b4a;
+  border-radius: 5px;
+  background: #171b24;
+  color: #aab2c1;
+  cursor: pointer;
+  font-size: 9px;
+}
+.storage-editor-header button.danger {
+  border-color: #5a2930;
+  color: #ed858d;
+}
+.storage-editor-header button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+.storage-editor textarea {
+  min-height: 0;
+  flex: 1;
+  resize: none;
+  padding: 14px;
+  border: 0;
+  outline: none;
+  background: #0b0d12;
+  color: #b6c1d6;
+  font:
+    11px/1.6 ui-monospace,
+    monospace;
+}
+.storage-warning {
+  margin: 0;
+  border-color: #665224;
+  background: #302815;
+  color: #dbb760;
+}
+.storage-empty {
+  margin: auto;
+  padding: 24px;
+  color: #626b7d;
+  font-size: 10px;
+  text-align: center;
+}

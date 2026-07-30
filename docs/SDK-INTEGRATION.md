@@ -122,3 +122,60 @@ JavaScript FPS is calculated from animation-frame callback delivery, while event
 are calculated from timer drift. These values are explicitly marked approximate. They are useful for
 finding JavaScript responsiveness regressions but are not native UI-thread, CPU, or memory profiling.
 `captureMemory` emits data only when the runtime genuinely exposes JavaScript heap usage.
+
+## Storage inspection
+
+Install AsyncStorage in the app, enable storage, and register its adapter before connecting:
+
+```ts
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createAsyncStorageProvider, ReactNativeDevTool } from '@pulse-rn/sdk';
+
+const client = ReactNativeDevTool.configure({
+  // ...
+  enableStorage: true,
+});
+
+const unregister = client.registerStorageProvider(createAsyncStorageProvider(AsyncStorage));
+client.connect();
+```
+
+The desktop app discovers registered providers and can list, search, read, refresh, update, and delete
+keys. Every update and delete requires an explicit desktop confirmation. JSON values pass through
+configured field redaction before being returned to Electron; editing is disabled when a displayed
+value contains redaction markers so secrets cannot accidentally be overwritten.
+
+MMKV v3/v4 can use the first-class adapter:
+
+```ts
+import { createMMKV } from 'react-native-mmkv';
+import { createMMKVStorageProvider } from '@pulse-rn/sdk';
+
+const mmkv = createMMKV({ id: 'app-cache' });
+client.registerStorageProvider(
+  createMMKVStorageProvider(mmkv, {
+    id: 'mmkv-app-cache',
+    name: 'MMKV · app-cache',
+  }),
+);
+```
+
+Register multiple MMKV instances with unique provider IDs to inspect them independently. String,
+number, and boolean types are preserved when edited. ArrayBuffer values are visible as read-only
+size markers because converting arbitrary binary data to editable text would be unsafe.
+
+MMKV v4 requires both `react-native-mmkv` and `react-native-nitro-modules`. Expo apps must use a
+development build/prebuild because Expo Go cannot load those custom native modules.
+
+Custom storage can also be integrated without changing the protocol:
+
+```ts
+client.registerStorageProvider({
+  id: 'custom',
+  name: 'Custom storage',
+  getAllKeys: async () => storage.getAllKeys(),
+  getItem: async (key) => storage.getString(key) ?? null,
+  setItem: async (key, value) => storage.set(key, value),
+  removeItem: async (key) => storage.delete(key),
+});
+```

@@ -11,5 +11,4 @@ coverage/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
-apps/example-react-native/android/
-apps/example-react-native/ios/
+

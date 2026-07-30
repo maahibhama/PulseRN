@@ -9,6 +9,9 @@ import {
   parseClientMessage,
   performanceEventPayloadSchema,
   reduxEventPayloadSchema,
+  storageCommandSchema,
+  storageEventPayloadSchema,
+  storageResultSchema,
 } from '../src/index.js';
 
 describe('protocol', () => {
@@ -97,6 +100,39 @@ describe('protocol', () => {
         value: 138,
         unit: 'ms',
         approximate: true,
+      }).success,
+    ).toBe(true);
+  });
+
+  it('validates storage commands, results, and audit events', () => {
+    expect(
+      storageCommandSchema.safeParse({
+        kind: 'storage-command',
+        requestId: 'storage-1',
+        providerId: 'async-storage',
+        operation: 'get',
+        key: 'session',
+      }).success,
+    ).toBe(true);
+    expect(
+      storageResultSchema.safeParse({
+        kind: 'storage-result',
+        requestId: 'storage-1',
+        providerId: 'async-storage',
+        operation: 'get',
+        success: true,
+        value: '{"user":"developer"}',
+      }).success,
+    ).toBe(true);
+    expect(
+      storageEventPayloadSchema.safeParse({
+        requestId: 'storage-1',
+        providerId: 'async-storage',
+        operation: 'get',
+        key: 'session',
+        success: true,
+        mutation: false,
+        duration: 1.2,
       }).success,
     ).toBe(true);
   });
