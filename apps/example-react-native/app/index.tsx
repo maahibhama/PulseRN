@@ -3,15 +3,46 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { Platform, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import { ReactNativeDevTool } from '@pulse-rn/sdk';
+import { createDevToolMiddleware } from '@pulse-rn/redux-plugin';
+import { applyMiddleware, createStore } from 'redux';
 
 // Android Emulator reaches the host through 10.0.2.2. Set EXPO_PUBLIC_PULSE_RN_HOST
 // to the development machine's LAN address for physical devices.
 const host =
   process.env.EXPO_PUBLIC_PULSE_RN_HOST ?? (Platform.OS === 'android' ? '10.0.2.2' : '127.0.0.1');
 
+interface DemoState {
+  count: number;
+  profile: { name: string; token: string };
+}
+
+const initialState: DemoState = {
+  count: 0,
+  profile: { name: 'PulseRN developer', token: 'redux-state-secret' },
+};
+
+function demoReducer(state = initialState, action: { type: string; payload?: unknown }): DemoState {
+  if (action.type === 'counter/increment') return { ...state, count: state.count + 1 };
+  if (action.type === 'profile/rename' && typeof action.payload === 'string') {
+    return { ...state, profile: { ...state.profile, name: action.payload } };
+  }
+  return state;
+}
+
+const reduxMiddleware = createDevToolMiddleware({
+  client: ReactNativeDevTool,
+  storeId: 'example',
+  captureState: true,
+  captureStateDiff: true,
+  maxStateDepth: 10,
+  redactedFields: ['token'],
+});
+const demoStore = createStore(demoReducer, applyMiddleware(reduxMiddleware));
+
 export default function HomeScreen() {
   const [sent, setSent] = useState(0);
   const [networkSent, setNetworkSent] = useState(0);
+  const [reduxCount, setReduxCount] = useState(demoStore.getState().count);
 
   useEffect(() => {
     if (!__DEV__) return;
@@ -42,7 +73,11 @@ export default function HomeScreen() {
       type: 'example.started',
       payload: { runtime: Platform.OS, host },
     });
-    return () => client.disconnect();
+    const unsubscribe = demoStore.subscribe(() => setReduxCount(demoStore.getState().count));
+    return () => {
+      unsubscribe();
+      client.disconnect();
+    };
   }, []);
 
   const sendTestEvent = () => {
@@ -89,12 +124,22 @@ export default function HomeScreen() {
     }
   };
 
+  const sendReduxDemo = () => {
+    demoStore.dispatch({
+      type: 'counter/increment',
+      payload: { source: 'button', token: 'redux-action-secret' },
+    });
+    if (demoStore.getState().count % 3 === 0) {
+      demoStore.dispatch({ type: 'profile/rename', payload: `Developer ${Date.now()}` });
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="light" />
       <View style={styles.container}>
         <Text style={styles.eyebrow}>PULSERN SDK</Text>
-        <Text style={styles.title}>Phase 1 connection test</Text>
+        <Text style={styles.title}>PulseRN phase demos</Text>
         <Text style={styles.body}>Desktop endpoint: ws://{host}:9090</Text>
         <Pressable style={styles.button} onPress={sendTestEvent}>
           <Text style={styles.buttonText}>Emit console demo</Text>
@@ -104,6 +149,10 @@ export default function HomeScreen() {
           <Text style={styles.buttonText}>Run network demo</Text>
         </Pressable>
         <Text style={styles.counter}>{networkSent} network demos requested</Text>
+        <Pressable style={[styles.button, styles.reduxButton]} onPress={sendReduxDemo}>
+          <Text style={styles.buttonText}>Dispatch Redux action</Text>
+        </Pressable>
+        <Text style={styles.counter}>Redux counter: {reduxCount}</Text>
       </View>
     </SafeAreaView>
   );
@@ -119,4 +168,5 @@ const styles = StyleSheet.create({
   buttonText: { color: '#ffffff', fontSize: 15, fontWeight: '700' },
   counter: { color: '#687085', marginTop: 16, textAlign: 'center' },
   secondaryButton: { backgroundColor: '#247b65', marginTop: 24 },
+  reduxButton: { backgroundColor: '#5e46b5', marginTop: 24 },
 });

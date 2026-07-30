@@ -6,6 +6,7 @@ import {
   networkEventPayloadSchema,
   negotiateProtocolVersion,
   parseClientMessage,
+  reduxEventPayloadSchema,
 } from '../src/index.js';
 
 describe('protocol', () => {
@@ -50,6 +51,20 @@ describe('protocol', () => {
         startedAt: 100,
         endedAt: 140,
         duration: 40,
+      }).success,
+    ).toBe(true);
+  });
+
+  it('validates Redux actions and state diffs', () => {
+    expect(
+      reduxEventPayloadSchema.safeParse({
+        storeId: 'main',
+        actionType: 'counter/increment',
+        action: { type: 'counter/increment' },
+        previousState: { count: 0 },
+        nextState: { count: 1 },
+        stateDiff: [{ path: '$.count', kind: 'changed', before: 0, after: 1 }],
+        reducerDuration: 0.25,
       }).success,
     ).toBe(true);
   });

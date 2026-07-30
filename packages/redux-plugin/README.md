@@ -1,3 +1,15 @@
 # @pulse-rn/redux-plugin
 
-This package boundary is reserved for Phase 4. No non-working placeholder API is published in Phase 1.
+Redux and Redux Toolkit-compatible middleware for recording actions, state snapshots, state diffs,
+and reducer duration in PulseRN.
+
+```ts
+createDevToolMiddleware({
+  client: ReactNativeDevTool,
+  storeId: 'main',
+  captureState: true,
+  captureStateDiff: true,
+  maxStateDepth: 10,
+  redactedFields: ['token'],
+});
+```

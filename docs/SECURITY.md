@@ -14,6 +14,7 @@ Please report vulnerabilities privately to the repository maintainers. Do not op
 - Sensitive object fields are redacted before queueing/transmission.
 - Sensitive network headers and URL query parameters are redacted before transmission.
 - Binary bodies are excluded and captured text/JSON bodies are size-limited.
+- Redux actions and state snapshots are depth-bounded and configurable sensitive fields are redacted.
 - No `eval`, remote content, navigation, or arbitrary window opening is allowed.
 
 Do not bind the server to a LAN interface until authentication and origin controls are implemented.

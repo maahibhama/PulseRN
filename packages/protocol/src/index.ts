@@ -74,6 +74,24 @@ export const networkEventPayloadSchema = z.object({
 });
 export type NetworkEventPayload = z.infer<typeof networkEventPayloadSchema>;
 
+export const reduxStateDiffSchema = z.object({
+  path: z.string().max(4_096),
+  kind: z.enum(['added', 'removed', 'changed']),
+  before: jsonValue.optional(),
+  after: jsonValue.optional(),
+});
+export const reduxEventPayloadSchema = z.object({
+  storeId: identifier,
+  actionType: z.string().max(4_096),
+  action: jsonValue,
+  previousState: jsonValue.optional(),
+  nextState: jsonValue.optional(),
+  stateDiff: z.array(reduxStateDiffSchema).max(10_000).optional(),
+  reducerDuration: z.number().finite().nonnegative(),
+});
+export type ReduxStateDiff = z.infer<typeof reduxStateDiffSchema>;
+export type ReduxEventPayload = z.infer<typeof reduxEventPayloadSchema>;
+
 export const eventEnvelopeSchema = z
   .object({
     id: identifier,
@@ -95,7 +113,9 @@ export const eventEnvelopeSchema = z
         ? consoleLogPayloadSchema
         : event.category === 'network'
           ? networkEventPayloadSchema
-          : undefined;
+          : event.category === 'redux'
+            ? reduxEventPayloadSchema
+            : undefined;
     if (payloadSchema && !payloadSchema.safeParse(event.payload).success) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
