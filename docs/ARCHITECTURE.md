@@ -27,6 +27,7 @@ SQLite writes use WAL mode and batched transactions. A small in-memory projectio
 
 - `apps/desktop`: Electron main, preload, React renderer, local persistence, and connection server.
 - `apps/example-react-native`: runnable Expo integration example.
+- `apps/example-react-native-cli`: bare React Native Community CLI integration example with committed native projects.
 - `packages/protocol`: message types, schemas, negotiation, and JSON decoding boundary.
 - `packages/sdk`: development-only transport client and event queue.
 - `packages/shared`: runtime-neutral IDs and recursive redaction.
