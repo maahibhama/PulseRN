@@ -28,6 +28,7 @@ const tag = `sdk-v${version}`;
 const root = new URL('..', import.meta.url);
 const sdkPackageUrl = new URL('../packages/sdk/package.json', import.meta.url);
 const clientUrl = new URL('../packages/sdk/src/client.ts', import.meta.url);
+const releasePaths = ['packages/sdk/package.json', 'packages/sdk/src/client.ts', 'pnpm-lock.yaml'];
 
 function execute(command, commandArgs, options = {}) {
   const printable = [command, ...commandArgs].join(' ');
@@ -56,10 +57,6 @@ async function updateSdkVersion() {
   const packageSource = await readFile(sdkPackageUrl, 'utf8');
   const packageJson = JSON.parse(packageSource);
   const previousVersion = packageJson.version;
-  if (previousVersion === version) {
-    throw new Error(`SDK package is already version ${version}.`);
-  }
-
   const clientSource = await readFile(clientUrl, 'utf8');
   const currentClientVersion = /const SDK_VERSION = '([^']+)';/.exec(clientSource)?.[1];
   if (!currentClientVersion) {
@@ -70,6 +67,9 @@ async function updateSdkVersion() {
       `SDK version sources are already inconsistent: package=${previousVersion}, client=${currentClientVersion}.`,
     );
   }
+  if (previousVersion === version) {
+    return { changed: false, previousVersion };
+  }
 
   if (!dryRun) {
     packageJson.version = version;
@@ -79,14 +79,26 @@ async function updateSdkVersion() {
       clientSource.replace(/const SDK_VERSION = '[^']+';/, `const SDK_VERSION = '${version}';`),
     );
   }
-  return previousVersion;
+  return { changed: true, previousVersion };
 }
 
 const initialStatus = execute('git', ['status', '--porcelain'], { capture: true }).stdout;
 if (initialStatus) {
-  throw new Error(
-    `The working tree must be clean before preparing an SDK release.\n${initialStatus}`,
-  );
+  const dirtyPaths = initialStatus
+    .split('\n')
+    .map((line) => line.slice(3).trim())
+    .filter(Boolean);
+  const onlyReleaseFilesAreDirty = dirtyPaths.every((path) => releasePaths.includes(path));
+  const packageVersion = JSON.parse(await readFile(sdkPackageUrl, 'utf8')).version;
+  const clientVersion = /const SDK_VERSION = '([^']+)';/.exec(
+    await readFile(clientUrl, 'utf8'),
+  )?.[1];
+  if (!onlyReleaseFilesAreDirty || packageVersion !== version || clientVersion !== version) {
+    throw new Error(
+      `The working tree must be clean before preparing an SDK release.\n${initialStatus}`,
+    );
+  }
+  console.log(`\nResuming the partially prepared ${tag} release.`);
 }
 
 const branch = execute('git', ['branch', '--show-current'], { capture: true }).stdout;
@@ -139,14 +151,18 @@ if (!assumeYes && !dryRun) {
   }
 }
 
-const previousVersion = await updateSdkVersion();
-console.log(`\nSDK version: ${previousVersion} -> ${version}`);
+const versionUpdate = await updateSdkVersion();
+console.log(
+  versionUpdate.changed
+    ? `\nSDK version: ${versionUpdate.previousVersion} -> ${version}`
+    : `\nSDK version is already prepared at ${version}; continuing the release.`,
+);
 
 if (dryRun) {
   console.log('\nWould update the SDK package, client version, and pnpm lockfile.');
   console.log(`Would validate the packed package against ${tag}.`);
 } else {
-  execute('pnpm', ['install', '--lockfile-only'], { mutates: true });
+  execute('pnpm', ['install'], { mutates: true });
   execute('pnpm', ['release:verify:sdk', tag]);
 }
 
@@ -157,14 +173,17 @@ if (!skipChecks) {
   execute('pnpm', ['build']);
 }
 
-execute(
-  'git',
-  ['add', 'packages/sdk/package.json', 'packages/sdk/src/client.ts', 'pnpm-lock.yaml'],
-  { mutates: true },
-);
-execute('git', ['commit', '-m', `chore(sdk): release version ${version}`], {
-  mutates: true,
-});
+const releaseStatus = execute('git', ['status', '--porcelain', '--', ...releasePaths], {
+  capture: true,
+}).stdout;
+if (releaseStatus) {
+  execute('git', ['add', ...releasePaths], { mutates: true });
+  execute('git', ['commit', '-m', `chore(sdk): release version ${version}`], {
+    mutates: true,
+  });
+} else {
+  console.log('\nSDK version changes are already committed.');
+}
 execute('git', ['push', '-u', 'origin', branch], { mutates: true });
 
 if (replaceTag && localTagExists) {

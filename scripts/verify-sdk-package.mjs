@@ -27,6 +27,10 @@ if (requestedTag && requestedTag !== expectedTag) {
 const temporaryDirectory = mkdtempSync(join(tmpdir(), 'pulse-rn-sdk-'));
 
 try {
+  execFileSync('pnpm', ['exec', 'turbo', 'run', 'build', '--filter=@pulse-rn/sdk...'], {
+    cwd: root,
+    stdio: 'inherit',
+  });
   execFileSync(
     'pnpm',
     ['--filter', '@pulse-rn/sdk', 'pack', '--pack-destination', temporaryDirectory],

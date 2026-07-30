@@ -34,7 +34,7 @@ import type {
   WebSocketLike,
 } from './types.js';
 
-const SDK_VERSION = '0.2.0';
+const SDK_VERSION = '0.2.1';
 const CONNECTING = 0;
 const OPEN = 1;
 
