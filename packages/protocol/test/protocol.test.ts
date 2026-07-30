@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   PROTOCOL_VERSION,
   consoleLogPayloadSchema,
+  errorEventPayloadSchema,
   eventEnvelopeSchema,
   networkEventPayloadSchema,
   navigationEventPayloadSchema,
@@ -133,6 +134,30 @@ describe('protocol', () => {
         success: true,
         mutation: false,
         duration: 1.2,
+      }).success,
+    ).toBe(true);
+  });
+
+  it('validates errors with bounded timeline context', () => {
+    expect(
+      errorEventPayloadSchema.safeParse({
+        source: 'react_boundary',
+        name: 'TypeError',
+        message: 'Cannot read property',
+        stack: 'TypeError: Cannot read property\n    at Checkout',
+        componentStack: '\n    at CheckoutScreen',
+        screen: 'Checkout',
+        fatal: false,
+        context: [
+          {
+            id: 'event-1',
+            timestamp: 100,
+            sequence: 1,
+            category: 'redux',
+            type: 'redux.action',
+            summary: 'checkout/start',
+          },
+        ],
       }).success,
     ).toBe(true);
   });

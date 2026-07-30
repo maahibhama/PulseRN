@@ -2,6 +2,7 @@ import type { DevToolEventEnvelope } from '@pulse-rn/protocol';
 import { useEffect, useState } from 'react';
 import { ConsolePanel } from './ConsolePanel.js';
 import { EventDetails } from './EventDetails.js';
+import { ErrorsPanel } from './ErrorsPanel.js';
 import { NetworkPanel } from './NetworkPanel.js';
 import { NavigationPanel } from './NavigationPanel.js';
 import { PerformancePanel } from './PerformancePanel.js';
@@ -27,7 +28,7 @@ const navItems: { name: ViewName; icon: string; available: boolean }[] = [
   { name: 'Navigation', icon: '→', available: true },
   { name: 'Performance', icon: '⌁', available: true },
   { name: 'Storage', icon: '▤', available: true },
-  { name: 'Errors', icon: '△', available: false },
+  { name: 'Errors', icon: '△', available: true },
 ];
 
 function formatTime(timestamp: number): string {
@@ -159,7 +160,7 @@ export function App() {
               ? deviceLabel(devices[0]!)
               : `${devices.length} devices connected`}
         </div>
-        <div className="phase-pill">Phase 7 · Storage</div>
+        <div className="phase-pill">Phase 8 · Errors</div>
       </header>
       <aside className="sidebar">
         <div className="section-label">Inspect</div>
@@ -197,6 +198,8 @@ export function App() {
         />
       ) : activeView === 'Storage' ? (
         <StoragePanel devices={devices} />
+      ) : activeView === 'Errors' ? (
+        <ErrorsPanel events={events} selectedEventId={selectedEventId} onSelect={selectEvent} />
       ) : (
         <UpcomingPanel view={activeView} />
       )}

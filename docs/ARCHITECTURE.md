@@ -11,6 +11,11 @@ specific negotiated WebSocket connection. The SDK dispatches commands only to re
 and returns bounded results. This provider boundary supports AsyncStorage now and future MMKV/custom
 adapters without coupling the transport to a storage library.
 
+Error instrumentation wraps React Native's global handler while preserving its normal behavior and
+uses runtime error/rejection events where available. React error boundaries forward through the
+public capture API. Before batching, the SDK attaches the active navigation screen and a bounded,
+redacted summary of the preceding 20 events.
+
 SQLite writes use WAL mode and batched transactions. A small in-memory projection feeds the Phase 1 UI; later phases will use paginated queries and TanStack Virtual for 100,000-event sessions.
 
 ## Package responsibilities

@@ -4,6 +4,8 @@ import {
   type ClientHello,
   type DevToolEventEnvelope,
   type EventBatch,
+  type ErrorContextEvent,
+  type ErrorEventPayload,
   type JsonValue,
   type NetworkEventPayload,
   type PerformanceEventPayload,
@@ -18,9 +20,20 @@ import { installFetchInterceptor } from './fetch-instrumentation';
 import type { NetworkCaptureOptions } from './network-utils';
 import { formatConsoleMessage } from './serialization';
 import { installXhrInterceptor } from './xhr-instrumentation';
+import {
+  installErrorInterceptor,
+  toCapturedError,
+  type CapturedError,
+} from './error-instrumentation';
 import { PerformanceMonitor } from './performance-monitor';
 import type { StorageProvider } from './storage-provider';
-import type { DevToolConfig, TrackEventInput, WebSocketFactory, WebSocketLike } from './types.js';
+import type {
+  CaptureErrorOptions,
+  DevToolConfig,
+  TrackEventInput,
+  WebSocketFactory,
+  WebSocketLike,
+} from './types.js';
 
 const SDK_VERSION = '0.1.0';
 const CONNECTING = 0;
@@ -61,7 +74,10 @@ export class DevToolClient {
   private manuallyClosed = false;
   private droppedEvents = 0;
   private restoreConsole?: () => void;
+  private restoreErrors?: () => void;
   private networkRestores: (() => void)[] = [];
+  private recentEvents: ErrorContextEvent[] = [];
+  private currentScreen?: string;
   private readonly storageProviders = new Map<string, StorageProvider>();
   readonly performance: PerformanceMonitor;
   readonly deviceId: string;
@@ -120,6 +136,12 @@ export class DevToolClient {
         { captureStackTrace: this.config.captureConsoleStackTrace ?? true },
       );
     }
+    if (this.config.enableErrors && !this.restoreErrors) {
+      this.restoreErrors = installErrorInterceptor(
+        globalThis as Parameters<typeof installErrorInterceptor>[0],
+        (error) => this.emitError(error),
+      );
+    }
     if (this.config.enableNetwork && this.networkRestores.length === 0) {
       const emit = (payload: NetworkEventPayload) => {
         this.track({ category: 'network', type: 'network.request', payload });
@@ -139,11 +161,21 @@ export class DevToolClient {
       }
     }
     const scheme = this.config.secure ? 'wss' : 'ws';
-    this.socket = this.factory(`${scheme}://${this.config.host}:${this.config.port}`);
+    try {
+      this.socket = this.factory(`${scheme}://${this.config.host}:${this.config.port}`);
+    } catch (error) {
+      this.emitError(toCapturedError(error, 'sdk_internal'));
+      this.handleClose();
+      return this;
+    }
     this.socket.onopen = () => this.sendHello();
     this.socket.onmessage = (event) => this.handleServerMessage(event.data);
     this.socket.onclose = () => this.handleClose();
-    this.socket.onerror = () => undefined;
+    this.socket.onerror = () => {
+      this.emitError(
+        toCapturedError(new Error('PulseRN WebSocket connection error.'), 'sdk_internal'),
+      );
+    };
     return this;
   }
 
@@ -154,6 +186,8 @@ export class DevToolClient {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.restoreConsole?.();
     this.restoreConsole = undefined;
+    this.restoreErrors?.();
+    this.restoreErrors = undefined;
     this.performance.stop();
     for (const restore of this.networkRestores.splice(0)) restore();
     this.socket?.close();
@@ -180,6 +214,34 @@ export class DevToolClient {
       this.droppedEvents += 1;
       return;
     }
+    if (
+      input.category === 'navigation' &&
+      payload &&
+      typeof payload === 'object' &&
+      !Array.isArray(payload)
+    ) {
+      const route = payload['currentRoute'];
+      if (
+        route &&
+        typeof route === 'object' &&
+        !Array.isArray(route) &&
+        typeof route['name'] === 'string'
+      ) {
+        this.currentScreen = route['name'];
+      }
+    }
+    if (
+      input.category === 'error' &&
+      payload &&
+      typeof payload === 'object' &&
+      !Array.isArray(payload)
+    ) {
+      payload = {
+        ...payload,
+        context: this.recentEvents.slice(-20),
+        ...(this.currentScreen ? { screen: this.currentScreen } : {}),
+      };
+    }
     const event: DevToolEventEnvelope = {
       id: createId('event'),
       protocolVersion: PROTOCOL_VERSION,
@@ -199,8 +261,44 @@ export class DevToolClient {
       this.droppedEvents += 1;
     }
     this.queue.push(event);
-    if (this.queue.length >= this.config.batchSize) this.flush();
+    this.rememberEvent(event);
+    if (
+      input.category === 'network' &&
+      payload &&
+      typeof payload === 'object' &&
+      !Array.isArray(payload) &&
+      payload['error'] &&
+      typeof payload['error'] === 'object' &&
+      !Array.isArray(payload['error'])
+    ) {
+      const networkError = payload['error'];
+      this.emitError({
+        source: 'network',
+        name: typeof networkError['name'] === 'string' ? networkError['name'] : 'NetworkError',
+        message:
+          typeof networkError['message'] === 'string'
+            ? networkError['message']
+            : 'Network request failed.',
+        fatal: false,
+        metadata: {
+          requestId: typeof payload['requestId'] === 'string' ? payload['requestId'] : '',
+          method: typeof payload['method'] === 'string' ? payload['method'] : '',
+          url: typeof payload['url'] === 'string' ? payload['url'] : '',
+        },
+      });
+    }
+    if (input.category === 'error' || this.queue.length >= this.config.batchSize) this.flush();
     else this.scheduleFlush();
+  }
+
+  captureError(error: unknown, options: CaptureErrorOptions = {}): void {
+    this.emitError(
+      toCapturedError(error, options.source ?? 'manual', {
+        ...(options.fatal === undefined ? {} : { fatal: options.fatal }),
+        ...(options.componentStack ? { componentStack: options.componentStack } : {}),
+        ...(options.metadata === undefined ? {} : { metadata: options.metadata }),
+      }),
+    );
   }
 
   getStats(): { queuedEvents: number; droppedEvents: number; connected: boolean } {
@@ -239,6 +337,37 @@ export class DevToolClient {
         ...(this.config.redaction?.queryParameters ?? []),
       ],
     };
+  }
+
+  private emitError(error: CapturedError): void {
+    if (!this.config.enableErrors) return;
+    const payload: ErrorEventPayload = {
+      ...error,
+      context: [],
+    };
+    this.track({ category: 'error', type: `error.${error.source}`, payload });
+  }
+
+  private rememberEvent(event: DevToolEventEnvelope): void {
+    let summary: string | undefined;
+    if (event.payload && typeof event.payload === 'object' && !Array.isArray(event.payload)) {
+      const candidate =
+        event.payload['message'] ??
+        event.payload['actionType'] ??
+        event.payload['url'] ??
+        event.payload['name'];
+      if (typeof candidate === 'string') summary = candidate.slice(0, 10_000);
+    }
+    this.recentEvents.push({
+      id: event.id,
+      timestamp: event.timestamp,
+      sequence: event.sequence,
+      category: event.category,
+      type: event.type,
+      ...(summary ? { summary } : {}),
+      ...(event.correlationId ? { correlationId: event.correlationId } : {}),
+    });
+    if (this.recentEvents.length > 20) this.recentEvents.shift();
   }
 
   private sendHello(): void {

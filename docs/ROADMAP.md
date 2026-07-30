@@ -7,6 +7,6 @@
 - **Phase 5 — Navigation (complete):** React Navigation integration, lifecycle events, nested route resolution, timing, redacted parameters, manual API.
 - **Phase 6 — Performance (complete):** approximate JS FPS/lag/stalls, startup and screen timing, optional JS heap samples, custom marks, correlated dashboards.
 - **Phase 7 — Storage (complete):** AsyncStorage/provider discovery, key read/search/refresh, JSON redaction, confirmed mutations, extensible provider API.
-- **Phase 8 — Errors:** global errors, rejection/error-boundary capture, stacks, and previous-event context.
+- **Phase 8 — Errors (complete):** global errors, rejection/error-boundary capture, stacks, active-screen attribution, network/SDK failures, and the previous 20 timeline events.
 
 Before high-volume phases, harden the foundation with database pagination, renderer virtualization, authenticated optional LAN binding, SDK identity persistence, and Electron end-to-end coverage.

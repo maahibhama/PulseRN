@@ -1,4 +1,5 @@
 import { consoleLogPayloadSchema, type DevToolEventEnvelope } from '@pulse-rn/protocol';
+import { ErrorEventDetails } from './ErrorEventDetails.js';
 import { NetworkEventDetails } from './NetworkEventDetails.js';
 import { NavigationEventDetails } from './NavigationEventDetails.js';
 import { PerformanceEventDetails } from './PerformanceEventDetails.js';
@@ -80,6 +81,8 @@ export function EventDetails({ event }: EventDetailsProps) {
             <NavigationEventDetails event={event} />
           ) : event.category === 'performance' ? (
             <PerformanceEventDetails event={event} />
+          ) : event.category === 'error' ? (
+            <ErrorEventDetails event={event} />
           ) : (
             <StandardDetails event={event} />
           )}

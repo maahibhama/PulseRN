@@ -167,6 +167,43 @@ size markers because converting arbitrary binary data to editable text would be 
 MMKV v4 requires both `react-native-mmkv` and `react-native-nitro-modules`. Expo apps must use a
 development build/prebuild because Expo Go cannot load those custom native modules.
 
+## Error capture
+
+Enable automatic uncaught JavaScript error and unhandled-rejection capture:
+
+```ts
+ReactNativeDevTool.configure({
+  appName: 'ExampleApp',
+  enableErrors: true,
+}).connect();
+```
+
+PulseRN preserves React Native's existing global error handler. Each error includes the current
+screen, when known, and the previous 20 PulseRN timeline events.
+
+Forward React error-boundary failures from `componentDidCatch`:
+
+```ts
+componentDidCatch(error: Error, info: React.ErrorInfo) {
+  ReactNativeDevTool.captureError(error, {
+    source: 'react_boundary',
+    componentStack: info.componentStack ?? undefined,
+  });
+}
+```
+
+Use the same API for handled failures that remain important during debugging:
+
+```ts
+ReactNativeDevTool.captureError(error, {
+  source: 'manual',
+  metadata: { operation: 'checkout' },
+});
+```
+
+Structured error metadata passes through configured field redaction. Avoid placing secrets directly
+inside error messages or stack text because arbitrary strings cannot be safely field-redacted.
+
 Custom storage can also be integrated without changing the protocol:
 
 ```ts
