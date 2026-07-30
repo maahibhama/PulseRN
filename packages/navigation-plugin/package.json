@@ -1,0 +1,8 @@
+{
+  "name": "@pulse-rn/navigation-plugin",
+  "version": "0.1.0",
+  "description": "Reserved package boundary for the Phase 5 PulseRN navigation integration.",
+  "license": "MIT",
+  "private": true,
+  "type": "module"
+}

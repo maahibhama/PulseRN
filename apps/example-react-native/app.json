@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "name": "PulseRN Example",
+    "slug": "pulse-rn-example",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "pulsern-example",
+    "plugins": ["expo-router"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "dev.pulsern.example"
+    },
+    "android": {
+      "package": "dev.pulsern.example"
+    }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "@pulse-rn/redux-plugin",
+  "version": "0.1.0",
+  "description": "Reserved package boundary for the Phase 4 PulseRN Redux integration.",
+  "license": "MIT",
+  "private": true,
+  "type": "module"
+}

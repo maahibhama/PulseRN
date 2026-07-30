@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675">
+  <rect width="1200" height="675" fill="#0b0d12"/>
+  <rect x="30" y="30" width="1140" height="615" rx="18" fill="#11141b" stroke="#2b3140"/>
+  <circle cx="78" cy="77" r="10" fill="#745cff"/>
+  <text x="102" y="85" fill="#e7ebf3" font-family="system-ui" font-size="28" font-weight="700">PulseRN</text>
+  <line x1="30" y1="115" x2="1170" y2="115" stroke="#2b3140"/>
+  <line x1="230" y1="115" x2="230" y2="645" stroke="#2b3140"/>
+  <line x1="870" y1="115" x2="870" y2="645" stroke="#2b3140"/>
+  <text x="510" y="330" fill="#8d75ff" font-family="system-ui" font-size="48">⌁</text>
+  <text x="445" y="380" fill="#cbd1dc" font-family="system-ui" font-size="24">Phase 1 timeline</text>
+  <text x="455" y="418" fill="#687085" font-family="system-ui" font-size="16">Screenshot placeholder</text>
+</svg>

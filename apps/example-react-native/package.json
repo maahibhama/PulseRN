@@ -1,0 +1,29 @@
+{
+  "name": "@pulse-rn/example-react-native",
+  "version": "0.1.0",
+  "private": true,
+  "main": "expo-router/entry",
+  "scripts": {
+    "android": "expo start --android",
+    "build": "tsc -p tsconfig.json --noEmit",
+    "dev": "expo start",
+    "ios": "expo start --ios",
+    "lint": "eslint app",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@pulse-rn/sdk": "workspace:*",
+    "expo": "^53.0.20",
+    "expo-constants": "^17.1.7",
+    "expo-router": "^5.1.4",
+    "expo-status-bar": "^2.2.3",
+    "react": "19.0.0",
+    "react-native": "0.79.6",
+    "react-native-safe-area-context": "5.4.0",
+    "react-native-screens": "~4.11.1"
+  },
+  "devDependencies": {
+    "@types/react": "~19.0.10"
+  }
+}

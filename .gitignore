@@ -1,0 +1,15 @@
+node_modules/
+dist/
+out/
+coverage/
+.turbo/
+.expo/
+.expo-export-check/
+.DS_Store
+*.log
+*.tsbuildinfo
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+apps/example-react-native/android/
+apps/example-react-native/ios/
