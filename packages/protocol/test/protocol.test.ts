@@ -7,6 +7,7 @@ import {
   navigationEventPayloadSchema,
   negotiateProtocolVersion,
   parseClientMessage,
+  performanceEventPayloadSchema,
   reduxEventPayloadSchema,
 } from '../src/index.js';
 
@@ -84,6 +85,18 @@ describe('protocol', () => {
           params: { itemId: 42, token: '[REDACTED]' },
         },
         previousRouteDuration: 1_250,
+      }).success,
+    ).toBe(true);
+  });
+
+  it('validates performance metrics and approximation labels', () => {
+    expect(
+      performanceEventPayloadSchema.safeParse({
+        metric: 'js_stall',
+        name: 'JavaScript thread stall',
+        value: 138,
+        unit: 'ms',
+        approximate: true,
       }).success,
     ).toBe(true);
   });

@@ -110,6 +110,31 @@ export const navigationEventPayloadSchema = z.object({
 export type NavigationRoute = z.infer<typeof navigationRouteSchema>;
 export type NavigationEventPayload = z.infer<typeof navigationEventPayloadSchema>;
 
+export const performanceMetricSchema = z.enum([
+  'js_fps',
+  'event_loop_lag',
+  'js_stall',
+  'long_task',
+  'app_start',
+  'screen_mount',
+  'screen_interactive',
+  'screen_duration',
+  'custom_measure',
+  'memory',
+]);
+export type PerformanceMetric = z.infer<typeof performanceMetricSchema>;
+export const performanceEventPayloadSchema = z.object({
+  metric: performanceMetricSchema,
+  name: z.string().min(1).max(4_096),
+  value: z.number().finite().nonnegative(),
+  unit: z.enum(['ms', 'fps', 'bytes']),
+  approximate: z.boolean(),
+  startedAt: z.number().finite().nonnegative().optional(),
+  endedAt: z.number().finite().nonnegative().optional(),
+  metadata: jsonValue.optional(),
+});
+export type PerformanceEventPayload = z.infer<typeof performanceEventPayloadSchema>;
+
 export const eventEnvelopeSchema = z
   .object({
     id: identifier,
@@ -135,7 +160,9 @@ export const eventEnvelopeSchema = z
             ? reduxEventPayloadSchema
             : event.category === 'navigation'
               ? navigationEventPayloadSchema
-              : undefined;
+              : event.category === 'performance'
+                ? performanceEventPayloadSchema
+                : undefined;
     if (payloadSchema && !payloadSchema.safeParse(event.payload).success) {
       context.addIssue({
         code: z.ZodIssueCode.custom,

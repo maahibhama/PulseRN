@@ -4,6 +4,7 @@ import { ConsolePanel } from './ConsolePanel.js';
 import { EventDetails } from './EventDetails.js';
 import { NetworkPanel } from './NetworkPanel.js';
 import { NavigationPanel } from './NavigationPanel.js';
+import { PerformancePanel } from './PerformancePanel.js';
 import { ReduxPanel } from './ReduxPanel.js';
 import { deviceLabel, findSelectedEvent, useDesktopStore } from './store.js';
 
@@ -23,7 +24,7 @@ const navItems: { name: ViewName; icon: string; available: boolean }[] = [
   { name: 'Network', icon: '⇄', available: true },
   { name: 'Redux', icon: '◇', available: true },
   { name: 'Navigation', icon: '→', available: true },
-  { name: 'Performance', icon: '⌁', available: false },
+  { name: 'Performance', icon: '⌁', available: true },
   { name: 'Storage', icon: '▤', available: false },
   { name: 'Errors', icon: '△', available: false },
 ];
@@ -157,7 +158,7 @@ export function App() {
               ? deviceLabel(devices[0]!)
               : `${devices.length} devices connected`}
         </div>
-        <div className="phase-pill">Phase 5 · Navigation</div>
+        <div className="phase-pill">Phase 6 · Performance</div>
       </header>
       <aside className="sidebar">
         <div className="section-label">Inspect</div>
@@ -187,6 +188,12 @@ export function App() {
         <ReduxPanel events={events} selectedEventId={selectedEventId} onSelect={selectEvent} />
       ) : activeView === 'Navigation' ? (
         <NavigationPanel events={events} selectedEventId={selectedEventId} onSelect={selectEvent} />
+      ) : activeView === 'Performance' ? (
+        <PerformancePanel
+          events={events}
+          selectedEventId={selectedEventId}
+          onSelect={selectEvent}
+        />
       ) : (
         <UpcomingPanel view={activeView} />
       )}

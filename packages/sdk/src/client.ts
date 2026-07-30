@@ -6,6 +6,7 @@ import {
   type EventBatch,
   type JsonValue,
   type NetworkEventPayload,
+  type PerformanceEventPayload,
 } from '@pulse-rn/protocol';
 import { createId, redact } from '@pulse-rn/shared';
 import { installAxiosInterceptor, type AxiosInstanceLike } from './axios-instrumentation';
@@ -14,6 +15,7 @@ import { installFetchInterceptor } from './fetch-instrumentation';
 import type { NetworkCaptureOptions } from './network-utils';
 import { formatConsoleMessage } from './serialization';
 import { installXhrInterceptor } from './xhr-instrumentation';
+import { PerformanceMonitor } from './performance-monitor';
 import type { DevToolConfig, TrackEventInput, WebSocketFactory, WebSocketLike } from './types.js';
 
 const SDK_VERSION = '0.1.0';
@@ -56,6 +58,7 @@ export class DevToolClient {
   private droppedEvents = 0;
   private restoreConsole?: () => void;
   private networkRestores: (() => void)[] = [];
+  readonly performance: PerformanceMonitor;
   readonly deviceId: string;
   readonly sessionId: string;
   readonly appId: string;
@@ -78,6 +81,15 @@ export class DevToolClient {
     this.deviceId = config.deviceId ?? createId('device');
     this.sessionId = config.sessionId ?? createId('session');
     this.appId = config.appId ?? config.appName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    this.performance = new PerformanceMonitor(
+      (payload: PerformanceEventPayload) =>
+        this.track({ category: 'performance', type: `performance.${payload.metric}`, payload }),
+      {
+        sampleIntervalMs: config.performanceSampleIntervalMs,
+        stallThresholdMs: config.javascriptStallThresholdMs,
+        captureMemory: config.captureMemory,
+      },
+    );
   }
 
   connect(): this {
@@ -89,6 +101,7 @@ export class DevToolClient {
     if (this.socket?.readyState === CONNECTING || this.socket?.readyState === OPEN) return this;
 
     this.manuallyClosed = false;
+    if (this.config.enablePerformance) this.performance.start();
     if (this.config.enableConsole && !this.restoreConsole) {
       this.restoreConsole = installConsoleInterceptor(
         console,
@@ -136,6 +149,7 @@ export class DevToolClient {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.restoreConsole?.();
     this.restoreConsole = undefined;
+    this.performance.stop();
     for (const restore of this.networkRestores.splice(0)) restore();
     this.socket?.close();
     this.socket = undefined;

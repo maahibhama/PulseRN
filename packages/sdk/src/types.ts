@@ -26,6 +26,10 @@ export interface DevToolConfig {
   captureRequestBodies?: boolean;
   captureResponseBodies?: boolean;
   maxNetworkBodyBytes?: number;
+  enablePerformance?: boolean;
+  performanceSampleIntervalMs?: number;
+  javascriptStallThresholdMs?: number;
+  captureMemory?: boolean;
   redaction?: {
     fields?: readonly string[];
     headers?: readonly string[];

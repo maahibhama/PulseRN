@@ -17,6 +17,11 @@ Navigation events use `navigation.ready`, `navigation.state`, `navigation.focus`
 `navigation.blur`. Payloads identify the navigator and integration source, lifecycle/action,
 sanitized previous/current routes, and optional time spent on the previous route.
 
+Performance events use `performance.<metric>`. Payloads contain a metric/name, non-negative value,
+unit, explicit approximation flag, optional monotonic start/end values, and optional JSON metadata.
+Approximate JavaScript FPS, timer-derived event-loop lag/stalls, startup and screen milestones,
+custom measures, and runtime-exposed heap samples share this contract.
+
 Limits in Phase 1:
 
 - WebSocket frame: 2 MiB

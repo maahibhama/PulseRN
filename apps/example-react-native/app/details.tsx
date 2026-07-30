@@ -1,8 +1,22 @@
 import { useRouter } from 'expo-router';
+import { useEffect } from 'react';
 import { Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { ReactNativeDevTool } from '@pulse-rn/sdk';
 
 export default function DetailsScreen() {
   const router = useRouter();
+  useEffect(() => {
+    ReactNativeDevTool.performance.startScreen('Details');
+    ReactNativeDevTool.performance.screenMounted('Details');
+    const timer = setTimeout(
+      () => ReactNativeDevTool.performance.screenInteractive('Details'),
+      180,
+    );
+    return () => {
+      clearTimeout(timer);
+      ReactNativeDevTool.performance.endScreen('Details');
+    };
+  }, []);
   const goBack = () => {
     router.back();
   };

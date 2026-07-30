@@ -90,3 +90,35 @@ The tracker resolves nested active routes and records ready/state/focus/blur lif
 previous and current routes, sanitized parameters, and time spent on the previous route. Compatible
 navigation refs can instead use `tracker.attach(navigationRef)`. Expo Router and custom navigation
 systems can call `tracker.track({ route, action, lifecycle })`.
+
+## Performance capture
+
+Enable JavaScript-derived sampling in the SDK configuration:
+
+```ts
+ReactNativeDevTool.configure({
+  // ...
+  enablePerformance: true,
+  performanceSampleIntervalMs: 1_000,
+  javascriptStallThresholdMs: 100,
+  captureMemory: false,
+}).connect();
+```
+
+Create custom and screen measurements:
+
+```ts
+ReactNativeDevTool.performance.mark('checkout-start');
+ReactNativeDevTool.performance.mark('checkout-complete');
+ReactNativeDevTool.performance.measure('checkout-duration', 'checkout-start', 'checkout-complete');
+
+ReactNativeDevTool.performance.startScreen('Checkout');
+ReactNativeDevTool.performance.screenMounted('Checkout');
+ReactNativeDevTool.performance.screenInteractive('Checkout');
+ReactNativeDevTool.performance.endScreen('Checkout');
+```
+
+JavaScript FPS is calculated from animation-frame callback delivery, while event-loop lag and stalls
+are calculated from timer drift. These values are explicitly marked approximate. They are useful for
+finding JavaScript responsiveness regressions but are not native UI-thread, CPU, or memory profiling.
+`captureMemory` emits data only when the runtime genuinely exposes JavaScript heap usage.
