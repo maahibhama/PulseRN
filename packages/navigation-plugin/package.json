@@ -1,8 +1,31 @@
 {
   "name": "@pulse-rn/navigation-plugin",
   "version": "0.1.0",
-  "description": "Reserved package boundary for the Phase 5 PulseRN navigation integration.",
+  "description": "React Navigation and manual route instrumentation for PulseRN.",
   "license": "MIT",
-  "private": true,
-  "type": "module"
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "react-native": "./src/index.ts",
+  "exports": {
+    ".": {
+      "react-native": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint src test",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@pulse-rn/protocol": "workspace:*",
+    "@pulse-rn/shared": "workspace:*"
+  }
 }

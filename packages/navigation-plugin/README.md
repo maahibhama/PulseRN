@@ -1,3 +1,20 @@
 # @pulse-rn/navigation-plugin
 
-This package boundary is reserved for Phase 5. No non-working placeholder API is published in Phase 1.
+React Navigation-compatible and manual route instrumentation for PulseRN.
+
+```ts
+const tracker = createNavigationTracker({
+  client: ReactNativeDevTool,
+  navigatorId: 'root',
+  redactedFields: ['token'],
+});
+
+<NavigationContainer
+  ref={navigationRef}
+  onReady={() => tracker.onReady(navigationRef)}
+  onStateChange={(state) => tracker.onStateChange(state, navigationRef)}
+/>;
+```
+
+`tracker.attach(navigationRef)` can subscribe to compatible state/focus/blur listeners. Expo Router and
+custom navigators can call `tracker.track({ route, action })`.

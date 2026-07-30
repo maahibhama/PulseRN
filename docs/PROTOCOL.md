@@ -13,6 +13,10 @@ Network events use type `network.request`. Each completed payload contains a req
 Redux events use type `redux.action`. Their payload contains a store ID, action type and sanitized
 action, optional previous/next state snapshots, optional path-based state diffs, and reducer duration.
 
+Navigation events use `navigation.ready`, `navigation.state`, `navigation.focus`, or
+`navigation.blur`. Payloads identify the navigator and integration source, lifecycle/action,
+sanitized previous/current routes, and optional time spent on the previous route.
+
 Limits in Phase 1:
 
 - WebSocket frame: 2 MiB

@@ -4,6 +4,7 @@ import {
   consoleLogPayloadSchema,
   eventEnvelopeSchema,
   networkEventPayloadSchema,
+  navigationEventPayloadSchema,
   negotiateProtocolVersion,
   parseClientMessage,
   reduxEventPayloadSchema,
@@ -65,6 +66,24 @@ describe('protocol', () => {
         nextState: { count: 1 },
         stateDiff: [{ path: '$.count', kind: 'changed', before: 0, after: 1 }],
         reducerDuration: 0.25,
+      }).success,
+    ).toBe(true);
+  });
+
+  it('validates navigation lifecycle events', () => {
+    expect(
+      navigationEventPayloadSchema.safeParse({
+        navigatorId: 'root',
+        source: 'react-navigation',
+        lifecycle: 'state',
+        action: 'push',
+        previousRoute: { key: 'home-1', name: 'Home' },
+        currentRoute: {
+          key: 'details-1',
+          name: 'Details',
+          params: { itemId: 42, token: '[REDACTED]' },
+        },
+        previousRouteDuration: 1_250,
       }).success,
     ).toBe(true);
   });

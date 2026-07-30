@@ -13,6 +13,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@pulse-rn/navigation-plugin": "workspace:*",
     "@pulse-rn/redux-plugin": "workspace:*",
     "@pulse-rn/sdk": "workspace:*",
     "expo": "^53.0.20",

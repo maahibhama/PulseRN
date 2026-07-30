@@ -92,6 +92,24 @@ export const reduxEventPayloadSchema = z.object({
 export type ReduxStateDiff = z.infer<typeof reduxStateDiffSchema>;
 export type ReduxEventPayload = z.infer<typeof reduxEventPayloadSchema>;
 
+export const navigationRouteSchema = z.object({
+  key: z.string().max(1_024).optional(),
+  name: z.string().min(1).max(1_024),
+  path: z.string().max(10_000).optional(),
+  params: jsonValue.optional(),
+});
+export const navigationEventPayloadSchema = z.object({
+  navigatorId: identifier,
+  source: z.enum(['react-navigation', 'expo-router', 'manual']),
+  lifecycle: z.enum(['ready', 'state', 'focus', 'blur']),
+  action: z.enum(['navigate', 'push', 'pop', 'replace', 'reset', 'back', 'unknown']),
+  previousRoute: navigationRouteSchema.optional(),
+  currentRoute: navigationRouteSchema.optional(),
+  previousRouteDuration: z.number().finite().nonnegative().optional(),
+});
+export type NavigationRoute = z.infer<typeof navigationRouteSchema>;
+export type NavigationEventPayload = z.infer<typeof navigationEventPayloadSchema>;
+
 export const eventEnvelopeSchema = z
   .object({
     id: identifier,
@@ -115,7 +133,9 @@ export const eventEnvelopeSchema = z
           ? networkEventPayloadSchema
           : event.category === 'redux'
             ? reduxEventPayloadSchema
-            : undefined;
+            : event.category === 'navigation'
+              ? navigationEventPayloadSchema
+              : undefined;
     if (payloadSchema && !payloadSchema.safeParse(event.payload).success) {
       context.addIssue({
         code: z.ZodIssueCode.custom,

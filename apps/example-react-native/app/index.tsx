@@ -1,10 +1,12 @@
 import Constants from 'expo-constants';
+import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { Platform, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import { ReactNativeDevTool } from '@pulse-rn/sdk';
 import { createDevToolMiddleware } from '@pulse-rn/redux-plugin';
 import { applyMiddleware, createStore } from 'redux';
+import { navigationTracker } from '../navigation';
 
 // Android Emulator reaches the host through 10.0.2.2. Set EXPO_PUBLIC_PULSE_RN_HOST
 // to the development machine's LAN address for physical devices.
@@ -40,6 +42,7 @@ const reduxMiddleware = createDevToolMiddleware({
 const demoStore = createStore(demoReducer, applyMiddleware(reduxMiddleware));
 
 export default function HomeScreen() {
+  const router = useRouter();
   const [sent, setSent] = useState(0);
   const [networkSent, setNetworkSent] = useState(0);
   const [reduxCount, setReduxCount] = useState(demoStore.getState().count);
@@ -72,6 +75,10 @@ export default function HomeScreen() {
       category: 'system',
       type: 'example.started',
       payload: { runtime: Platform.OS, host },
+    });
+    navigationTracker.track({
+      lifecycle: 'ready',
+      route: { name: 'Home', path: '/' },
     });
     const unsubscribe = demoStore.subscribe(() => setReduxCount(demoStore.getState().count));
     return () => {
@@ -134,6 +141,10 @@ export default function HomeScreen() {
     }
   };
 
+  const openDetails = () => {
+    router.push('/details');
+  };
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="light" />
@@ -153,6 +164,9 @@ export default function HomeScreen() {
           <Text style={styles.buttonText}>Dispatch Redux action</Text>
         </Pressable>
         <Text style={styles.counter}>Redux counter: {reduxCount}</Text>
+        <Pressable style={[styles.button, styles.navigationButton]} onPress={openDetails}>
+          <Text style={styles.buttonText}>Open navigation demo</Text>
+        </Pressable>
       </View>
     </SafeAreaView>
   );
@@ -169,4 +183,5 @@ const styles = StyleSheet.create({
   counter: { color: '#687085', marginTop: 16, textAlign: 'center' },
   secondaryButton: { backgroundColor: '#247b65', marginTop: 24 },
   reduxButton: { backgroundColor: '#5e46b5', marginTop: 24 },
+  navigationButton: { backgroundColor: '#326d91', marginTop: 24 },
 });

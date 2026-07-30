@@ -2,7 +2,7 @@
 
 PulseRN is an open-source desktop debugging foundation for React Native. Its central idea is a unified, chronological timeline that will correlate app interactions, navigation, Redux, network, rendering, performance, and errors.
 
-> Status: Phase 4. The foundation, Console, Network, and Redux inspectors are working. Navigation, performance, storage, and dedicated error instrumentation are scheduled for later phases.
+> Status: Phase 5. The foundation, Console, Network, Redux, and Navigation inspectors are working. Performance, storage, and dedicated error instrumentation are scheduled for later phases.
 
 ## What works today
 
@@ -18,6 +18,7 @@ PulseRN is an open-source desktop debugging foundation for React Native. Its cen
 - Fetch and XMLHttpRequest inspection with optional Axios interceptors
 - Network status/method filters, URL search, failed-request highlighting, body truncation, and detail tabs
 - Redux/Redux Toolkit middleware with action, state, diff, reducer timing, redaction, and multi-store inspection
+- React Navigation and manual route instrumentation with lifecycle events, nested routes, parameter redaction, and route timing
 - Expo-based React Native integration example
 
 ![Screenshot placeholder](docs/assets/screenshot-placeholder.svg)
