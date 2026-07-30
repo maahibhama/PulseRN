@@ -20,6 +20,9 @@ Please report vulnerabilities privately to the repository maintainers. Do not op
 - Storage commands are schema-validated, bounded, device-scoped, and time-limited.
 - Storage updates and deletes require explicit desktop confirmation; redacted JSON cannot be updated.
 - Storage audit events never contain stored values.
+- Structured error metadata is field-redacted; context is derived from already-sanitized events,
+  capped at 20 entries, and remains subject to payload limits. Applications should not embed secrets
+  directly in arbitrary error-message or stack strings.
 - No `eval`, remote content, navigation, or arbitrary window opening is allowed.
 
 Do not bind the server to a LAN interface until authentication and origin controls are implemented.

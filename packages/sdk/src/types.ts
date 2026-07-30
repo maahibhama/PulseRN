@@ -31,6 +31,7 @@ export interface DevToolConfig {
   javascriptStallThresholdMs?: number;
   captureMemory?: boolean;
   enableStorage?: boolean;
+  enableErrors?: boolean;
   redaction?: {
     fields?: readonly string[];
     headers?: readonly string[];
@@ -44,6 +45,13 @@ export interface TrackEventInput {
   payload: JsonValue;
   correlationId?: string;
   parentId?: string;
+}
+
+export interface CaptureErrorOptions {
+  source?: 'react_boundary' | 'manual' | 'sdk_internal' | 'unhandled_rejection';
+  fatal?: boolean;
+  componentStack?: string;
+  metadata?: JsonValue;
 }
 
 export interface WebSocketLike {

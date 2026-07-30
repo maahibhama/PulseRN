@@ -28,6 +28,11 @@ messages for provider discovery, list, get, set, or delete; the SDK responds wit
 one connected device. `storage.<operation>` audit events enter the unified timeline without
 including stored values.
 
+Error events use `error.<source>`. Their validated payload contains source, name, message, optional
+JavaScript/component stacks, fatality, active screen, metadata, and at most 20 preceding timeline
+event summaries. Sources are `uncaught`, `unhandled_rejection`, `react_boundary`, `network`,
+`sdk_internal`, and `manual`.
+
 Limits in Phase 1:
 
 - WebSocket frame: 2 MiB

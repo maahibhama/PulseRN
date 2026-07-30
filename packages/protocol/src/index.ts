@@ -149,6 +149,38 @@ export const storageEventPayloadSchema = z.object({
 });
 export type StorageEventPayload = z.infer<typeof storageEventPayloadSchema>;
 
+export const errorSourceSchema = z.enum([
+  'uncaught',
+  'unhandled_rejection',
+  'react_boundary',
+  'network',
+  'sdk_internal',
+  'manual',
+]);
+export type ErrorSource = z.infer<typeof errorSourceSchema>;
+export const errorContextEventSchema = z.object({
+  id: identifier,
+  timestamp: z.number().finite().nonnegative(),
+  sequence: z.number().int().nonnegative(),
+  category: eventCategorySchema,
+  type: identifier,
+  summary: z.string().max(10_000).optional(),
+  correlationId: identifier.optional(),
+});
+export const errorEventPayloadSchema = z.object({
+  source: errorSourceSchema,
+  name: z.string().min(1).max(1_024),
+  message: z.string().max(100_000),
+  stack: z.string().max(200_000).optional(),
+  componentStack: z.string().max(200_000).optional(),
+  screen: z.string().max(4_096).optional(),
+  fatal: z.boolean(),
+  context: z.array(errorContextEventSchema).max(20),
+  metadata: jsonValue.optional(),
+});
+export type ErrorContextEvent = z.infer<typeof errorContextEventSchema>;
+export type ErrorEventPayload = z.infer<typeof errorEventPayloadSchema>;
+
 export const eventEnvelopeSchema = z
   .object({
     id: identifier,
@@ -178,7 +210,9 @@ export const eventEnvelopeSchema = z
                 ? performanceEventPayloadSchema
                 : event.category === 'storage'
                   ? storageEventPayloadSchema
-                  : undefined;
+                  : event.category === 'error'
+                    ? errorEventPayloadSchema
+                    : undefined;
     if (payloadSchema && !payloadSchema.safeParse(event.payload).success) {
       context.addIssue({
         code: z.ZodIssueCode.custom,

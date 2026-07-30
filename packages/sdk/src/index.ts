@@ -1,5 +1,5 @@
 import { DevToolClient } from './client.js';
-import type { DevToolConfig, TrackEventInput } from './types.js';
+import type { CaptureErrorOptions, DevToolConfig, TrackEventInput } from './types.js';
 
 let activeClient: DevToolClient | undefined;
 
@@ -11,6 +11,9 @@ export const ReactNativeDevTool = {
   },
   track(event: TrackEventInput): void {
     activeClient?.track(event);
+  },
+  captureError(error: unknown, options?: CaptureErrorOptions): void {
+    activeClient?.captureError(error, options);
   },
   get client(): DevToolClient | undefined {
     return activeClient;
@@ -45,6 +48,13 @@ export { installAxiosInterceptor } from './axios-instrumentation.js';
 export type { AxiosInstanceLike } from './axios-instrumentation.js';
 export { serializeConsoleValue } from './serialization.js';
 export { PerformanceMonitor } from './performance-monitor.js';
+export { installErrorInterceptor, toCapturedError } from './error-instrumentation.js';
 export { createAsyncStorageProvider, createMMKVStorageProvider } from './storage-provider.js';
 export type { AsyncStorageLike, MMKVLike, StorageProvider } from './storage-provider.js';
-export type { DevToolConfig, TrackEventInput, WebSocketFactory, WebSocketLike } from './types.js';
+export type {
+  CaptureErrorOptions,
+  DevToolConfig,
+  TrackEventInput,
+  WebSocketFactory,
+  WebSocketLike,
+} from './types.js';

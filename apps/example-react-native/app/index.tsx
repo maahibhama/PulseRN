@@ -79,6 +79,7 @@ export default function HomeScreen() {
       javascriptStallThresholdMs: 100,
       captureMemory: true,
       enableStorage: true,
+      enableErrors: true,
     });
     const unregisterStorage = client.registerStorageProvider(
       createAsyncStorageProvider(AsyncStorage),
@@ -195,6 +196,14 @@ export default function HomeScreen() {
     ReactNativeDevTool.performance.measure('Example long task', 'demo-start', 'demo-complete');
   };
 
+  const captureErrorDemo = () => {
+    ReactNativeDevTool.captureError(new Error('Example checkout error'), {
+      source: 'react_boundary',
+      componentStack: '\n    at CheckoutScreen\n    at ExampleErrorBoundary',
+      metadata: { operation: 'checkout', token: 'error-secret' },
+    });
+  };
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="light" />
@@ -220,6 +229,9 @@ export default function HomeScreen() {
         <Pressable style={[styles.button, styles.performanceButton]} onPress={runPerformanceDemo}>
           <Text style={styles.buttonText}>Run performance demo</Text>
         </Pressable>
+        <Pressable style={[styles.button, styles.errorButton]} onPress={captureErrorDemo}>
+          <Text style={styles.buttonText}>Capture error-boundary demo</Text>
+        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );
@@ -238,4 +250,5 @@ const styles = StyleSheet.create({
   reduxButton: { backgroundColor: '#5e46b5', marginTop: 24 },
   navigationButton: { backgroundColor: '#326d91', marginTop: 24 },
   performanceButton: { backgroundColor: '#8a5c27', marginTop: 24 },
+  errorButton: { backgroundColor: '#8f3344', marginTop: 24 },
 });

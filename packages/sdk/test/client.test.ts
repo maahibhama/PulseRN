@@ -112,4 +112,64 @@ describe('DevToolClient', () => {
     });
     client.disconnect();
   });
+
+  it('attaches the previous 20 events and current screen to captured errors', () => {
+    vi.useFakeTimers();
+    const socket = createSocket();
+    const client = new DevToolClient(
+      {
+        appName: 'Example',
+        isDevelopment: true,
+        enableErrors: true,
+        batchIntervalMs: 10,
+      },
+      () => socket,
+    ).connect();
+    socket.onopen?.();
+    socket.onmessage?.({
+      data: JSON.stringify({
+        kind: 'server-hello',
+        accepted: true,
+        protocolVersion: PROTOCOL_VERSION,
+        connectionId: 'connection-1',
+        serverTime: Date.now(),
+      }),
+    });
+    client.track({
+      category: 'navigation',
+      type: 'navigation.state',
+      payload: {
+        navigatorId: 'root',
+        source: 'manual',
+        lifecycle: 'state',
+        action: 'navigate',
+        currentRoute: { name: 'Checkout' },
+      },
+    });
+    for (let index = 0; index < 22; index += 1) {
+      client.track({ category: 'system', type: `step.${index}`, payload: { index } });
+    }
+    client.captureError(new Error('checkout failed'), { source: 'react_boundary' });
+    vi.advanceTimersByTime(11);
+
+    const batches = socket.sent
+      .map(
+        (message) =>
+          JSON.parse(message) as {
+            kind: string;
+            events?: Array<{ category: string; payload: Record<string, unknown> }>;
+          },
+      )
+      .filter((message) => message.kind === 'event-batch');
+    const error = batches
+      .flatMap((batch) => batch.events ?? [])
+      .find((event) => event.category === 'error');
+    expect(error?.payload).toMatchObject({
+      source: 'react_boundary',
+      screen: 'Checkout',
+    });
+    expect(error?.payload['context']).toHaveLength(20);
+    client.disconnect();
+    vi.useRealTimers();
+  });
 });

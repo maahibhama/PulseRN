@@ -5,10 +5,11 @@ coverage/
 .turbo/
 .expo/
 .expo-export-check/
+apps/example-react-native/android/
+apps/example-react-native/ios/
 .DS_Store
 *.log
 *.tsbuildinfo
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
-

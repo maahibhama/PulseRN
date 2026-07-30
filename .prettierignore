@@ -4,3 +4,5 @@ out
 coverage
 pnpm-lock.yaml
 *.rndebug
+apps/example-react-native/android
+apps/example-react-native/ios
