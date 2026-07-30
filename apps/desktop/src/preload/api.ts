@@ -9,8 +9,19 @@ export interface StorageRequestInput {
   value?: string;
 }
 
+export interface AppSettings {
+  theme: 'system' | 'dark' | 'light';
+  density: 'comfortable' | 'compact';
+  timelineOrder: 'newest' | 'oldest';
+  launchAtLogin: boolean;
+  keepRunningInBackground: boolean;
+}
+
 export interface PulseRNDesktopApi {
   getSnapshot(): Promise<DesktopSnapshot>;
   onSnapshot(listener: (snapshot: DesktopSnapshot) => void): () => void;
   requestStorage(input: StorageRequestInput): Promise<StorageResult>;
+  getSettings(): Promise<AppSettings>;
+  updateSettings(patch: Partial<AppSettings>): Promise<AppSettings>;
+  onSettings(listener: (settings: AppSettings) => void): () => void;
 }
