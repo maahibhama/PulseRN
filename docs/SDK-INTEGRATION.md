@@ -67,3 +67,26 @@ With Redux Toolkit, append it using `middleware: (getDefaultMiddleware) =>
 getDefaultMiddleware().concat(pulseRNMiddleware)`. With Redux, pass it to `applyMiddleware`.
 Each configured `storeId` is independently filterable in the desktop app. The middleware observes
 dispatch without mutating actions or state and does not implement state replay or time travel.
+
+## Navigation capture
+
+Install `@pulse-rn/navigation-plugin` and connect its tracker to React Navigation:
+
+```tsx
+const tracker = createNavigationTracker({
+  client: ReactNativeDevTool,
+  navigatorId: 'root',
+  redactedFields: ['token', 'password'],
+});
+
+<NavigationContainer
+  ref={navigationRef}
+  onReady={() => tracker.onReady(navigationRef)}
+  onStateChange={(state) => tracker.onStateChange(state, navigationRef)}
+/>;
+```
+
+The tracker resolves nested active routes and records ready/state/focus/blur lifecycle events,
+previous and current routes, sanitized parameters, and time spent on the previous route. Compatible
+navigation refs can instead use `tracker.attach(navigationRef)`. Expo Router and custom navigation
+systems can call `tracker.track({ route, action, lifecycle })`.

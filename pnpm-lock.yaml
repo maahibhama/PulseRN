@@ -87,6 +87,9 @@ importers:
 
   apps/example-react-native:
     dependencies:
+      '@pulse-rn/navigation-plugin':
+        specifier: workspace:*
+        version: link:../../packages/navigation-plugin
       '@pulse-rn/redux-plugin':
         specifier: workspace:*
         version: link:../../packages/redux-plugin
@@ -125,7 +128,14 @@ importers:
         specifier: ~19.0.10
         version: 19.0.14
 
-  packages/navigation-plugin: {}
+  packages/navigation-plugin:
+    dependencies:
+      '@pulse-rn/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@pulse-rn/shared':
+        specifier: workspace:*
+        version: link:../shared
 
   packages/protocol:
     dependencies:

@@ -4,7 +4,7 @@
 - **Phase 2 — Console (complete):** safe console interception, serialization, stacks, filtering, search, pause, clear, payload expansion, and copy.
 - **Phase 3 — Network (complete):** fetch/XHR/Axios instrumentation, redaction, binary exclusion, truncation, timing, filtering, failure highlighting, and inspector tabs.
 - **Phase 4 — Redux (complete):** Redux/RTK middleware, action/state/diff capture, timing, redaction, filters, multiple stores.
-- **Phase 5 — Navigation:** React Navigation integration, lifecycle events, manual API.
+- **Phase 5 — Navigation (complete):** React Navigation integration, lifecycle events, nested route resolution, timing, redacted parameters, manual API.
 - **Phase 6 — Performance:** FPS/lag/stalls, startup and screen timing, custom marks, dashboards.
 - **Phase 7 — Storage:** AsyncStorage read/search and confirmed mutations; extensible storage provider API.
 - **Phase 8 — Errors:** global errors, rejection/error-boundary capture, stacks, and previous-event context.
