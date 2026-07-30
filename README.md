@@ -22,6 +22,7 @@ PulseRN is an open-source desktop debugging foundation for React Native. Its cen
 - Performance monitoring with approximate JS FPS, event-loop lag/stalls, startup/screen/custom timing, optional available heap metrics, and correlated slow-operation views
 - AsyncStorage and MMKV inspection with provider discovery, key search/read/refresh, JSON redaction, type-preserving MMKV edits, and explicitly confirmed update/delete operations
 - Error inspection for uncaught JavaScript failures, unhandled rejections, React error boundaries, network failures, and SDK errors with stack traces and 20 preceding timeline events
+- Native Hermes JavaScript debugger with original TypeScript sources, breakpoints, line stepping, call stacks, scopes, watches, evaluation, and exception pausing
 - Persistent desktop settings for system/light/dark themes, interface density, timeline ordering, launch at login, and macOS background behavior
 - Compact, rounded light and dark application icons that follow the selected theme, including live macOS system-theme changes
 - Expo development-build and bare React Native Community CLI examples covering Console, Network, Redux, Navigation, Performance, AsyncStorage, MMKV, and Errors
@@ -155,11 +156,19 @@ Open **Settings** in the Electron sidebar to configure:
 - System, dark, or light appearance
 - Comfortable or compact interface density
 - Newest-first or oldest-first timeline ordering
+- Local Metro discovery port for the Hermes debugger
 - Launch at login on packaged macOS builds
 - Whether closing the window keeps PulseRN running in the background
 
 Appearance changes apply immediately to the debugger, header branding, window icon, and macOS Dock
 icon. With **System** selected, PulseRN follows macOS automatically.
+
+## JavaScript line debugger
+
+Open **Debugger**, refresh Metro targets, and select a Hermes development runtime. PulseRN supports
+React Native 0.76+ development builds and defaults to Metro on `127.0.0.1:8081`; change the port in
+Settings when needed. See [JavaScript debugger](docs/JAVASCRIPT-DEBUGGER.md) for breakpoint
+controls, keyboard shortcuts, examples, and current limitations.
 
 ## Known limitations
 

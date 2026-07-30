@@ -1,6 +1,7 @@
 import type { DevToolEventEnvelope } from '@pulse-rn/protocol';
 import { useEffect, useState } from 'react';
 import { ConsolePanel } from './ConsolePanel.js';
+import { DebuggerPanel } from './DebuggerPanel.js';
 import { EventDetails } from './EventDetails.js';
 import { ErrorsPanel } from './ErrorsPanel.js';
 import { NetworkPanel } from './NetworkPanel.js';
@@ -22,6 +23,7 @@ type ViewName =
   | 'Performance'
   | 'Storage'
   | 'Errors'
+  | 'Debugger'
   | 'Settings';
 
 const navItems: { name: ViewName; icon: string; available: boolean }[] = [
@@ -33,6 +35,7 @@ const navItems: { name: ViewName; icon: string; available: boolean }[] = [
   { name: 'Performance', icon: '⌁', available: true },
   { name: 'Storage', icon: '▤', available: true },
   { name: 'Errors', icon: '△', available: true },
+  { name: 'Debugger', icon: '⏵', available: true },
   { name: 'Settings', icon: '⚙', available: true },
 ];
 
@@ -191,7 +194,7 @@ export function App() {
               ? deviceLabel(devices[0]!)
               : `${devices.length} devices connected`}
         </div>
-        <div className="phase-pill">Phase 8 · Errors</div>
+        <div className="phase-pill">Phase 9 · JavaScript Debugger</div>
       </header>
       <aside className="sidebar">
         <div className="section-label">Inspect</div>
@@ -211,7 +214,9 @@ export function App() {
           WebSocket :9090
         </div>
       </aside>
-      {activeView === 'Timeline' ? (
+      {activeView === 'Debugger' ? (
+        <DebuggerPanel theme={resolvedTheme} />
+      ) : activeView === 'Timeline' ? (
         <TimelinePanel
           events={events}
           order={settings.timelineOrder}
@@ -245,7 +250,7 @@ export function App() {
       ) : (
         <UpcomingPanel view={activeView} />
       )}
-      <EventDetails event={selected} />
+      {activeView !== 'Debugger' && <EventDetails event={selected} />}
     </div>
   );
 }

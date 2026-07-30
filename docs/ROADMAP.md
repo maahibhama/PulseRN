@@ -8,5 +8,6 @@
 - **Phase 6 — Performance (complete):** approximate JS FPS/lag/stalls, startup and screen timing, optional JS heap samples, custom marks, correlated dashboards.
 - **Phase 7 — Storage (complete):** AsyncStorage/provider discovery, key read/search/refresh, JSON redaction, confirmed mutations, extensible provider API.
 - **Phase 8 — Errors (complete):** global errors, rejection/error-boundary capture, stacks, active-screen attribution, network/SDK failures, and the previous 20 timeline events.
+- **Phase 9 — JavaScript debugger (complete):** Hermes target discovery through Metro, original sources and source maps, breakpoints, pause/resume, line stepping, call stacks, scopes, watches, expression evaluation, and exception pausing.
 
 Before high-volume phases, harden the foundation with database pagination, renderer virtualization, authenticated optional LAN binding, SDK identity persistence, and Electron end-to-end coverage.

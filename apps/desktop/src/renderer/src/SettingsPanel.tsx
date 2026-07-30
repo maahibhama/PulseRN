@@ -57,6 +57,32 @@ export function SettingsPanel({ resolvedTheme, settings, onChange }: SettingsPan
 
         <section className="settings-card">
           <header>
+            <strong>JavaScript debugger</strong>
+            <small>Hermes through Metro</small>
+          </header>
+          <label className="setting-row">
+            <span>
+              <strong>Metro port</strong>
+              <small>PulseRN discovers local Hermes debugger targets on this port.</small>
+            </span>
+            <input
+              aria-label="Metro port"
+              max={65_535}
+              min={1}
+              type="number"
+              value={settings.metroPort}
+              onChange={(event) => {
+                const metroPort = Number(event.target.value);
+                if (Number.isInteger(metroPort) && metroPort >= 1 && metroPort <= 65_535) {
+                  void onChange({ metroPort });
+                }
+              }}
+            />
+          </label>
+        </section>
+
+        <section className="settings-card">
+          <header>
             <strong>Appearance</strong>
             <small>Changes apply immediately</small>
           </header>
