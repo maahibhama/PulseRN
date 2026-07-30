@@ -76,6 +76,12 @@ sudo apt install ./PulseRN-<version>-linux-x64.deb
 See [desktop installation](docs/INSTALLATION.md) for verification, upgrades, and uninstall
 instructions.
 
+Maintainers can prepare and publish a complete version-tag release with:
+
+```bash
+pnpm release:desktop 0.1.0
+```
+
 ## Develop locally
 
 ```bash

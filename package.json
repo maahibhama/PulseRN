@@ -23,6 +23,7 @@
     "typecheck": "turbo run typecheck",
     "lint": "turbo run lint",
     "pack:desktop": "pnpm --filter @pulse-rn/desktop run pack",
+    "release:desktop": "node scripts/release.mjs",
     "release:verify": "node scripts/verify-release-version.mjs"
   },
   "devDependencies": {

@@ -5,29 +5,28 @@ Windows x64 and ARM64 NSIS installers, Linux x64 AppImage and Debian packages, a
 
 ## Prepare a release
 
-1. Update the same semantic version in:
-   - `package.json`
-   - `apps/desktop/package.json`
-   - `Casks/pulsern.rb`
-2. Update the changelog or release-facing documentation.
-3. Install and verify the repository:
+Use the release script from a clean working tree:
 
-   ```bash
-   pnpm install --frozen-lockfile
-   pnpm release:verify v0.1.0
-   pnpm typecheck
-   pnpm test
-   pnpm lint
-   pnpm build
-   ```
+```bash
+pnpm release:desktop 0.1.0
+```
 
-4. Commit the release preparation.
-5. Create and push the matching tag:
+The script updates the root package, desktop package, and Homebrew Cask versions; runs typecheck,
+tests, lint, and build; creates a release preparation commit when necessary; pushes the current
+branch; and creates and pushes the annotated version tag.
 
-   ```bash
-   git tag v0.1.0
-   git push origin v0.1.0
-   ```
+Preview its actions without changing files or Git:
+
+```bash
+pnpm release:desktop 0.1.0 --dry-run
+```
+
+For automation, bypass the confirmation with `--yes`. Use `--skip-checks` only when the exact commit
+has already passed the complete verification suite:
+
+```bash
+pnpm release:desktop 0.1.0 --yes --skip-checks
+```
 
 Use a tag such as `v0.2.0-beta.1` for a GitHub prerelease. The workflow rejects malformed tags and
 any mismatch between the tag, package versions, and Homebrew Cask version.
