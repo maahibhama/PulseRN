@@ -1,5 +1,8 @@
 # PulseRN
 
+[![npm version](https://img.shields.io/npm/v/@pulse-rn/sdk.svg)](https://www.npmjs.com/package/@pulse-rn/sdk)
+[![npm downloads](https://img.shields.io/npm/dm/@pulse-rn/sdk.svg)](https://www.npmjs.com/package/@pulse-rn/sdk)
+
 PulseRN is an open-source desktop debugging foundation for React Native. Its central idea is a unified, chronological timeline that will correlate app interactions, navigation, Redux, network, rendering, performance, and errors.
 
 > Status: Phase 8. The Foundation, Console, Network, Redux, Navigation, Performance, Storage, and Errors inspectors are working.
