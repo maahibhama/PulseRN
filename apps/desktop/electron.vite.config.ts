@@ -4,7 +4,11 @@ import { defineConfig, externalizeDepsPlugin } from 'electron-vite';
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
+    plugins: [
+      externalizeDepsPlugin({
+        exclude: ['@pulse-rn/protocol', '@pulse-rn/shared'],
+      }),
+    ],
   },
   preload: {
     build: {

@@ -34,7 +34,49 @@ PulseRN is an open-source desktop debugging foundation for React Native. Its cen
 - pnpm 10.14
 - Xcode for the iOS simulator, or Android Studio for the Android emulator
 
-## Install and run
+## Install the desktop app
+
+PulseRN preview releases are available from
+[GitHub Releases](https://github.com/maahibhama/PulseRN/releases). They are currently unsigned, so
+macOS Gatekeeper and Windows SmartScreen display a warning.
+
+### Homebrew
+
+```bash
+brew tap maahibhama/pulsern https://github.com/maahibhama/PulseRN
+brew install --cask --no-quarantine pulsern
+```
+
+### macOS DMG
+
+Download `PulseRN-<version>-mac-universal.dmg`, open it, and drag PulseRN to Applications. The
+universal application runs natively on Intel and Apple Silicon Macs. If Gatekeeper blocks the
+preview, right-click PulseRN and choose **Open**.
+
+### Windows
+
+Download the x64 installer for most Windows PCs or the ARM64 installer for Windows on ARM. If
+SmartScreen appears, select **More info** and then **Run anyway**.
+
+### Linux
+
+Use the portable AppImage:
+
+```bash
+chmod +x PulseRN-<version>-linux-x64.AppImage
+./PulseRN-<version>-linux-x64.AppImage
+```
+
+Or install the Debian package:
+
+```bash
+sudo apt install ./PulseRN-<version>-linux-x64.deb
+```
+
+See [desktop installation](docs/INSTALLATION.md) for verification, upgrades, and uninstall
+instructions.
+
+## Develop locally
 
 ```bash
 pnpm install
