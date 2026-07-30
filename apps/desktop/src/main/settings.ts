@@ -6,6 +6,7 @@ export const appSettingsSchema = z.object({
   theme: z.enum(['system', 'dark', 'light']),
   density: z.enum(['comfortable', 'compact']),
   timelineOrder: z.enum(['newest', 'oldest']),
+  metroPort: z.number().int().min(1).max(65_535),
   launchAtLogin: z.boolean(),
   keepRunningInBackground: z.boolean(),
 });
@@ -16,6 +17,7 @@ const defaults: AppSettings = {
   theme: 'system',
   density: 'comfortable',
   timelineOrder: 'newest',
+  metroPort: 8081,
   launchAtLogin: false,
   keepRunningInBackground: true,
 };

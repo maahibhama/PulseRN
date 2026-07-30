@@ -1,12 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {createNavigationTracker} from '@pulse-rn/navigation-plugin';
-import {createDevToolMiddleware} from '@pulse-rn/redux-plugin';
+import { createNavigationTracker } from '@pulse-rn/navigation-plugin';
+import { createDevToolMiddleware } from '@pulse-rn/redux-plugin';
 import {
   createAsyncStorageProvider,
   createMMKVStorageProvider,
   ReactNativeDevTool,
 } from '@pulse-rn/sdk';
-import {useEffect, useState} from 'react';
+import { useEffect, useState } from 'react';
 import {
   Platform,
   Pressable,
@@ -16,15 +16,16 @@ import {
   Text,
   View,
 } from 'react-native';
-import {createMMKV} from 'react-native-mmkv';
-import {SafeAreaProvider, SafeAreaView} from 'react-native-safe-area-context';
-import {applyMiddleware, createStore} from 'redux';
+import { createMMKV } from 'react-native-mmkv';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { applyMiddleware, createStore } from 'redux';
+import { runLineDebuggerDemo, runUnhandledDebuggerDemo } from './debugger-demo';
 
 // Android Emulator reaches the development machine through 10.0.2.2.
 // Use adb reverse tcp:9090 tcp:9090 for an attached Android device, or replace
 // this value with your development machine's LAN address for a physical device.
 const host = Platform.OS === 'android' ? '10.0.2.2' : '127.0.0.1';
-const mmkv = createMMKV({id: 'pulse-rn-cli-example'});
+const mmkv = createMMKV({ id: 'pulse-rn-cli-example' });
 
 const navigationTracker = createNavigationTracker({
   client: ReactNativeDevTool,
@@ -35,26 +36,23 @@ const navigationTracker = createNavigationTracker({
 
 interface DemoState {
   count: number;
-  profile: {name: string; token: string};
+  profile: { name: string; token: string };
 }
 
 const initialState: DemoState = {
   count: 0,
-  profile: {name: 'PulseRN developer', token: 'redux-state-secret'},
+  profile: { name: 'PulseRN developer', token: 'redux-state-secret' },
 };
 
 function demoReducer(
   state = initialState,
-  action: {type: string; payload?: unknown},
+  action: { type: string; payload?: unknown },
 ): DemoState {
   if (action.type === 'counter/increment') {
-    return {...state, count: state.count + 1};
+    return { ...state, count: state.count + 1 };
   }
-  if (
-    action.type === 'profile/rename' &&
-    typeof action.payload === 'string'
-  ) {
-    return {...state, profile: {...state.profile, name: action.payload}};
+  if (action.type === 'profile/rename' && typeof action.payload === 'string') {
+    return { ...state, profile: { ...state.profile, name: action.payload } };
   }
   return state;
 }
@@ -67,10 +65,7 @@ const reduxMiddleware = createDevToolMiddleware({
   maxStateDepth: 10,
   redactedFields: ['token'],
 });
-const demoStore = createStore(
-  demoReducer,
-  applyMiddleware(reduxMiddleware),
-);
+const demoStore = createStore(demoReducer, applyMiddleware(reduxMiddleware));
 
 type Screen = 'home' | 'details';
 
@@ -150,11 +145,11 @@ function App() {
     client.track({
       category: 'system',
       type: 'cli-example.started',
-      payload: {runtime: Platform.OS, host},
+      payload: { runtime: Platform.OS, host },
     });
     navigationTracker.track({
       lifecycle: 'ready',
-      route: {name: 'Home', path: '/'},
+      route: { name: 'Home', path: '/' },
     });
 
     return () => {
@@ -168,11 +163,11 @@ function App() {
     navigationTracker.track({
       lifecycle: 'state',
       action: 'navigate',
-      previousRoute: {name: 'Home', path: '/'},
+      previousRoute: { name: 'Home', path: '/' },
       route: {
         name: 'Details',
         path: '/details',
-        params: {token: 'navigation-secret'},
+        params: { token: 'navigation-secret' },
       },
     });
     setScreen('details');
@@ -182,8 +177,8 @@ function App() {
     navigationTracker.track({
       lifecycle: 'state',
       action: 'back',
-      previousRoute: {name: 'Details', path: '/details'},
-      route: {name: 'Home', path: '/'},
+      previousRoute: { name: 'Details', path: '/details' },
+      route: { name: 'Home', path: '/' },
     });
     setScreen('home');
   };
@@ -200,10 +195,11 @@ function App() {
   );
 }
 
-function HomeScreen({onOpenDetails}: {onOpenDetails: () => void}) {
+function HomeScreen({ onOpenDetails }: { onOpenDetails: () => void }) {
   const [sent, setSent] = useState(0);
   const [networkSent, setNetworkSent] = useState(0);
   const [reduxCount, setReduxCount] = useState(demoStore.getState().count);
+  const [debuggerResult, setDebuggerResult] = useState('Not run');
 
   useEffect(() => {
     ReactNativeDevTool.performance.startScreen('Home');
@@ -230,14 +226,14 @@ function HomeScreen({onOpenDetails}: {onOpenDetails: () => void}) {
     };
     circular.self = circular;
     console.log('Checkout button pressed', circular);
-    console.info('Requesting checkout configuration', {attempt: sent + 1});
-    console.warn('Example slow operation', {duration: 420});
-    console.debug('Debug context', {platform: Platform.OS});
+    console.info('Requesting checkout configuration', { attempt: sent + 1 });
+    console.warn('Example slow operation', { duration: 420 });
+    console.debug('Debug context', { platform: Platform.OS });
     console.error(new Error('Example error for the Console inspector'));
     ReactNativeDevTool.track({
       category: 'interaction',
       type: 'cli-example.console-demo',
-      payload: {count: sent + 1},
+      payload: { count: sent + 1 },
     });
     setSent(value => value + 1);
   };
@@ -269,7 +265,7 @@ function HomeScreen({onOpenDetails}: {onOpenDetails: () => void}) {
   const sendReduxDemo = () => {
     demoStore.dispatch({
       type: 'counter/increment',
-      payload: {source: 'button', token: 'redux-action-secret'},
+      payload: { source: 'button', token: 'redux-action-secret' },
     });
     if (demoStore.getState().count % 3 === 0) {
       demoStore.dispatch({
@@ -297,8 +293,13 @@ function HomeScreen({onOpenDetails}: {onOpenDetails: () => void}) {
     ReactNativeDevTool.captureError(new Error('Example checkout error'), {
       source: 'react_boundary',
       componentStack: '\n    at CheckoutScreen\n    at ExampleErrorBoundary',
-      metadata: {operation: 'checkout', token: 'error-secret'},
+      metadata: { operation: 'checkout', token: 'error-secret' },
     });
+  };
+
+  const runDebuggerDemo = async () => {
+    const result = await runLineDebuggerDemo(sent + 1);
+    setDebuggerResult(result);
   };
 
   return (
@@ -338,6 +339,17 @@ function HomeScreen({onOpenDetails}: {onOpenDetails: () => void}) {
           onPress={captureErrorDemo}
           color="#8f3344"
         />
+        <DemoButton
+          label="Run line debugger demo"
+          onPress={runDebuggerDemo}
+          color="#4656b5"
+        />
+        <Text style={styles.counter}>Debugger: {debuggerResult}</Text>
+        <DemoButton
+          label="Throw debugger exception"
+          onPress={() => void runUnhandledDebuggerDemo()}
+          color="#6f354c"
+        />
       </ScrollView>
     </SafeAreaView>
   );
@@ -354,14 +366,15 @@ function DemoButton({
 }) {
   return (
     <Pressable
-      style={[styles.button, {backgroundColor: color}]}
-      onPress={onPress}>
+      style={[styles.button, { backgroundColor: color }]}
+      onPress={onPress}
+    >
       <Text style={styles.buttonText}>{label}</Text>
     </Pressable>
   );
 }
 
-function DetailsScreen({onBack}: {onBack: () => void}) {
+function DetailsScreen({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     ReactNativeDevTool.performance.startScreen('Details');
     ReactNativeDevTool.performance.screenMounted('Details');
@@ -393,8 +406,8 @@ function DetailsScreen({onBack}: {onBack: () => void}) {
 }
 
 const styles = StyleSheet.create({
-  safe: {flex: 1, backgroundColor: '#0b0d12'},
-  container: {flexGrow: 1, justifyContent: 'center', padding: 28},
+  safe: { flex: 1, backgroundColor: '#0b0d12' },
+  container: { flexGrow: 1, justifyContent: 'center', padding: 28 },
   eyebrow: {
     color: '#8d75ff',
     fontSize: 12,
@@ -407,17 +420,17 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginTop: 10,
   },
-  body: {color: '#8e97a9', fontSize: 15, marginBottom: 14, marginTop: 12},
+  body: { color: '#8e97a9', fontSize: 15, marginBottom: 14, marginTop: 12 },
   button: {
     alignItems: 'center',
     borderRadius: 10,
     marginTop: 16,
     padding: 16,
   },
-  buttonText: {color: '#ffffff', fontSize: 15, fontWeight: '700'},
-  counter: {color: '#687085', marginTop: 10, textAlign: 'center'},
-  details: {flex: 1, justifyContent: 'center', padding: 28},
-  detailsEyebrow: {color: '#70bdf5'},
+  buttonText: { color: '#ffffff', fontSize: 15, fontWeight: '700' },
+  counter: { color: '#687085', marginTop: 10, textAlign: 'center' },
+  details: { flex: 1, justifyContent: 'center', padding: 28 },
+  detailsEyebrow: { color: '#70bdf5' },
   detailsBody: {
     color: '#8e97a9',
     fontSize: 15,

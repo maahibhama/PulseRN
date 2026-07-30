@@ -6,10 +6,12 @@ import { EventDatabase } from './database.js';
 import { SessionManager } from './session-manager.js';
 import { SettingsStore } from './settings.js';
 import { DevToolWebSocketServer } from './websocket-server.js';
+import { DebuggerManager } from './debugger-manager.js';
 
 const SNAPSHOT_CHANNEL = 'pulse-rn:snapshot';
 const STORAGE_CHANNEL = 'pulse-rn:storage';
 const SETTINGS_CHANNEL = 'pulse-rn:settings';
+const DEBUGGER_CHANNEL = 'pulse-rn:debugger';
 const DARK_APP_ICON = join(__dirname, '../../resources/pulse-rn-app-icon-dark.png');
 const LIGHT_APP_ICON = join(__dirname, '../../resources/pulse-rn-app-icon-light.png');
 const storageRequestSchema = z.object({
@@ -24,6 +26,7 @@ let database: EventDatabase | undefined;
 let server: DevToolWebSocketServer | undefined;
 let window: BrowserWindow | undefined;
 let settingsStore: SettingsStore | undefined;
+let debuggerManager: DebuggerManager | undefined;
 let isQuitting = false;
 
 function appIconPath(theme: 'system' | 'dark' | 'light'): string {
@@ -84,6 +87,13 @@ function createWindow(): void {
 
 app.whenReady().then(async () => {
   settingsStore = new SettingsStore(join(app.getPath('userData'), 'settings.json'));
+  debuggerManager = new DebuggerManager(
+    join(app.getPath('userData'), 'debugger.json'),
+    () => settingsStore?.get().metroPort ?? 8081,
+    (state) => {
+      if (window && !window.isDestroyed()) window.webContents.send(DEBUGGER_CHANNEL, state);
+    },
+  );
   const initialSettings = settingsStore.get();
   nativeTheme.themeSource = initialSettings.theme;
   if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: initialSettings.launchAtLogin });
@@ -126,6 +136,82 @@ app.whenReady().then(async () => {
     if (window && !window.isDestroyed()) window.webContents.send(SETTINGS_CHANNEL, settings);
     return settings;
   });
+  ipcMain.handle(DEBUGGER_CHANNEL, async (_event, value?: unknown) => {
+    if (!debuggerManager) throw new Error('PulseRN debugger is not ready.');
+    const input = z
+      .discriminatedUnion('operation', [
+        z.object({ operation: z.literal('state') }),
+        z.object({ operation: z.literal('discover') }),
+        z.object({ operation: z.literal('connect'), targetId: z.string().min(1).max(2048) }),
+        z.object({ operation: z.literal('disconnect') }),
+        z.object({ operation: z.literal('source'), sourceId: z.string().min(1).max(100_000) }),
+        z.object({
+          operation: z.literal('addBreakpoint'),
+          sourceId: z.string().min(1).max(100_000),
+          line: z.number().int().min(1).max(10_000_000),
+          column: z.number().int().min(1).max(10_000_000),
+          condition: z.string().max(10_000).optional(),
+        }),
+        z.object({ operation: z.literal('removeBreakpoint'), id: z.string().uuid() }),
+        z.object({
+          operation: z.literal('enableBreakpoint'),
+          id: z.string().uuid(),
+          enabled: z.boolean(),
+        }),
+        z.object({
+          operation: z.literal('command'),
+          command: z.enum(['pause', 'resume', 'stepOver', 'stepInto', 'stepOut']),
+        }),
+        z.object({ operation: z.literal('selectFrame'), id: z.string().min(1).max(100_000) }),
+        z.object({ operation: z.literal('scope'), objectId: z.string().min(1).max(100_000) }),
+        z.object({
+          operation: z.literal('addWatch'),
+          expression: z.string().trim().min(1).max(10_000),
+        }),
+        z.object({ operation: z.literal('removeWatch'), id: z.string().uuid() }),
+        z.object({
+          operation: z.literal('evaluate'),
+          expression: z.string().trim().min(1).max(10_000),
+        }),
+        z.object({
+          operation: z.literal('pauseOnExceptions'),
+          mode: z.enum(['none', 'uncaught', 'all']),
+        }),
+      ])
+      .parse(value ?? { operation: 'state' });
+    switch (input.operation) {
+      case 'state':
+        return debuggerManager.snapshot();
+      case 'discover':
+        return debuggerManager.discover();
+      case 'connect':
+        return debuggerManager.connect(input.targetId);
+      case 'disconnect':
+        return debuggerManager.disconnect();
+      case 'source':
+        return debuggerManager.getSource(input.sourceId);
+      case 'addBreakpoint':
+        return debuggerManager.addBreakpoint(input);
+      case 'removeBreakpoint':
+        return debuggerManager.removeBreakpoint(input.id);
+      case 'enableBreakpoint':
+        return debuggerManager.setBreakpointEnabled(input.id, input.enabled);
+      case 'command':
+        return debuggerManager.command(input.command);
+      case 'selectFrame':
+        return debuggerManager.selectCallFrame(input.id);
+      case 'scope':
+        return debuggerManager.getScope(input.objectId);
+      case 'addWatch':
+        return debuggerManager.addWatch(input.expression);
+      case 'removeWatch':
+        return debuggerManager.removeWatch(input.id);
+      case 'evaluate':
+        return debuggerManager.evaluate(input.expression);
+      case 'pauseOnExceptions':
+        return debuggerManager.setPauseOnExceptions(input.mode);
+    }
+  });
   server = new DevToolWebSocketServer(9090, {
     onConnected(device) {
       sessions.connect(device);
@@ -161,7 +247,9 @@ app.on('before-quit', () => {
   ipcMain.removeHandler(SNAPSHOT_CHANNEL);
   ipcMain.removeHandler(STORAGE_CHANNEL);
   ipcMain.removeHandler(SETTINGS_CHANNEL);
+  ipcMain.removeHandler(DEBUGGER_CHANNEL);
   nativeTheme.removeListener('updated', handleNativeThemeUpdated);
   void server?.close();
+  debuggerManager?.close();
   database?.close();
 });

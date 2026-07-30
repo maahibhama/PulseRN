@@ -1,11 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { z } from 'zod';
 import { storageOperationSchema, storageResultSchema } from '@pulse-rn/protocol';
-import type { AppSettings, PulseRNDesktopApi } from './api.js';
+import type { AppSettings, DebuggerState, PulseRNDesktopApi } from './api.js';
 
 const SNAPSHOT_CHANNEL = 'pulse-rn:snapshot';
 const STORAGE_CHANNEL = 'pulse-rn:storage';
 const SETTINGS_CHANNEL = 'pulse-rn:settings';
+const DEBUGGER_CHANNEL = 'pulse-rn:debugger';
 const snapshotSchema = z.object({
   devices: z.array(z.unknown()),
   events: z.array(z.unknown()),
@@ -21,10 +22,90 @@ const settingsSchema = z.object({
   theme: z.enum(['system', 'dark', 'light']),
   density: z.enum(['comfortable', 'compact']),
   timelineOrder: z.enum(['newest', 'oldest']),
+  metroPort: z.number().int().min(1).max(65_535),
   launchAtLogin: z.boolean(),
   keepRunningInBackground: z.boolean(),
 });
 const settingsPatchSchema = settingsSchema.partial().strict();
+const debuggerLocationSchema = z.object({
+  sourceId: z.string(),
+  line: z.number().int().min(1),
+  column: z.number().int().min(1),
+});
+const remoteValueSchema = z.object({
+  type: z.string(),
+  description: z.string(),
+  value: z.unknown().optional(),
+  objectId: z.string().optional(),
+});
+const debuggerStateSchema = z.object({
+  status: z.enum(['disconnected', 'discovering', 'connecting', 'connected', 'paused', 'error']),
+  targets: z.array(
+    z.object({
+      id: z.string(),
+      title: z.string(),
+      description: z.string(),
+      appId: z.string().optional(),
+      deviceName: z.string().optional(),
+    }),
+  ),
+  activeTargetId: z.string().optional(),
+  sources: z.array(
+    z.object({
+      id: z.string(),
+      url: z.string(),
+      name: z.string(),
+      internal: z.boolean(),
+      original: z.boolean(),
+    }),
+  ),
+  breakpoints: z.array(
+    debuggerLocationSchema.extend({
+      id: z.string(),
+      appId: z.string().optional(),
+      enabled: z.boolean(),
+      condition: z.string().optional(),
+      verified: z.boolean(),
+      error: z.string().optional(),
+    }),
+  ),
+  callFrames: z.array(
+    z.object({
+      id: z.string(),
+      functionName: z.string(),
+      location: debuggerLocationSchema,
+      scopes: z.array(
+        z.object({
+          type: z.string(),
+          name: z.string().optional(),
+          objectId: z.string().optional(),
+        }),
+      ),
+    }),
+  ),
+  selectedCallFrameId: z.string().optional(),
+  watches: z.array(
+    z.object({
+      id: z.string(),
+      expression: z.string(),
+      result: remoteValueSchema.optional(),
+      error: z.string().optional(),
+    }),
+  ),
+  pauseOnExceptions: z.enum(['none', 'uncaught', 'all']),
+  pauseReason: z.string().optional(),
+  error: z.string().optional(),
+});
+const debuggerPropertySchema = z.array(
+  z.object({
+    name: z.string(),
+    value: remoteValueSchema,
+  }),
+);
+
+async function invokeDebugger(value: unknown): Promise<unknown> {
+  return ipcRenderer.invoke(DEBUGGER_CHANNEL, value);
+}
 
 const api: PulseRNDesktopApi = {
   async getSnapshot() {
@@ -62,6 +143,104 @@ const api: PulseRNDesktopApi = {
     };
     ipcRenderer.on(SETTINGS_CHANNEL, handler);
     return () => ipcRenderer.removeListener(SETTINGS_CHANNEL, handler);
+  },
+  async getDebuggerState() {
+    return debuggerStateSchema.parse(await invokeDebugger({ operation: 'state' }));
+  },
+  onDebuggerState(listener) {
+    const handler = (_event: Electron.IpcRendererEvent, value: unknown) => {
+      const result = debuggerStateSchema.safeParse(value);
+      if (result.success) listener(result.data as DebuggerState);
+    };
+    ipcRenderer.on(DEBUGGER_CHANNEL, handler);
+    return () => ipcRenderer.removeListener(DEBUGGER_CHANNEL, handler);
+  },
+  async discoverDebuggerTargets() {
+    return debuggerStateSchema.parse(await invokeDebugger({ operation: 'discover' }));
+  },
+  async connectDebugger(targetId) {
+    return debuggerStateSchema.parse(
+      await invokeDebugger({ operation: 'connect', targetId: z.string().parse(targetId) }),
+    );
+  },
+  async disconnectDebugger() {
+    return debuggerStateSchema.parse(await invokeDebugger({ operation: 'disconnect' }));
+  },
+  async getDebuggerSource(sourceId) {
+    return z
+      .string()
+      .parse(await invokeDebugger({ operation: 'source', sourceId: z.string().parse(sourceId) }));
+  },
+  async addDebuggerBreakpoint(input) {
+    return debuggerStateSchema.parse(
+      await invokeDebugger({
+        operation: 'addBreakpoint',
+        ...debuggerLocationSchema
+          .extend({ condition: z.string().max(10_000).optional() })
+          .parse(input),
+      }),
+    );
+  },
+  async removeDebuggerBreakpoint(id) {
+    return debuggerStateSchema.parse(
+      await invokeDebugger({ operation: 'removeBreakpoint', id: z.string().uuid().parse(id) }),
+    );
+  },
+  async setDebuggerBreakpointEnabled(id, enabled) {
+    return debuggerStateSchema.parse(
+      await invokeDebugger({
+        operation: 'enableBreakpoint',
+        id: z.string().uuid().parse(id),
+        enabled: z.boolean().parse(enabled),
+      }),
+    );
+  },
+  async debuggerCommand(command) {
+    return debuggerStateSchema.parse(
+      await invokeDebugger({
+        operation: 'command',
+        command: z.enum(['pause', 'resume', 'stepOver', 'stepInto', 'stepOut']).parse(command),
+      }),
+    );
+  },
+  async selectDebuggerCallFrame(id) {
+    return debuggerStateSchema.parse(
+      await invokeDebugger({ operation: 'selectFrame', id: z.string().parse(id) }),
+    );
+  },
+  async getDebuggerScope(objectId) {
+    return debuggerPropertySchema.parse(
+      await invokeDebugger({ operation: 'scope', objectId: z.string().parse(objectId) }),
+    );
+  },
+  async addDebuggerWatch(expression) {
+    return debuggerStateSchema.parse(
+      await invokeDebugger({
+        operation: 'addWatch',
+        expression: z.string().trim().min(1).max(10_000).parse(expression),
+      }),
+    );
+  },
+  async removeDebuggerWatch(id) {
+    return debuggerStateSchema.parse(
+      await invokeDebugger({ operation: 'removeWatch', id: z.string().uuid().parse(id) }),
+    );
+  },
+  async evaluateDebuggerExpression(expression) {
+    return remoteValueSchema.parse(
+      await invokeDebugger({
+        operation: 'evaluate',
+        expression: z.string().trim().min(1).max(10_000).parse(expression),
+      }),
+    );
+  },
+  async setPauseOnExceptions(mode) {
+    return debuggerStateSchema.parse(
+      await invokeDebugger({
+        operation: 'pauseOnExceptions',
+        mode: z.enum(['none', 'uncaught', 'all']).parse(mode),
+      }),
+    );
   },
 };
 

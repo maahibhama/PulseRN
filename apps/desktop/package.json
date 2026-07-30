@@ -14,7 +14,7 @@
     "dev": "electron-vite dev",
     "dist": "pnpm build && electron-builder",
     "dist:linux": "pnpm build && electron-builder --linux AppImage deb --x64",
-    "dist:mac": "pnpm build && electron-builder --mac dmg --universal",
+    "dist:mac": "pnpm build && electron-builder --mac dmg --arm64 --x64",
     "dist:win:arm64": "pnpm build && electron-builder --win nsis --arm64",
     "dist:win:x64": "pnpm build && electron-builder --win nsis --x64",
     "lint": "eslint src",
@@ -24,8 +24,11 @@
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit"
   },
   "dependencies": {
+    "@jridgewell/trace-mapping": "^0.3.31",
+    "@monaco-editor/react": "^4.7.0",
     "@pulse-rn/protocol": "workspace:*",
     "@pulse-rn/shared": "workspace:*",
+    "monaco-editor": "^0.52.2",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "ws": "^8.18.3",

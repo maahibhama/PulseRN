@@ -10,13 +10,18 @@ describe('SettingsStore', () => {
     const filePath = join(directory, 'settings.json');
     const store = new SettingsStore(filePath);
 
-    expect(store.get()).toMatchObject({ theme: 'system', density: 'comfortable' });
-    store.update({ theme: 'light', density: 'compact', launchAtLogin: true });
+    expect(store.get()).toMatchObject({
+      theme: 'system',
+      density: 'comfortable',
+      metroPort: 8081,
+    });
+    store.update({ theme: 'light', density: 'compact', launchAtLogin: true, metroPort: 8090 });
 
     expect(new SettingsStore(filePath).get()).toMatchObject({
       theme: 'light',
       density: 'compact',
       launchAtLogin: true,
+      metroPort: 8090,
     });
     expect(JSON.parse(readFileSync(filePath, 'utf8'))).not.toHaveProperty('unknown');
   });
@@ -27,5 +32,7 @@ describe('SettingsStore', () => {
 
     expect(() => store.update({ theme: 'neon' })).toThrow();
     expect(() => store.update({ unknown: true })).toThrow();
+    expect(() => store.update({ metroPort: 0 })).toThrow();
+    expect(() => store.update({ metroPort: 65_536 })).toThrow();
   });
 });

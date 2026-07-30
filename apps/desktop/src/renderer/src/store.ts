@@ -18,6 +18,7 @@ export const useDesktopStore = create<DesktopState>((set) => ({
     theme: 'system',
     density: 'comfortable',
     timelineOrder: 'newest',
+    metroPort: 8081,
     launchAtLogin: false,
     keepRunningInBackground: true,
   },

@@ -11,6 +11,7 @@ import { createMMKV } from 'react-native-mmkv';
 import { createDevToolMiddleware } from '@pulse-rn/redux-plugin';
 import { applyMiddleware, createStore } from 'redux';
 import { navigationTracker } from '../navigation';
+import { runLineDebuggerDemo, runUnhandledDebuggerDemo } from '../debugger-demo';
 
 // Android Emulator reaches the host through 10.0.2.2. Set EXPO_PUBLIC_PULSE_RN_HOST
 // to the development machine's LAN address for physical devices.
@@ -51,6 +52,7 @@ export default function HomeScreen() {
   const [sent, setSent] = useState(0);
   const [networkSent, setNetworkSent] = useState(0);
   const [reduxCount, setReduxCount] = useState(demoStore.getState().count);
+  const [debuggerResult, setDebuggerResult] = useState('Not run');
 
   useEffect(() => {
     if (!__DEV__) return;
@@ -205,6 +207,11 @@ export default function HomeScreen() {
     });
   };
 
+  const runDebuggerDemo = async () => {
+    const result = await runLineDebuggerDemo(sent + 1);
+    setDebuggerResult(result);
+  };
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="light" />
@@ -233,6 +240,16 @@ export default function HomeScreen() {
         <Pressable style={[styles.button, styles.errorButton]} onPress={captureErrorDemo}>
           <Text style={styles.buttonText}>Capture error-boundary demo</Text>
         </Pressable>
+        <Pressable style={[styles.button, styles.debuggerButton]} onPress={runDebuggerDemo}>
+          <Text style={styles.buttonText}>Run line debugger demo</Text>
+        </Pressable>
+        <Text style={styles.counter}>Debugger: {debuggerResult}</Text>
+        <Pressable
+          style={[styles.button, styles.debuggerExceptionButton]}
+          onPress={() => void runUnhandledDebuggerDemo()}
+        >
+          <Text style={styles.buttonText}>Throw debugger exception</Text>
+        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );
@@ -252,4 +269,6 @@ const styles = StyleSheet.create({
   navigationButton: { backgroundColor: '#326d91', marginTop: 24 },
   performanceButton: { backgroundColor: '#8a5c27', marginTop: 24 },
   errorButton: { backgroundColor: '#8f3344', marginTop: 24 },
+  debuggerButton: { backgroundColor: '#4656b5', marginTop: 24 },
+  debuggerExceptionButton: { backgroundColor: '#6f354c', marginTop: 24 },
 });

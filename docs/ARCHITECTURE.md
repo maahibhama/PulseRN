@@ -6,6 +6,11 @@ PulseRN is a pnpm/Turborepo monorepo. The wire contract is independent of Electr
 
 Electron main is the trusted desktop boundary. It owns WebSocket connections, session state, SQLite, and operating-system integration. Preload exposes only typed snapshot reads/subscriptions. The renderer has `contextIsolation`, `sandbox`, and disabled Node integration.
 
+The JavaScript debugger is a separate, Electron-main-owned connection to a single Hermes runtime
+through Metro's loopback Chrome DevTools Protocol proxy. Electron validates target discovery and CDP
+messages, resolves source maps, persists debugger preferences, and exposes only narrow debugger
+commands and snapshots through preload. The renderer never receives a raw debugger WebSocket.
+
 Desktop preferences cross a narrow validated preload IPC boundary and are atomically persisted as a
 user-only JSON file in Electron's platform-specific `userData` directory. Electron main applies
 native theme, login-item, and macOS window-lifecycle preferences; renderer-only display preferences
