@@ -1,15 +1,28 @@
-import { useEffect } from 'react';
+import type { DevToolEventEnvelope } from '@pulse-rn/protocol';
+import { useEffect, useState } from 'react';
+import { ConsolePanel } from './ConsolePanel.js';
+import { EventDetails } from './EventDetails.js';
 import { deviceLabel, findSelectedEvent, useDesktopStore } from './store.js';
 
-const navItems = [
-  'Timeline',
-  'Console',
-  'Network',
-  'Redux',
-  'Navigation',
-  'Performance',
-  'Storage',
-  'Errors',
+type ViewName =
+  | 'Timeline'
+  | 'Console'
+  | 'Network'
+  | 'Redux'
+  | 'Navigation'
+  | 'Performance'
+  | 'Storage'
+  | 'Errors';
+
+const navItems: { name: ViewName; icon: string; available: boolean }[] = [
+  { name: 'Timeline', icon: '⌁', available: true },
+  { name: 'Console', icon: '>_', available: true },
+  { name: 'Network', icon: '⇄', available: false },
+  { name: 'Redux', icon: '◇', available: false },
+  { name: 'Navigation', icon: '→', available: false },
+  { name: 'Performance', icon: '⌁', available: false },
+  { name: 'Storage', icon: '▤', available: false },
+  { name: 'Errors', icon: '△', available: false },
 ];
 
 function formatTime(timestamp: number): string {
@@ -22,8 +35,90 @@ function formatTime(timestamp: number): string {
   });
 }
 
+function TimelinePanel({
+  events,
+  selectedEventId,
+  onSelect,
+}: {
+  events: DevToolEventEnvelope[];
+  selectedEventId?: string;
+  onSelect(id: string): void;
+}) {
+  const [paused, setPaused] = useState(false);
+  const [visibleEvents, setVisibleEvents] = useState(events);
+  const [clearedAt, setClearedAt] = useState(0);
+
+  useEffect(() => {
+    if (!paused) setVisibleEvents(events);
+  }, [events, paused]);
+
+  const displayed = visibleEvents.filter((event) => event.timestamp > clearedAt);
+  return (
+    <main className="timeline">
+      <div className="panel-header">
+        <div>
+          <strong>Unified timeline</strong>
+          <span>{displayed.length} events</span>
+        </div>
+        <div className="actions">
+          <button className={paused ? 'control-active' : ''} onClick={() => setPaused(!paused)}>
+            {paused ? 'Resume' : 'Pause'}
+          </button>
+          <button onClick={() => setClearedAt(Date.now())}>Clear</button>
+        </div>
+      </div>
+      <div className="column-head">
+        <span>Time</span>
+        <span>Category</span>
+        <span>Event</span>
+      </div>
+      <div className="event-list">
+        {displayed.length === 0 ? (
+          <div className="empty">
+            <div className="empty-icon">⌁</div>
+            <h2>Ready to inspect</h2>
+            <p>Connect the example React Native app to see its events here.</p>
+            <code>ws://127.0.0.1:9090</code>
+          </div>
+        ) : (
+          [...displayed].reverse().map((event) => (
+            <button
+              className={event.id === selectedEventId ? 'event selected' : 'event'}
+              key={event.id}
+              onClick={() => onSelect(event.id)}
+            >
+              <time>{formatTime(event.timestamp)}</time>
+              <span className={`category ${event.category}`}>{event.category}</span>
+              <span>
+                <strong>{event.type}</strong>
+                <small>#{event.sequence}</small>
+              </span>
+            </button>
+          ))
+        )}
+      </div>
+    </main>
+  );
+}
+
+function UpcomingPanel({ view }: { view: ViewName }) {
+  return (
+    <main className="timeline">
+      <div className="panel-header">
+        <strong>{view}</strong>
+      </div>
+      <div className="empty">
+        <div className="empty-icon">◇</div>
+        <h2>{view} is planned</h2>
+        <p>This inspector belongs to a later implementation phase.</p>
+      </div>
+    </main>
+  );
+}
+
 export function App() {
   const { devices, events, selectedEventId, setSnapshot, selectEvent } = useDesktopStore();
+  const [activeView, setActiveView] = useState<ViewName>('Timeline');
   const selected = findSelectedEvent(events, selectedEventId);
   const desktopApi = window.pulseRN;
 
@@ -59,88 +154,34 @@ export function App() {
               ? deviceLabel(devices[0]!)
               : `${devices.length} devices connected`}
         </div>
-        <div className="search">⌘K&nbsp;&nbsp; Search events</div>
+        <div className="phase-pill">Phase 2 · Console</div>
       </header>
       <aside className="sidebar">
         <div className="section-label">Inspect</div>
-        {navItems.map((item, index) => (
-          <button className={index === 0 ? 'nav active' : 'nav'} key={item}>
-            <span>{['⌁', '›_', '⇄', '◇', '→', '⌁', '▤', '△'][index]}</span>
-            {item}
+        {navItems.map((item) => (
+          <button
+            className={`${activeView === item.name ? 'nav active' : 'nav'} ${item.available ? '' : 'upcoming'}`}
+            key={item.name}
+            onClick={() => setActiveView(item.name)}
+          >
+            <span>{item.icon}</span>
+            {item.name}
+            {!item.available && <small>Soon</small>}
           </button>
         ))}
         <div className="sidebar-footer">
-          <span className="status online" />
+          <span className={devices.length ? 'status online' : 'status'} />
           WebSocket :9090
         </div>
       </aside>
-      <main className="timeline">
-        <div className="panel-header">
-          <div>
-            <strong>Unified timeline</strong>
-            <span>{events.length} events</span>
-          </div>
-          <div className="actions">
-            <button>Pause</button>
-            <button>Clear</button>
-          </div>
-        </div>
-        <div className="column-head">
-          <span>Time</span>
-          <span>Category</span>
-          <span>Event</span>
-        </div>
-        <div className="event-list">
-          {events.length === 0 ? (
-            <div className="empty">
-              <div className="empty-icon">⌁</div>
-              <h2>Ready to inspect</h2>
-              <p>Connect the example React Native app to see its events here.</p>
-              <code>ws://127.0.0.1:9090</code>
-            </div>
-          ) : (
-            [...events].reverse().map((event) => (
-              <button
-                className={event.id === selectedEventId ? 'event selected' : 'event'}
-                key={event.id}
-                onClick={() => selectEvent(event.id)}
-              >
-                <time>{formatTime(event.timestamp)}</time>
-                <span className={`category ${event.category}`}>{event.category}</span>
-                <span>
-                  <strong>{event.type}</strong>
-                  <small>#{event.sequence}</small>
-                </span>
-              </button>
-            ))
-          )}
-        </div>
-      </main>
-      <aside className="details">
-        <div className="panel-header">
-          <strong>Event details</strong>
-        </div>
-        {selected ? (
-          <div className="detail-content">
-            <div className="detail-grid">
-              <span>Type</span>
-              <strong>{selected.type}</strong>
-              <span>Category</span>
-              <strong>{selected.category}</strong>
-              <span>Sequence</span>
-              <strong>{selected.sequence}</strong>
-              <span>Session</span>
-              <strong>{selected.sessionId}</strong>
-            </div>
-            <h3>Payload</h3>
-            <pre>{JSON.stringify(selected.payload, null, 2)}</pre>
-          </div>
-        ) : (
-          <div className="details-empty">
-            Select an event to inspect its validated envelope and payload.
-          </div>
-        )}
-      </aside>
+      {activeView === 'Timeline' ? (
+        <TimelinePanel events={events} selectedEventId={selectedEventId} onSelect={selectEvent} />
+      ) : activeView === 'Console' ? (
+        <ConsolePanel events={events} selectedEventId={selectedEventId} onSelect={selectEvent} />
+      ) : (
+        <UpcomingPanel view={activeView} />
+      )}
+      <EventDetails event={selected} />
     </div>
   );
 }

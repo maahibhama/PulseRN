@@ -18,4 +18,5 @@ export const ReactNativeDevTool = {
 };
 
 export { DevToolClient };
+export { serializeConsoleValue } from './serialization';
 export type { DevToolConfig, TrackEventInput, WebSocketFactory, WebSocketLike } from './types';

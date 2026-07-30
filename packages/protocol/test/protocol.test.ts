@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   PROTOCOL_VERSION,
+  consoleLogPayloadSchema,
   eventEnvelopeSchema,
   negotiateProtocolVersion,
   parseClientMessage,
@@ -15,5 +16,22 @@ describe('protocol', () => {
   it('rejects malformed event envelopes without throwing', () => {
     expect(eventEnvelopeSchema.safeParse({ type: 'test' }).success).toBe(false);
     expect(parseClientMessage({ kind: 'event-batch', events: [] }).success).toBe(false);
+  });
+
+  it('validates console payloads', () => {
+    expect(
+      consoleLogPayloadSchema.safeParse({
+        level: 'warn',
+        arguments: ['slow render', { duration: 120 }],
+        message: 'slow render {"duration":120}',
+      }).success,
+    ).toBe(true);
+    expect(
+      consoleLogPayloadSchema.safeParse({
+        level: 'verbose',
+        arguments: [],
+        message: '',
+      }).success,
+    ).toBe(false);
   });
 });

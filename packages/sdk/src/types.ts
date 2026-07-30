@@ -20,6 +20,8 @@ export interface DevToolConfig {
   reconnectMaxDelayMs?: number;
   allowInProduction?: boolean;
   isDevelopment?: boolean;
+  enableConsole?: boolean;
+  captureConsoleStackTrace?: boolean;
   redaction?: {
     fields?: readonly string[];
     headers?: readonly string[];

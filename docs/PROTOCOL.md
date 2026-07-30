@@ -6,6 +6,8 @@ Clients first send `client-hello` with supported versions, stable IDs, app metad
 
 Every event contains an ID, negotiated protocol version, session/device/app IDs, wall-clock timestamp, monotonic sequence within the client session, category, type, and JSON payload. Optional `correlationId` and `parentId` fields support the future unified timeline.
 
+Console events use types `console.log`, `console.info`, `console.warn`, `console.error`, and `console.debug`. Their payload includes a validated level, JSON-safe arguments, display message, and optional stack/source location.
+
 Limits in Phase 1:
 
 - WebSocket frame: 2 MiB

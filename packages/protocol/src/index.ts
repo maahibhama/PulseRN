@@ -25,20 +25,49 @@ const jsonValue: z.ZodType<JsonValue> = z.lazy(() =>
 export type JsonValue =
   string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
-export const eventEnvelopeSchema = z.object({
-  id: identifier,
-  protocolVersion: identifier,
-  sessionId: identifier,
-  deviceId: identifier,
-  appId: identifier,
-  timestamp: z.number().finite().nonnegative(),
-  sequence: z.number().int().nonnegative(),
-  category: eventCategorySchema,
-  type: identifier,
-  payload: jsonValue,
-  correlationId: identifier.optional(),
-  parentId: identifier.optional(),
+export const consoleLogLevelSchema = z.enum(['log', 'info', 'warn', 'error', 'debug']);
+export type ConsoleLogLevel = z.infer<typeof consoleLogLevelSchema>;
+
+export const consoleLogPayloadSchema = z.object({
+  level: consoleLogLevelSchema,
+  arguments: z.array(jsonValue).max(100),
+  message: z.string().max(100_000),
+  stack: z.string().max(100_000).optional(),
+  source: z
+    .object({
+      file: z.string().max(4_096),
+      line: z.number().int().positive(),
+      column: z.number().int().nonnegative().optional(),
+    })
+    .optional(),
 });
+export type ConsoleLogPayload = z.infer<typeof consoleLogPayloadSchema>;
+
+export const eventEnvelopeSchema = z
+  .object({
+    id: identifier,
+    protocolVersion: identifier,
+    sessionId: identifier,
+    deviceId: identifier,
+    appId: identifier,
+    timestamp: z.number().finite().nonnegative(),
+    sequence: z.number().int().nonnegative(),
+    category: eventCategorySchema,
+    type: identifier,
+    payload: jsonValue,
+    correlationId: identifier.optional(),
+    parentId: identifier.optional(),
+  })
+  .superRefine((event, context) => {
+    if (event.category !== 'console') return;
+    if (!consoleLogPayloadSchema.safeParse(event.payload).success) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['payload'],
+        message: 'Invalid console event payload',
+      });
+    }
+  });
 
 export type DevToolEventEnvelope<TPayload extends JsonValue = JsonValue> = Omit<
   z.infer<typeof eventEnvelopeSchema>,

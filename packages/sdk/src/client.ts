@@ -7,6 +7,8 @@ import {
   type JsonValue,
 } from '@pulse-rn/protocol';
 import { createId, redact } from '@pulse-rn/shared';
+import { installConsoleInterceptor } from './console-instrumentation';
+import { formatConsoleMessage } from './serialization';
 import type { DevToolConfig, TrackEventInput, WebSocketFactory, WebSocketLike } from './types.js';
 
 const SDK_VERSION = '0.1.0';
@@ -47,6 +49,7 @@ export class DevToolClient {
   private negotiated = false;
   private manuallyClosed = false;
   private droppedEvents = 0;
+  private restoreConsole?: () => void;
   readonly deviceId: string;
   readonly sessionId: string;
   readonly appId: string;
@@ -80,6 +83,19 @@ export class DevToolClient {
     if (this.socket?.readyState === CONNECTING || this.socket?.readyState === OPEN) return this;
 
     this.manuallyClosed = false;
+    if (this.config.enableConsole && !this.restoreConsole) {
+      this.restoreConsole = installConsoleInterceptor(
+        console,
+        (level, payload) => {
+          this.track({
+            category: 'console',
+            type: `console.${level}`,
+            payload,
+          });
+        },
+        { captureStackTrace: this.config.captureConsoleStackTrace ?? true },
+      );
+    }
     const scheme = this.config.secure ? 'wss' : 'ws';
     this.socket = this.factory(`${scheme}://${this.config.host}:${this.config.port}`);
     this.socket.onopen = () => this.sendHello();
@@ -94,12 +110,26 @@ export class DevToolClient {
     this.negotiated = false;
     if (this.flushTimer) clearTimeout(this.flushTimer);
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    this.restoreConsole?.();
+    this.restoreConsole = undefined;
     this.socket?.close();
     this.socket = undefined;
   }
 
   track(input: TrackEventInput): void {
-    const payload = redact(input.payload, { fields: this.config.redaction?.fields }) as JsonValue;
+    let payload = redact(input.payload, { fields: this.config.redaction?.fields }) as JsonValue;
+    if (
+      input.category === 'console' &&
+      payload !== null &&
+      !Array.isArray(payload) &&
+      typeof payload === 'object' &&
+      Array.isArray(payload['arguments'])
+    ) {
+      payload = {
+        ...payload,
+        message: formatConsoleMessage(payload['arguments']),
+      };
+    }
     if (
       new TextEncoder().encode(JSON.stringify(payload)).byteLength > this.config.maxPayloadBytes
     ) {

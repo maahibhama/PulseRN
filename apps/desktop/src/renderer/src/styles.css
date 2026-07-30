@@ -63,7 +63,7 @@ button {
   margin-right: 8px;
 }
 .device-pill,
-.search {
+.phase-pill {
   color: #a9b0c0;
   border: 1px solid #2b3140;
   background: #171b24;
@@ -74,10 +74,9 @@ button {
 .device-pill {
   min-width: 205px;
 }
-.search {
+.phase-pill {
   margin-left: auto;
-  width: 220px;
-  color: #747d90;
+  color: #9d8bea;
 }
 .status {
   display: inline-block;
@@ -122,6 +121,16 @@ button {
 .nav span {
   width: 16px;
   color: #6d7588;
+}
+.nav small {
+  margin-left: auto;
+  color: #50586a;
+  font-size: 8px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.nav.upcoming:not(.active) {
+  color: #626a7a;
 }
 .nav.active {
   background: #29233f;
@@ -170,6 +179,11 @@ button {
   color: #9098a9;
   padding: 5px 9px;
   font-size: 11px;
+}
+.actions button.control-active {
+  border-color: #725bdb;
+  color: #b8a9ff;
+  background: #29233f;
 }
 .column-head,
 .event {
@@ -231,6 +245,10 @@ button {
   color: #69d6aa;
   background: #15372d;
 }
+.category.console {
+  color: #e0b46e;
+  background: #40311b;
+}
 .empty {
   height: 100%;
   display: grid;
@@ -287,6 +305,189 @@ button {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.7px;
+}
+.copy-detail {
+  border: 0;
+  background: transparent;
+  color: #7f889a;
+  cursor: pointer;
+  font-size: 10px;
+}
+.source-link {
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #9d8bea;
+  cursor: pointer;
+  font:
+    11px/1.5 ui-monospace,
+    monospace;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stack-trace {
+  color: #9ca7bb;
+  font-size: 10px;
+}
+.console-header {
+  height: 55px;
+}
+.console-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 49px;
+  padding: 8px 14px;
+  border-bottom: 1px solid #252a35;
+  background: #10131a;
+}
+.level-filters {
+  display: flex;
+  gap: 5px;
+}
+.level-filter {
+  padding: 4px 7px;
+  border: 1px solid #292f3b;
+  border-radius: 5px;
+  background: transparent;
+  color: #596173;
+  cursor: pointer;
+  font-size: 9px;
+  text-transform: uppercase;
+}
+.level-filter.enabled {
+  color: #b9c0ce;
+  background: #1c212b;
+}
+.level-filter.warn.enabled {
+  border-color: #6d5629;
+  color: #e5bd66;
+}
+.level-filter.error.enabled {
+  border-color: #70393d;
+  color: #f1868e;
+}
+.level-filter.info.enabled {
+  border-color: #285375;
+  color: #79baf0;
+}
+.console-toolbar input {
+  width: min(260px, 40%);
+  margin-left: auto;
+  padding: 7px 10px;
+  border: 1px solid #2b3140;
+  border-radius: 6px;
+  outline: none;
+  background: #0c0f15;
+  color: #c9cfda;
+  font-size: 11px;
+}
+.console-toolbar input:focus {
+  border-color: #6652be;
+}
+.console-columns,
+.console-entry-main {
+  display: grid;
+  grid-template-columns: 105px 72px minmax(0, 1fr);
+}
+.console-columns {
+  padding: 8px 14px;
+  border-bottom: 1px solid #1d222c;
+  color: #5e6678;
+  font-size: 9px;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+}
+.console-list {
+  height: calc(100vh - 209px);
+  overflow: auto;
+}
+.console-entry {
+  position: relative;
+  border-bottom: 1px solid #191e27;
+}
+.console-entry:hover,
+.console-entry.selected {
+  background: #151924;
+}
+.console-entry-main {
+  width: calc(100% - 50px);
+  min-height: 39px;
+  align-items: center;
+  padding: 8px 14px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+.console-entry-main time {
+  color: #697285;
+  font:
+    10px ui-monospace,
+    monospace;
+}
+.level-badge {
+  width: max-content;
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: #222733;
+  color: #a6aebb;
+  font-size: 9px;
+  text-transform: uppercase;
+}
+.level-badge.warn {
+  color: #e5bd66;
+  background: #3b301c;
+}
+.level-badge.error {
+  color: #f1868e;
+  background: #3c2023;
+}
+.level-badge.info {
+  color: #79baf0;
+  background: #172d41;
+}
+.level-badge.debug {
+  color: #ad91ee;
+  background: #29213c;
+}
+.console-message {
+  overflow: hidden;
+  color: #c4cad5;
+  font:
+    11px/1.45 ui-monospace,
+    monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.copy-row {
+  position: absolute;
+  top: 9px;
+  right: 10px;
+  padding: 3px 5px;
+  border: 0;
+  background: transparent;
+  color: #596173;
+  cursor: pointer;
+  font-size: 9px;
+}
+.copy-row:hover {
+  color: #a99af0;
+}
+.inline-payload {
+  margin: 0 14px 9px 191px;
+  color: #687085;
+  font-size: 9px;
+}
+.inline-payload summary {
+  cursor: pointer;
+}
+.inline-payload pre {
+  margin: 7px 0 0;
+  max-height: 240px;
+  overflow: auto;
 }
 pre {
   white-space: pre-wrap;

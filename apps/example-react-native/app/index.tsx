@@ -29,6 +29,8 @@ export default function HomeScreen() {
         fields: ['password', 'otp', 'token', 'accessToken'],
         headers: ['authorization', 'cookie'],
       },
+      enableConsole: true,
+      captureConsoleStackTrace: true,
     }).connect();
     client.track({
       category: 'system',
@@ -39,10 +41,21 @@ export default function HomeScreen() {
   }, []);
 
   const sendTestEvent = () => {
+    const circular: Record<string, unknown> = {
+      count: sent + 1,
+      token: 'this value will be redacted',
+      screen: 'Phase 2 example',
+    };
+    circular.self = circular;
+    console.log('Checkout button pressed', circular);
+    console.info('Requesting checkout configuration', { attempt: sent + 1 });
+    console.warn('Example slow operation', { duration: 420 });
+    console.debug('Debug context', { platform: Platform.OS });
+    console.error(new Error('Example error for the Console inspector'));
     ReactNativeDevTool.track({
       category: 'interaction',
-      type: 'example.button-pressed',
-      payload: { count: sent + 1, token: 'this value will be redacted' },
+      type: 'example.console-demo',
+      payload: { count: sent + 1 },
     });
     setSent((value) => value + 1);
   };
@@ -55,9 +68,9 @@ export default function HomeScreen() {
         <Text style={styles.title}>Phase 1 connection test</Text>
         <Text style={styles.body}>Desktop endpoint: ws://{host}:9090</Text>
         <Pressable style={styles.button} onPress={sendTestEvent}>
-          <Text style={styles.buttonText}>Send test event</Text>
+          <Text style={styles.buttonText}>Emit console demo</Text>
         </Pressable>
-        <Text style={styles.counter}>{sent} test events queued</Text>
+        <Text style={styles.counter}>{sent} console demos emitted</Text>
       </View>
     </SafeAreaView>
   );

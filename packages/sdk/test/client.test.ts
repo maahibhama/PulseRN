@@ -37,9 +37,19 @@ describe('DevToolClient', () => {
         serverTime: Date.now(),
       }),
     });
-    client.track({ category: 'system', type: 'sdk.test', payload: { token: 'secret' } });
+    client.track({
+      category: 'console',
+      type: 'console.log',
+      payload: {
+        level: 'log',
+        arguments: [{ token: 'secret' }],
+        message: '{"token":"secret"}',
+      },
+    });
     vi.advanceTimersByTime(11);
-    expect(JSON.parse(socket.sent[1] ?? '{}').events[0].payload.token).toBe('[REDACTED]');
+    const payload = JSON.parse(socket.sent[1] ?? '{}').events[0].payload;
+    expect(payload.arguments[0].token).toBe('[REDACTED]');
+    expect(payload.message).not.toContain('secret');
     client.disconnect();
     vi.useRealTimers();
   });
