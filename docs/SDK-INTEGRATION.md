@@ -44,3 +44,26 @@ const removeAxiosInterceptor = ReactNativeDevTool.client?.attachAxios(axios);
 ```
 
 Call the returned function when disposing the Axios instance. Do not enable both a global capture path and an Axios interceptor if duplicate events for the same Axios request are undesirable.
+
+## Redux capture
+
+Install `@pulse-rn/redux-plugin` and add its middleware to Redux or Redux Toolkit:
+
+```ts
+import { createDevToolMiddleware } from '@pulse-rn/redux-plugin';
+import { ReactNativeDevTool } from '@pulse-rn/sdk';
+
+const pulseRNMiddleware = createDevToolMiddleware({
+  client: ReactNativeDevTool,
+  storeId: 'main',
+  captureState: true,
+  captureStateDiff: true,
+  maxStateDepth: 10,
+  redactedFields: ['token', 'password'],
+});
+```
+
+With Redux Toolkit, append it using `middleware: (getDefaultMiddleware) =>
+getDefaultMiddleware().concat(pulseRNMiddleware)`. With Redux, pass it to `applyMiddleware`.
+Each configured `storeId` is independently filterable in the desktop app. The middleware observes
+dispatch without mutating actions or state and does not implement state replay or time travel.

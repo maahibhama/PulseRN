@@ -10,6 +10,9 @@ Console events use types `console.log`, `console.info`, `console.warn`, `console
 
 Network events use type `network.request`. Each completed payload contains a request ID, transport, method, redacted URL/query/headers, optional bounded bodies, status, start/end timestamps, duration, and optional error. Binary bodies are excluded.
 
+Redux events use type `redux.action`. Their payload contains a store ID, action type and sanitized
+action, optional previous/next state snapshots, optional path-based state diffs, and reducer duration.
+
 Limits in Phase 1:
 
 - WebSocket frame: 2 MiB

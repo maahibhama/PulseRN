@@ -3,7 +3,7 @@
 - **Phase 1 — Foundation (complete):** monorepo, secure Electron shell, protocol, WebSocket transport, SDK, sessions, SQLite, example, initial UI.
 - **Phase 2 — Console (complete):** safe console interception, serialization, stacks, filtering, search, pause, clear, payload expansion, and copy.
 - **Phase 3 — Network (complete):** fetch/XHR/Axios instrumentation, redaction, binary exclusion, truncation, timing, filtering, failure highlighting, and inspector tabs.
-- **Phase 4 — Redux:** Redux/RTK middleware, action/state/diff capture, timing, filters, multiple stores.
+- **Phase 4 — Redux (complete):** Redux/RTK middleware, action/state/diff capture, timing, redaction, filters, multiple stores.
 - **Phase 5 — Navigation:** React Navigation integration, lifecycle events, manual API.
 - **Phase 6 — Performance:** FPS/lag/stalls, startup and screen timing, custom marks, dashboards.
 - **Phase 7 — Storage:** AsyncStorage read/search and confirmed mutations; extensible storage provider API.

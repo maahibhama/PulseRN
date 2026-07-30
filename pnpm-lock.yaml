@@ -87,6 +87,9 @@ importers:
 
   apps/example-react-native:
     dependencies:
+      '@pulse-rn/redux-plugin':
+        specifier: workspace:*
+        version: link:../../packages/redux-plugin
       '@pulse-rn/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
@@ -114,6 +117,9 @@ importers:
       react-native-screens:
         specifier: ~4.11.1
         version: 4.11.1(react-native@0.79.6(@babel/core@7.29.7)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)
+      redux:
+        specifier: ^5.0.1
+        version: 5.0.1
     devDependencies:
       '@types/react':
         specifier: ~19.0.10
@@ -131,7 +137,14 @@ importers:
         specifier: ^22.17.0
         version: 22.20.1
 
-  packages/redux-plugin: {}
+  packages/redux-plugin:
+    dependencies:
+      '@pulse-rn/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@pulse-rn/shared':
+        specifier: workspace:*
+        version: link:../shared
 
   packages/sdk:
     dependencies:
@@ -3379,6 +3392,9 @@ packages:
   react@19.0.0:
     resolution: {integrity: sha512-V8AVnmPIICiWpGfm6GLzCR/W5FXLchHop40W4nXBmdlEceh16rCN8O8LNWm5bh5XUX91fh7KpA+W0TgMKmgTpQ==}
     engines: {node: '>=0.10.0'}
+
+  redux@5.0.1:
+    resolution: {integrity: sha512-M9/ELqF6fy8FwmkpnF0S3YKOqMyoWJ4+CS5Efg2ct3oY9daQvd/Pc71FpGZsVsbl3Cpb+IIcjBDUnnyBdQbq4w==}
 
   regenerate-unicode-properties@10.2.2:
     resolution: {integrity: sha512-m03P+zhBeQd1RGnYxrGyDAPpWX/epKirLrp8e3qevZdVkKtnCrjjWczIbYc8+xd6vcTStVlqfycTx1KR4LOr0g==}
@@ -7791,6 +7807,8 @@ snapshots:
   react-refresh@0.17.0: {}
 
   react@19.0.0: {}
+
+  redux@5.0.1: {}
 
   regenerate-unicode-properties@10.2.2:
     dependencies:

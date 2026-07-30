@@ -1,5 +1,6 @@
 import { consoleLogPayloadSchema, type DevToolEventEnvelope } from '@pulse-rn/protocol';
 import { NetworkEventDetails } from './NetworkEventDetails.js';
+import { ReduxEventDetails } from './ReduxEventDetails.js';
 
 interface EventDetailsProps {
   event?: DevToolEventEnvelope;
@@ -71,6 +72,8 @@ export function EventDetails({ event }: EventDetailsProps) {
           </div>
           {event.category === 'network' ? (
             <NetworkEventDetails event={event} />
+          ) : event.category === 'redux' ? (
+            <ReduxEventDetails event={event} />
           ) : (
             <StandardDetails event={event} />
           )}

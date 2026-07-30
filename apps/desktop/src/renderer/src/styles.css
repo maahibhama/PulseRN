@@ -701,3 +701,57 @@ pre {
     11px/1.6 ui-monospace,
     monospace;
 }
+.redux-columns,
+.redux-entry {
+  display: grid;
+  grid-template-columns: 90px minmax(180px, 1fr) 72px 90px;
+  align-items: center;
+}
+.redux-columns {
+  padding: 8px 14px;
+  border-bottom: 1px solid #1d222c;
+  color: #5e6678;
+  font-size: 9px;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+}
+.redux-list {
+  height: calc(100vh - 209px);
+  overflow: auto;
+}
+.redux-entry {
+  width: 100%;
+  min-height: 39px;
+  padding: 8px 14px;
+  border: 0;
+  border-bottom: 1px solid #191e27;
+  background: transparent;
+  color: #778095;
+  text-align: left;
+  font-size: 10px;
+}
+.redux-entry:hover,
+.redux-entry.selected {
+  background: #151924;
+}
+.redux-entry strong {
+  overflow: hidden;
+  color: #c5cad5;
+  font:
+    10px ui-monospace,
+    monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.store-badge {
+  width: max-content;
+  max-width: 80px;
+  overflow: hidden;
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: #2b2240;
+  color: #b6a1f1;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
