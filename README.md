@@ -31,7 +31,21 @@ PulseRN is an open-source desktop debugging foundation for React Native. Its cen
 - Compact, rounded light and dark application icons that follow the selected theme, including live macOS system-theme changes
 - Expo development-build and bare React Native Community CLI examples covering Console, Network, Redux, Navigation, Performance, AsyncStorage, MMKV, and Errors
 
-![Screenshot placeholder](docs/assets/screenshot-placeholder.svg)
+## Screenshots
+
+### Unified desktop timeline
+
+![PulseRN desktop debugger showing the unified event timeline](docs/assets/pulsern-timeline.png)
+
+### React Native Community CLI example
+
+<p align="center">
+  <img
+    src="docs/assets/pulsern-react-native-example.png"
+    alt="PulseRN React Native Community CLI example running in the iOS Simulator"
+    width="420"
+  />
+</p>
 
 ## Requirements
 
