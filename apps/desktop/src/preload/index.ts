@@ -91,6 +91,12 @@ const databaseMaintenanceSchema = z.object({
   retainedEvents: z.number().int().nonnegative(),
   completedAt: z.number().finite().nonnegative(),
 });
+const sessionArchiveResultSchema = z.object({
+  canceled: z.boolean(),
+  filePath: z.string().optional(),
+  sessions: z.number().int().nonnegative(),
+  events: z.number().int().nonnegative(),
+});
 const settingsPatchSchema = settingsSchema.partial().strict();
 const debuggerLocationSchema = z.object({
   sourceId: z.string(),
@@ -213,6 +219,21 @@ const api: PulseRNDesktopApi = {
       operation: 'sessions',
     });
     return z.array(storedSessionSchema).parse(value);
+  },
+  async exportSessions(sessionIds) {
+    const value: unknown = await ipcRenderer.invoke(EVENTS_CHANNEL, {
+      operation: 'export',
+      sessionIds: sessionIds
+        ? z.array(z.string().trim().min(1).max(256)).min(1).max(500).parse(sessionIds)
+        : undefined,
+    });
+    return sessionArchiveResultSchema.parse(value);
+  },
+  async importSessions() {
+    const value: unknown = await ipcRenderer.invoke(EVENTS_CHANNEL, {
+      operation: 'import',
+    });
+    return sessionArchiveResultSchema.parse(value);
   },
   async runDatabaseMaintenance() {
     const value: unknown = await ipcRenderer.invoke(EVENTS_CHANNEL, {

@@ -132,6 +132,71 @@ button {
 .database-actions .danger-button {
   color: var(--danger);
 }
+
+.session-message {
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--border);
+  color: var(--success);
+  background: var(--panel-soft);
+}
+
+.session-message.error {
+  color: var(--danger);
+}
+
+.session-columns,
+.session-entry {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.4fr) minmax(150px, 1fr) minmax(170px, 1fr) 90px 80px;
+  gap: 12px;
+  align-items: center;
+}
+
+.session-columns {
+  padding: 9px 18px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.session-list {
+  overflow: auto;
+}
+
+.session-entry {
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.session-entry > span {
+  min-width: 0;
+}
+
+.session-entry strong,
+.session-entry small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-entry strong {
+  color: var(--text);
+}
+
+.session-entry small {
+  margin-top: 3px;
+}
+
+.session-entry button {
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 6px 10px;
+  background: var(--panel-soft);
+  color: var(--text);
+}
 .device-pill.degraded small {
   color: #e0a15c;
 }

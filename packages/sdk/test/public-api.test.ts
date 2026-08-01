@@ -7,6 +7,7 @@ import {
   createPulseRNClient,
   diffStates,
   getActiveRoute,
+  getOrCreatePulseRNDeviceId,
   ReactNativeDevTool,
 } from '../src/index.js';
 
@@ -19,6 +20,7 @@ describe('single-entry SDK API', () => {
     expect(diffStates).toBeTypeOf('function');
     expect(createNavigationTracker).toBeTypeOf('function');
     expect(getActiveRoute).toBeTypeOf('function');
+    expect(getOrCreatePulseRNDeviceId).toBeTypeOf('function');
     expect(ReactNativeDevTool.configure).toBeTypeOf('function');
   });
 

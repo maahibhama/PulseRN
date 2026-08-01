@@ -37,6 +37,7 @@ import {
   createPulseRNClient,
   diffStates,
   getActiveRoute,
+  getOrCreatePulseRNDeviceId,
   ReactNativeDevTool,
 } from '@pulse-rn/sdk';
 
@@ -54,6 +55,10 @@ client.connect();
 
 PulseRN is intended for development builds. Production connections stay disabled unless explicitly
 enabled with `allowInProduction`.
+
+Use `getOrCreatePulseRNDeviceId(AsyncStorage)` and pass the result as `deviceId` when device history
+should remain stable across development app launches. The storage library remains an application
+dependency and is not imported eagerly by PulseRN.
 
 See the repository's [SDK integration guide](https://github.com/maahibhama/PulseRN/blob/main/docs/SDK-INTEGRATION.md)
 for Redux, navigation, AsyncStorage, MMKV, performance, and error-capture examples.

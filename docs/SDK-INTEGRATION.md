@@ -32,6 +32,27 @@ if (__DEV__) {
 
 Android Emulator maps the host loopback address to `10.0.2.2`. The iOS simulator can use `127.0.0.1`. Physical devices require a reachable LAN binding, which is intentionally disabled pending authenticated remote connections.
 
+## Persistent device identity
+
+By default, every configured client creates a fresh device ID. To group launches under one stable
+development device, persist an ID through an already-installed storage library:
+
+```ts
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getOrCreatePulseRNDeviceId, ReactNativeDevTool } from '@pulse-rn/sdk';
+
+const deviceId = await getOrCreatePulseRNDeviceId(AsyncStorage);
+
+ReactNativeDevTool.configure({
+  appName: 'MyApp',
+  deviceId,
+}).connect();
+```
+
+The helper has no native dependency of its own. It accepts any object with `getItem` and `setItem`,
+validates an existing ID, and creates one only when missing or malformed. A custom key can be supplied
+as the second argument.
+
 `allowInProduction` defaults to false. Leave it disabled. Events created offline remain in a
 bounded queue; the oldest event is dropped when the queue is full. PulseRN also pauses dequeueing
 while the native WebSocket send buffer is saturated.

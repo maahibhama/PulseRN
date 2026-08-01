@@ -8,7 +8,7 @@
 
 PulseRN is an open-source desktop debugging foundation for React Native. Its central idea is a unified, chronological timeline that will correlate app interactions, navigation, Redux, network, rendering, performance, and errors.
 
-> Status: Phase 10 complete. The inspectors, scalable persistence, transport hardening, sustained-load checks, and Electron acceptance coverage are working.
+> Status: Phase 11 complete. The inspectors, scalable persistence, session portability, transport hardening, sustained-load checks, and Electron acceptance coverage are working.
 
 ## What works today
 
@@ -19,6 +19,7 @@ PulseRN is an open-source desktop debugging foundation for React Native. Its cen
 - Multiple connected-device tracking
 - SQLite event persistence with configurable age/count retention and recovery cleanup
 - Cursor-paginated unified timeline and category inspectors with bounded timeline virtualization
+- Versioned, validated session archive import/export through native file dialogs
 - Console interception for log, info, warn, error, and debug
 - Console filtering, search, pause, clear, payload expansion, copy, source, and stack inspection
 - Fetch and XMLHttpRequest inspection with optional Axios interceptors
@@ -32,6 +33,7 @@ PulseRN is an open-source desktop debugging foundation for React Native. Its cen
 - Persistent desktop settings for system/light/dark themes, interface density, timeline ordering, launch at login, and macOS background behavior
 - Compact, rounded light and dark application icons that follow the selected theme, including live macOS system-theme changes
 - Expo development-build and bare React Native Community CLI examples covering Console, Network, Redux, Navigation, Performance, AsyncStorage, MMKV, and Errors
+- Optional persistent SDK device identity for stable device history across app launches
 
 ## Screenshots
 
@@ -187,8 +189,8 @@ if (__DEV__) {
 }
 ```
 
-See [SDK integration](docs/SDK-INTEGRATION.md), [architecture](docs/ARCHITECTURE.md), and the
-[roadmap](docs/ROADMAP.md). Source code, issues, and contributions live in the
+See [SDK integration](docs/SDK-INTEGRATION.md), [session archives](docs/SESSION-ARCHIVES.md),
+[architecture](docs/ARCHITECTURE.md), and the [roadmap](docs/ROADMAP.md). Source code, issues, and contributions live in the
 [GitHub repository](https://github.com/maahibhama/PulseRN); downloadable desktop builds are
 published through [GitHub Releases](https://github.com/maahibhama/PulseRN/releases).
 
@@ -206,6 +208,12 @@ Open **Settings** in the Electron sidebar to configure:
 
 Appearance changes apply immediately to the debugger, header branding, window icon, and macOS Dock
 icon. With **System** selected, PulseRN follows macOS automatically.
+
+## Session archives
+
+Open **Sessions** to browse retained runs, export one session or all stored sessions, and import a
+`.pulsern-session.json` archive. PulseRN validates the versioned archive in Electron main before
+writing any data. Imports are duplicate-safe and remain subject to the configured retention limits.
 
 ## JavaScript line debugger
 

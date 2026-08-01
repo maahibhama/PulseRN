@@ -421,6 +421,66 @@ export class EventDatabase {
       .all(safeLimit) as unknown as StoredSession[];
   }
 
+  importSessionData(
+    sessions: readonly StoredSession[],
+    events: readonly DevToolEventEnvelope[],
+  ): void {
+    if (sessions.length === 0) return;
+    this.database.exec('BEGIN IMMEDIATE;');
+    try {
+      const upsert = this.database.prepare(`
+        INSERT INTO sessions (
+          session_id, app_id, device_id, app_name, device_name, platform,
+          started_at, last_seen_at, event_count
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
+        ON CONFLICT(session_id) DO UPDATE SET
+          app_id = excluded.app_id,
+          device_id = excluded.device_id,
+          app_name = excluded.app_name,
+          device_name = excluded.device_name,
+          platform = excluded.platform,
+          started_at = MIN(sessions.started_at, excluded.started_at),
+          last_seen_at = MAX(sessions.last_seen_at, excluded.last_seen_at)
+      `);
+      for (const session of sessions) {
+        upsert.run(
+          session.sessionId,
+          session.appId,
+          session.deviceId,
+          session.appName,
+          session.deviceName,
+          session.platform,
+          session.startedAt,
+          session.lastSeenAt,
+        );
+      }
+      const insert = this.database.prepare(`
+        INSERT OR IGNORE INTO events
+          (id, session_id, device_id, timestamp, sequence, category, type, envelope_json)
+        VALUES
+          (?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      for (const event of events) {
+        insert.run(
+          event.id,
+          event.sessionId,
+          event.deviceId,
+          event.timestamp,
+          event.sequence,
+          event.category,
+          event.type,
+          JSON.stringify(event),
+        );
+      }
+      this.refreshSessionCounts();
+      this.database.exec('COMMIT;');
+    } catch (error) {
+      this.database.exec('ROLLBACK;');
+      throw error;
+    }
+  }
+
   schemaVersion(): number {
     return (
       this.database.prepare('PRAGMA user_version;').get() as unknown as { user_version: number }

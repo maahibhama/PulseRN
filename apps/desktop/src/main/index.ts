@@ -1,4 +1,5 @@
 import { isAbsolute, join } from 'node:path';
+import { readFile, stat, writeFile } from 'node:fs/promises';
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme } from 'electron';
 import { eventCategorySchema, storageOperationSchema } from '@pulse-rn/protocol';
 import { z } from 'zod';
@@ -7,6 +8,11 @@ import { SessionManager } from './session-manager.js';
 import { SettingsStore } from './settings.js';
 import { DevToolWebSocketServer } from './websocket-server.js';
 import { DebuggerManager } from './debugger-manager.js';
+import {
+  createSessionArchive,
+  importSessionArchive,
+  parseSessionArchive,
+} from './session-archive.js';
 
 const SNAPSHOT_CHANNEL = 'pulse-rn:snapshot';
 const DEVICES_CHANNEL = 'pulse-rn:devices';
@@ -57,6 +63,11 @@ const eventRequestSchema = z.discriminatedUnion('operation', [
   z.object({ operation: z.literal('sessions') }),
   z.object({ operation: z.literal('maintain') }),
   z.object({ operation: z.literal('clear') }),
+  z.object({
+    operation: z.literal('export'),
+    sessionIds: z.array(z.string().trim().min(1).max(256)).min(1).max(500).optional(),
+  }),
+  z.object({ operation: z.literal('import') }),
 ]);
 const sessions = new SessionManager();
 let database: EventDatabase | undefined;
@@ -188,6 +199,61 @@ app.whenReady().then(async () => {
         sessions.hydrate([]);
         publish();
         return report;
+      }
+      case 'export': {
+        const archive = createSessionArchive(database, input.sessionIds);
+        const singleSession = archive.sessions.length === 1 ? archive.sessions[0] : undefined;
+        const result = window
+          ? await dialog.showSaveDialog(window, {
+              title: 'Export PulseRN session',
+              defaultPath: `${singleSession?.appName.replace(/[^A-Za-z0-9._-]+/g, '-') || 'PulseRN-sessions'}.pulsern-session.json`,
+              filters: [{ name: 'PulseRN session', extensions: ['json'] }],
+            })
+          : await dialog.showSaveDialog({
+              title: 'Export PulseRN session',
+              defaultPath: 'PulseRN-sessions.pulsern-session.json',
+              filters: [{ name: 'PulseRN session', extensions: ['json'] }],
+            });
+        if (result.canceled || !result.filePath) {
+          return { canceled: true, sessions: 0, events: 0 };
+        }
+        await writeFile(result.filePath, `${JSON.stringify(archive, null, 2)}\n`, {
+          encoding: 'utf8',
+          mode: 0o600,
+        });
+        return {
+          canceled: false,
+          filePath: result.filePath,
+          sessions: archive.sessions.length,
+          events: archive.events.length,
+        };
+      }
+      case 'import': {
+        const result = window
+          ? await dialog.showOpenDialog(window, {
+              title: 'Import PulseRN session',
+              properties: ['openFile'],
+              filters: [{ name: 'PulseRN session', extensions: ['json'] }],
+            })
+          : await dialog.showOpenDialog({
+              title: 'Import PulseRN session',
+              properties: ['openFile'],
+              filters: [{ name: 'PulseRN session', extensions: ['json'] }],
+            });
+        const filePath = result.filePaths[0];
+        if (result.canceled || !filePath) return { canceled: true, sessions: 0, events: 0 };
+        const file = await stat(filePath);
+        if (!file.isFile() || file.size > 100 * 1024 * 1024) {
+          throw new Error('PulseRN session archives must be files no larger than 100 MiB.');
+        }
+        const archive = parseSessionArchive(
+          JSON.parse(await readFile(filePath, 'utf8')) as unknown,
+        );
+        const imported = importSessionArchive(database, archive);
+        maintainDatabase(true);
+        sessions.hydrate(database.recent());
+        publish();
+        return { canceled: false, filePath, ...imported };
       }
     }
   });

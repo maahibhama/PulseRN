@@ -50,6 +50,13 @@ export interface DatabaseMaintenanceReport {
   completedAt: number;
 }
 
+export interface SessionArchiveResult {
+  canceled: boolean;
+  filePath?: string;
+  sessions: number;
+  events: number;
+}
+
 export interface StorageRequestInput {
   connectionId: string;
   providerId: string;
@@ -157,6 +164,8 @@ export interface PulseRNDesktopApi {
   queryEvents(input?: EventQuery): Promise<EventPage>;
   getEvent(id: string): Promise<EventPage['events'][number] | undefined>;
   listSessions(): Promise<StoredSession[]>;
+  exportSessions(sessionIds?: string[]): Promise<SessionArchiveResult>;
+  importSessions(): Promise<SessionArchiveResult>;
   runDatabaseMaintenance(): Promise<DatabaseMaintenanceReport>;
   clearStoredEvents(): Promise<DatabaseMaintenanceReport>;
   requestStorage(input: StorageRequestInput): Promise<StorageResult>;

@@ -45,6 +45,11 @@ drives it through Chromium's loopback debugging endpoint. It verifies sandbox is
 preload API, SDK WebSocket ingestion, persisted pagination, inspector navigation, settings, and
 maintenance. A separate 25,000-event load test traverses every cursor page before enforcing retention.
 
+Session archives use the versioned `pulse-rn-session` JSON format. Electron main owns native file
+dialogs and filesystem access, caps imports at 100 MiB, validates the complete archive before writing,
+and reconciles retained session counts after duplicate-safe event insertion. The renderer receives
+only archive summaries and never arbitrary filesystem capabilities.
+
 ## Package responsibilities
 
 - `apps/desktop`: Electron main, preload, React renderer, local persistence, and connection server.

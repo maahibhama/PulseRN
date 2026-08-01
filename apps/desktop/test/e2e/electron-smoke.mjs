@@ -207,6 +207,16 @@ try {
   );
 
   await cdp.evaluate(
+    "[...document.querySelectorAll('.nav')].find((button) => button.textContent.includes('Sessions'))?.click()",
+  );
+  await retry(
+    async () =>
+      (await cdp.evaluate("document.querySelector('.session-entry strong')?.textContent")) ===
+      'PulseRN E2E',
+    'Stored session browser',
+  );
+
+  await cdp.evaluate(
     "[...document.querySelectorAll('.nav')].find((button) => button.textContent.includes('Settings'))?.click()",
   );
   await retry(
