@@ -861,6 +861,7 @@ const api: PulseRNDesktopApi = {
         name: z.string(),
         url: z.string(),
         original: z.boolean(),
+        mappingStatus: z.enum(['original', 'generated', 'unavailable']),
         requestedLine: z.number().int().positive(),
         startLine: z.number().int().positive(),
         endLine: z.number().int().positive(),

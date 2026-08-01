@@ -1,5 +1,5 @@
-import Editor, { loader, type Monaco, type OnMount } from '@monaco-editor/react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Editor, { loader, type EditorProps, type Monaco, type OnMount } from '@monaco-editor/react';
+import { type ComponentType, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type * as MonacoTypes from 'monaco-editor';
 import * as bundledMonaco from 'monaco-editor/esm/vs/editor/editor.api';
 import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
@@ -22,6 +22,9 @@ import type {
   },
 };
 loader.config({ monaco: bundledMonaco });
+// @monaco-editor/react currently resolves a different ReactNode declaration in some
+// pnpm installations. Its runtime component and EditorProps remain compatible.
+const MonacoEditor = Editor as unknown as ComponentType<EditorProps>;
 
 const initialState: DebuggerState = {
   status: 'disconnected',
@@ -176,7 +179,9 @@ export function DebuggerPanel({ theme }: { theme: 'dark' | 'light' }) {
     try {
       const history = JSON.parse(localStorage.getItem('pulsern.debugger.console-history') ?? '[]');
       if (Array.isArray(history)) {
-        setConsoleHistory(history.filter((value): value is string => typeof value === 'string').slice(0, 100));
+        setConsoleHistory(
+          history.filter((value): value is string => typeof value === 'string').slice(0, 100),
+        );
       }
       const layout = JSON.parse(localStorage.getItem('pulsern.debugger.layout') ?? '{}') as {
         bottomOpen?: boolean;
@@ -506,9 +511,7 @@ export function DebuggerPanel({ theme }: { theme: 'dark' | 'light' }) {
 
   const connected = state.status === 'connected' || state.status === 'paused';
   const paused = state.status === 'paused';
-  const selectedComponent = componentSnapshot.nodes.find(
-    (node) => node.id === selectedComponentId,
-  );
+  const selectedComponent = componentSnapshot.nodes.find((node) => node.id === selectedComponentId);
   const visibleComponents = useMemo(() => {
     const query = componentSearch.trim().toLowerCase();
     if (!query) return componentSnapshot.nodes;
@@ -557,7 +560,9 @@ export function DebuggerPanel({ theme }: { theme: 'dark' | 'light' }) {
       };
       setEvaluation('');
       setHistoryIndex(-1);
-      setConsoleHistory((current) => [expression, ...current.filter((item) => item !== expression)].slice(0, 100));
+      setConsoleHistory((current) =>
+        [expression, ...current.filter((item) => item !== expression)].slice(0, 100),
+      );
       setConsoleEntries((current) => [...current, entry].slice(-200));
       try {
         const result = await api.evaluateDebuggerExpression(expression, {
@@ -590,7 +595,7 @@ export function DebuggerPanel({ theme }: { theme: 'dark' | 'light' }) {
       setSelectedComponentId((current) =>
         current && snapshot.nodes.some((node) => node.id === current)
           ? current
-          : snapshot.selectedId ?? snapshot.roots[0],
+          : (snapshot.selectedId ?? snapshot.roots[0]),
       );
     } catch (error) {
       setComponentSnapshot({
@@ -638,12 +643,7 @@ export function DebuggerPanel({ theme }: { theme: 'dark' | 'light' }) {
     if (componentSnapshot.capabilities.highlight) {
       void api.interactWithReactComponent('hideHighlight');
     }
-  }, [
-    api,
-    componentPicking,
-    componentSnapshot.capabilities.highlight,
-    workbench,
-  ]);
+  }, [api, componentPicking, componentSnapshot.capabilities.highlight, workbench]);
 
   return (
     <>
@@ -725,83 +725,83 @@ export function DebuggerPanel({ theme }: { theme: 'dark' | 'light' }) {
           </div>
         )}
         {workbench === 'sources' && (
-        <div className={`debugger-workspace ${bottomOpen ? 'with-bottom-drawer' : ''}`}>
-          <aside className="source-browser">
-            <input
-              ref={sourceSearchRef}
-              aria-label="Search sources"
-              placeholder="Search files…"
-              value={sourceSearch}
-              onChange={(event) => setSourceSearch(event.target.value)}
-            />
-            <label>
+          <div className={`debugger-workspace ${bottomOpen ? 'with-bottom-drawer' : ''}`}>
+            <aside className="source-browser">
               <input
-                checked={showInternal}
-                type="checkbox"
-                onChange={(event) => setShowInternal(event.target.checked)}
+                ref={sourceSearchRef}
+                aria-label="Search sources"
+                placeholder="Search files…"
+                value={sourceSearch}
+                onChange={(event) => setSourceSearch(event.target.value)}
               />
-              Show internal sources
-            </label>
-            <label>
-              <input
-                checked={state.blackboxInternal}
-                disabled={connected && !state.capabilities.blackboxing}
-                type="checkbox"
-                onChange={(event) =>
-                  void run(() => api.setDebuggerBlackboxInternal(event.target.checked))
-                }
-              />
-              Blackbox dependencies
-            </label>
-            <div>
-              {sourceGroups.map(([group, groupedSources]) => (
-                <details key={group} open>
-                  <summary>{group}</summary>
-                  {groupedSources.map((source) => (
-                    <button
-                      className={source.id === sourceId ? 'active' : ''}
-                      key={source.id}
-                      title={source.url}
-                      onClick={() => setSourceId(source.id)}
-                    >
-                      <span>{source.name}</span>
-                      <small>{source.original ? 'TS' : 'JS'}</small>
-                    </button>
-                  ))}
-                </details>
-              ))}
-            </div>
-          </aside>
-          <section className="source-editor">
-            <div className="source-title">
-              {selectedSource?.url ?? 'Connect and choose a source file'}
-            </div>
-            <Editor
-              height="100%"
-              language={
-                selectedSource?.name.endsWith('.tsx')
-                  ? 'typescript'
-                  : selectedSource?.name.endsWith('.ts')
+              <label>
+                <input
+                  checked={showInternal}
+                  type="checkbox"
+                  onChange={(event) => setShowInternal(event.target.checked)}
+                />
+                Show internal sources
+              </label>
+              <label>
+                <input
+                  checked={state.blackboxInternal}
+                  disabled={connected && !state.capabilities.blackboxing}
+                  type="checkbox"
+                  onChange={(event) =>
+                    void run(() => api.setDebuggerBlackboxInternal(event.target.checked))
+                  }
+                />
+                Blackbox dependencies
+              </label>
+              <div>
+                {sourceGroups.map(([group, groupedSources]) => (
+                  <details key={group} open>
+                    <summary>{group}</summary>
+                    {groupedSources.map((source) => (
+                      <button
+                        className={source.id === sourceId ? 'active' : ''}
+                        key={source.id}
+                        title={source.url}
+                        onClick={() => setSourceId(source.id)}
+                      >
+                        <span>{source.name}</span>
+                        <small>{source.original ? 'TS' : 'JS'}</small>
+                      </button>
+                    ))}
+                  </details>
+                ))}
+              </div>
+            </aside>
+            <section className="source-editor">
+              <div className="source-title">
+                {selectedSource?.url ?? 'Connect and choose a source file'}
+              </div>
+              <MonacoEditor
+                height="100%"
+                language={
+                  selectedSource?.name.endsWith('.tsx')
                     ? 'typescript'
-                    : 'javascript'
-              }
-              loading="Loading source editor…"
-              onMount={onMount}
-              options={{
-                readOnly: true,
-                glyphMargin: true,
-                minimap: { enabled: false },
-                fontSize: 12,
-                lineNumbersMinChars: 3,
-                scrollBeyondLastLine: false,
-                automaticLayout: true,
-              }}
-              path={selectedSource?.url}
-              theme={theme === 'dark' ? 'vs-dark' : 'light'}
-              value={sourceText}
-            />
-          </section>
-        </div>
+                    : selectedSource?.name.endsWith('.ts')
+                      ? 'typescript'
+                      : 'javascript'
+                }
+                loading="Loading source editor…"
+                onMount={onMount}
+                options={{
+                  readOnly: true,
+                  glyphMargin: true,
+                  minimap: { enabled: false },
+                  fontSize: 12,
+                  lineNumbersMinChars: 3,
+                  scrollBeyondLastLine: false,
+                  automaticLayout: true,
+                }}
+                path={selectedSource?.url}
+                theme={theme === 'dark' ? 'vs-dark' : 'light'}
+                value={sourceText}
+              />
+            </section>
+          </div>
         )}
         {workbench === 'components' && (
           <div className="react-components-workspace">
@@ -874,11 +874,9 @@ export function DebuggerPanel({ theme }: { theme: 'dark' | 'light' }) {
                     key={node.id}
                     onMouseEnter={() => {
                       if (!componentSnapshot.capabilities.highlight) return;
-                      void api
-                        .interactWithReactComponent('highlight', node.id)
-                        .then((result) => {
-                          if (result.error) setComponentInteractionError(result.error);
-                        });
+                      void api.interactWithReactComponent('highlight', node.id).then((result) => {
+                        if (result.error) setComponentInteractionError(result.error);
+                      });
                     }}
                     onMouseLeave={() => {
                       if (componentSnapshot.capabilities.highlight) {
@@ -957,7 +955,8 @@ export function DebuggerPanel({ theme }: { theme: 'dark' | 'light' }) {
                   <button
                     onClick={() => {
                       for (const entry of consoleEntries) {
-                        if (entry.result?.objectId) void api.releaseDebuggerObject(entry.result.objectId);
+                        if (entry.result?.objectId)
+                          void api.releaseDebuggerObject(entry.result.objectId);
                       }
                       setConsoleEntries([]);
                     }}
@@ -1007,9 +1006,7 @@ export function DebuggerPanel({ theme }: { theme: 'dark' | 'light' }) {
                       <button
                         key={name}
                         onClick={() => {
-                          setEvaluation((current) =>
-                            current.replace(/[A-Za-z_$][\w$]*$/, name),
-                          );
+                          setEvaluation((current) => current.replace(/[A-Za-z_$][\w$]*$/, name));
                           setShowCompletions(false);
                         }}
                       >
@@ -1051,11 +1048,16 @@ export function DebuggerPanel({ theme }: { theme: 'dark' | 'light' }) {
                         setEvaluation(next < 0 ? '' : (consoleHistory[next] ?? ''));
                       }
                     }}
-                    placeholder={paused ? 'Evaluate in selected call frame…' : 'Evaluate in runtime…'}
+                    placeholder={
+                      paused ? 'Evaluate in selected call frame…' : 'Evaluate in runtime…'
+                    }
                     rows={1}
                     value={evaluation}
                   />
-                  <button disabled={!connected || !evaluation.trim()} onClick={() => void executeConsole()}>
+                  <button
+                    disabled={!connected || !evaluation.trim()}
+                    onClick={() => void executeConsole()}
+                  >
                     Run
                   </button>
                 </div>
@@ -1084,131 +1086,132 @@ export function DebuggerPanel({ theme }: { theme: 'dark' | 'light' }) {
         )}
       </main>
       {workbench === 'sources' && (
-      <aside className="debugger-sidebar">
-        <nav className="debugger-side-tabs" aria-label="Debugger details">
-          {(['frames', 'variables', 'watch', 'breakpoints'] as const).map((tab) => (
-            <button
-              className={sideTab === tab ? 'active' : ''}
-              key={tab}
-              onClick={() => setSideTab(tab)}
-              title={tab}
-            >
-              {tab === 'frames' ? 'Stack' : tab === 'variables' ? 'Variables' : tab}
-            </button>
-          ))}
-        </nav>
-        {sideTab === 'frames' && (
-        <section>
-          <header>
-            <strong>Call stack</strong>
-            {state.pauseReason && <small>{state.pauseReason}</small>}
-          </header>
-          <div className="debugger-list">
-            {state.callFrames.map((frame) => (
+        <aside className="debugger-sidebar">
+          <nav className="debugger-side-tabs" aria-label="Debugger details">
+            {(['frames', 'variables', 'watch', 'breakpoints'] as const).map((tab) => (
               <button
-                className={frame.id === state.selectedCallFrameId ? 'active' : ''}
-                key={frame.id}
-                onClick={() => void run(() => api.selectDebuggerCallFrame(frame.id))}
+                className={sideTab === tab ? 'active' : ''}
+                key={tab}
+                onClick={() => setSideTab(tab)}
+                title={tab}
               >
-                <strong>{frame.functionName}</strong>
-                <small>
-                  {state.sources.find((source) => source.id === frame.location.sourceId)?.name ??
-                    frame.location.sourceId}
-                  :{frame.location.line}
-                </small>
+                {tab === 'frames' ? 'Stack' : tab === 'variables' ? 'Variables' : tab}
               </button>
             ))}
-            {!paused && <p>Pause execution to inspect frames.</p>}
-          </div>
-        </section>
-        )}
-        {sideTab === 'variables' && (
-        <section className="debugger-flex-section">
-          <header>
-            <strong>Scopes</strong>
-          </header>
-          <input
-            aria-label="Search variables"
-            className="debugger-variable-search"
-            onChange={(event) => setVariableSearch(event.target.value)}
-            placeholder="Search variables…"
-            type="search"
-            value={variableSearch}
-          />
-          <div className="scope-list">
-            {state.callFrames
-              .find((frame) => frame.id === state.selectedCallFrameId)
-              ?.scopes.map((scope, index) => (
-                <details
-                  key={`${scope.type}-${index}`}
-                  onToggle={(event) => {
-                    if (event.currentTarget.open && scope.objectId) void loadScope(scope.objectId);
-                  }}
+          </nav>
+          {sideTab === 'frames' && (
+            <section>
+              <header>
+                <strong>Call stack</strong>
+                {state.pauseReason && <small>{state.pauseReason}</small>}
+              </header>
+              <div className="debugger-list">
+                {state.callFrames.map((frame) => (
+                  <button
+                    className={frame.id === state.selectedCallFrameId ? 'active' : ''}
+                    key={frame.id}
+                    onClick={() => void run(() => api.selectDebuggerCallFrame(frame.id))}
+                  >
+                    <strong>{frame.functionName}</strong>
+                    <small>
+                      {state.sources.find((source) => source.id === frame.location.sourceId)
+                        ?.name ?? frame.location.sourceId}
+                      :{frame.location.line}
+                    </small>
+                  </button>
+                ))}
+                {!paused && <p>Pause execution to inspect frames.</p>}
+              </div>
+            </section>
+          )}
+          {sideTab === 'variables' && (
+            <section className="debugger-flex-section">
+              <header>
+                <strong>Scopes</strong>
+              </header>
+              <input
+                aria-label="Search variables"
+                className="debugger-variable-search"
+                onChange={(event) => setVariableSearch(event.target.value)}
+                placeholder="Search variables…"
+                type="search"
+                value={variableSearch}
+              />
+              <div className="scope-list">
+                {state.callFrames
+                  .find((frame) => frame.id === state.selectedCallFrameId)
+                  ?.scopes.map((scope, index) => (
+                    <details
+                      key={`${scope.type}-${index}`}
+                      onToggle={(event) => {
+                        if (event.currentTarget.open && scope.objectId)
+                          void loadScope(scope.objectId);
+                      }}
+                    >
+                      <summary>{scope.name || scope.type}</summary>
+                      {scope.objectId &&
+                        (scopeProperties[scope.objectId] ?? [])
+                          .filter(
+                            (property) =>
+                              !variableSearch ||
+                              property.name.toLowerCase().includes(variableSearch.toLowerCase()) ||
+                              valueText(property.value)
+                                .toLowerCase()
+                                .includes(variableSearch.toLowerCase()),
+                          )
+                          .map((property) => (
+                            <div className="debugger-property" key={property.name}>
+                              <span>{property.name}</span>
+                              <RemoteValueView compact value={property.value} />
+                            </div>
+                          ))}
+                    </details>
+                  ))}
+              </div>
+            </section>
+          )}
+          {sideTab === 'watch' && (
+            <WatchPane
+              paused={paused}
+              state={state}
+              value={watchExpression}
+              onChange={setWatchExpression}
+              onAdd={(expression) => void run(() => api.addDebuggerWatch(expression))}
+              onRemove={(id) => void run(() => api.removeDebuggerWatch(id))}
+            />
+          )}
+          {sideTab === 'frames' && (
+            <section className="pause-exceptions">
+              <label>
+                Pause on exceptions
+                <select
+                  disabled={connected && !state.capabilities.pauseOnExceptions}
+                  value={state.pauseOnExceptions}
+                  onChange={(event) =>
+                    void run(() =>
+                      api.setPauseOnExceptions(
+                        event.target.value as DebuggerState['pauseOnExceptions'],
+                      ),
+                    )
+                  }
                 >
-                  <summary>{scope.name || scope.type}</summary>
-                  {scope.objectId &&
-                    (scopeProperties[scope.objectId] ?? [])
-                      .filter(
-                        (property) =>
-                          !variableSearch ||
-                          property.name.toLowerCase().includes(variableSearch.toLowerCase()) ||
-                          valueText(property.value)
-                            .toLowerCase()
-                            .includes(variableSearch.toLowerCase()),
-                      )
-                      .map((property) => (
-                        <div className="debugger-property" key={property.name}>
-                          <span>{property.name}</span>
-                          <RemoteValueView compact value={property.value} />
-                        </div>
-                      ))}
-                </details>
-              ))}
-          </div>
-        </section>
-        )}
-        {sideTab === 'watch' && (
-          <WatchPane
-            paused={paused}
-            state={state}
-            value={watchExpression}
-            onChange={setWatchExpression}
-            onAdd={(expression) => void run(() => api.addDebuggerWatch(expression))}
-            onRemove={(id) => void run(() => api.removeDebuggerWatch(id))}
-          />
-        )}
-        {sideTab === 'frames' && (
-        <section className="pause-exceptions">
-          <label>
-            Pause on exceptions
-            <select
-              disabled={connected && !state.capabilities.pauseOnExceptions}
-              value={state.pauseOnExceptions}
-              onChange={(event) =>
-                void run(() =>
-                  api.setPauseOnExceptions(
-                    event.target.value as DebuggerState['pauseOnExceptions'],
-                  ),
-                )
+                  <option value="none">None</option>
+                  <option value="uncaught">Uncaught</option>
+                  <option value="all">All</option>
+                </select>
+              </label>
+            </section>
+          )}
+          {sideTab === 'breakpoints' && (
+            <BreakpointPane
+              state={state}
+              onOpen={setSourceId}
+              onToggle={(id, enabled) =>
+                void run(() => api.setDebuggerBreakpointEnabled(id, enabled))
               }
-            >
-              <option value="none">None</option>
-              <option value="uncaught">Uncaught</option>
-              <option value="all">All</option>
-            </select>
-          </label>
-        </section>
-        )}
-        {sideTab === 'breakpoints' && (
-          <BreakpointPane
-            state={state}
-            onOpen={setSourceId}
-            onToggle={(id, enabled) =>
-              void run(() => api.setDebuggerBreakpointEnabled(id, enabled))
-            }
-          />
-        )}
-      </aside>
+            />
+          )}
+        </aside>
       )}
     </>
   );
@@ -1302,10 +1305,7 @@ function BreakpointPane({
               {breakpoint.hitCondition ? ` · hit ${breakpoint.hitCondition}` : ''}
               {breakpoint.logMessage ? ` · log ${breakpoint.logMessage}` : ''}
             </button>
-            <span
-              className={breakpoint.verified ? 'verified' : 'pending'}
-              title={breakpoint.error}
-            >
+            <span className={breakpoint.verified ? 'verified' : 'pending'} title={breakpoint.error}>
               {breakpoint.verified ? '●' : '○'} {breakpoint.hitCount ?? 0}
             </span>
           </div>
@@ -1406,7 +1406,10 @@ function ComponentDetails({
         )}
         {node.nativeTag !== undefined && <span>Native tag {node.nativeTag}</span>}
         {owner && (
-          <button onClick={() => onSelectOwner(owner.id)} title="Select the component that rendered this one">
+          <button
+            onClick={() => onSelectOwner(owner.id)}
+            title="Select the component that rendered this one"
+          >
             Rendered by {owner.name}
           </button>
         )}
