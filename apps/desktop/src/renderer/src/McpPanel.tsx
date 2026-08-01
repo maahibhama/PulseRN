@@ -175,6 +175,35 @@ export function McpPanel({
           </span>
         </section>
 
+        <section className="mcp-access-card">
+          <div>
+            <strong>AI access mode</strong>
+            <small>
+              Choose the maximum level of control available to every connected MCP client.
+            </small>
+          </div>
+          <select
+            aria-label="MCP access mode"
+            value={settings.mcpAccessMode}
+            onChange={(event) =>
+              void onChange({
+                mcpAccessMode: event.target.value as AppSettings['mcpAccessMode'],
+              })
+            }
+          >
+            <option value="read-only">Read-only diagnostics</option>
+            <option value="debugger">Debugger control</option>
+            <option value="full">Full control</option>
+          </select>
+          <small>
+            {settings.mcpAccessMode === 'read-only'
+              ? 'Can inspect events, diagnoses, sources, snapshots, debugger state, and storage values.'
+              : settings.mcpAccessMode === 'debugger'
+                ? 'Also allows connecting, pausing, stepping, and managing breakpoints.'
+                : 'Also allows JavaScript evaluation, React interaction, and storage mutations.'}
+          </small>
+        </section>
+
         {settings.mcpEnabled && (
           <section className="mcp-connection-card">
             <header>

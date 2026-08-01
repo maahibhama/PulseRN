@@ -21,6 +21,7 @@ import { TlsCertificateStore } from './tls-certificate.js';
 import { UpdateManager, type DesktopUpdaterAdapter } from './update-manager.js';
 import { createCurlCommand, createSanitizedHar } from './network-export.js';
 import { McpBridge } from './mcp-bridge.js';
+import { DiagnosticService } from './diagnostic-service.js';
 import { networkEventPayloadSchema } from '@pulse-rn/protocol';
 
 const SNAPSHOT_CHANNEL = 'pulse-rn:snapshot';
@@ -182,6 +183,7 @@ let pairingStore: PairingStore | undefined;
 let tlsCertificateStore: TlsCertificateStore | undefined;
 let updateManager: UpdateManager | undefined;
 let mcpBridge: McpBridge | undefined;
+let diagnosticService: DiagnosticService | undefined;
 let automaticUpdateTimer: ReturnType<typeof setTimeout> | undefined;
 let isQuitting = false;
 let shutdownComplete = false;
@@ -446,6 +448,7 @@ app.whenReady().then(async () => {
   applyAppIcon(initialSettings.theme);
   nativeTheme.on('updated', handleNativeThemeUpdated);
   database = new EventDatabase(join(app.getPath('userData'), 'pulse-rn.sqlite'));
+  diagnosticService = new DiagnosticService(database, sessions);
   mcpBridge = new McpBridge(
     app.getPath('userData'),
     {
@@ -462,6 +465,11 @@ app.whenReady().then(async () => {
         if (!server) throw new Error('PulseRN device server is not ready.');
         return server;
       },
+      diagnostics: () => {
+        if (!diagnosticService) throw new Error('PulseRN diagnostics are not ready.');
+        return diagnosticService;
+      },
+      accessMode: () => settingsStore?.get().mcpAccessMode ?? 'read-only',
     },
     publishMcpInfo,
   );
@@ -1032,6 +1040,17 @@ app.whenReady().then(async () => {
         z.object({ operation: z.literal('disconnect') }),
         z.object({ operation: z.literal('source'), sourceId: z.string().min(1).max(100_000) }),
         z.object({
+          operation: z.literal('searchSources'),
+          query: z.string().trim().min(1).max(1_000),
+          limit: z.number().int().min(1).max(100).optional(),
+        }),
+        z.object({
+          operation: z.literal('sourceContext'),
+          sourceId: z.string().min(1).max(100_000),
+          line: z.number().int().min(1).max(10_000_000),
+          contextLines: z.number().int().min(1).max(50).optional(),
+        }),
+        z.object({
           operation: z.literal('addBreakpoint'),
           sourceId: z.string().min(1).max(100_000),
           line: z.number().int().min(1).max(10_000_000),
@@ -1039,8 +1058,10 @@ app.whenReady().then(async () => {
           condition: z.string().max(10_000).optional(),
           hitCondition: z.number().int().positive().max(1_000_000).optional(),
           logMessage: z.string().max(10_000).optional(),
+          temporary: z.boolean().optional(),
         }),
         z.object({ operation: z.literal('removeBreakpoint'), id: z.string().uuid() }),
+        z.object({ operation: z.literal('removeTemporaryBreakpoints') }),
         z.object({
           operation: z.literal('enableBreakpoint'),
           id: z.string().uuid(),
@@ -1102,10 +1123,16 @@ app.whenReady().then(async () => {
         return debuggerManager.disconnect();
       case 'source':
         return debuggerManager.getSource(input.sourceId);
+      case 'searchSources':
+        return debuggerManager.searchSources(input.query, input.limit);
+      case 'sourceContext':
+        return debuggerManager.getSourceContext(input.sourceId, input.line, input.contextLines);
       case 'addBreakpoint':
         return debuggerManager.addBreakpoint(input);
       case 'removeBreakpoint':
         return debuggerManager.removeBreakpoint(input.id);
+      case 'removeTemporaryBreakpoints':
+        return debuggerManager.removeTemporaryBreakpoints();
       case 'enableBreakpoint':
         return debuggerManager.setBreakpointEnabled(input.id, input.enabled);
       case 'command':
@@ -1186,6 +1213,7 @@ app.on('before-quit', (event) => {
 
       const activeDatabase = database;
       database = undefined;
+      diagnosticService = undefined;
       activeDatabase?.close();
     })().finally(() => {
       shutdownComplete = true;

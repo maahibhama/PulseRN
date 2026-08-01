@@ -78,62 +78,61 @@ async function createHarness(rejectDebugger = false): Promise<Harness> {
           JSON.stringify({
             id: command.id,
             result: {
-              result:
-                isInteraction
+              result: isInteraction
+                ? {
+                    type: 'object',
+                    value: { supported: true, active: false, selectedId: 'fiber-1' },
+                  }
+                : isComponentSnapshot
                   ? {
                       type: 'object',
-                      value: { supported: true, active: false, selectedId: 'fiber-1' },
-                    }
-                  : isComponentSnapshot
-                    ? {
-                        type: 'object',
-                        value: {
-                          available: true,
-                          rendererCount: 1,
-                          roots: ['fiber-1'],
-                          nodes: [
-                            {
-                              id: 'fiber-1',
-                              name: 'App',
-                              kind: 'function',
-                              depth: 0,
-                              props: { title: 'PulseRN' },
-                              state: {},
-                              hooks: [{ index: 0, value: '1' }],
-                              context: {},
-                              renderDuration: 2.4,
-                              renderCount: 1,
-                              changed: [],
-                              children: [],
-                            },
-                          ],
-                          truncated: false,
-                          capturedAt: 100,
-                          capabilities: { highlight: true, pick: true },
-                        },
-                      }
-                    : command.params?.expression === 'values'
-                  ? {
-                      type: 'object',
-                      subtype: 'array',
-                      objectId: 'values-1',
-                      description: 'Array(3)',
-                      preview: {
-                        overflow: false,
-                        properties: [
-                          { name: '0', type: 'number', value: '1' },
-                          { name: '1', type: 'number', value: '2' },
+                      value: {
+                        available: true,
+                        rendererCount: 1,
+                        roots: ['fiber-1'],
+                        nodes: [
+                          {
+                            id: 'fiber-1',
+                            name: 'App',
+                            kind: 'function',
+                            depth: 0,
+                            props: { title: 'PulseRN' },
+                            state: {},
+                            hooks: [{ index: 0, value: '1' }],
+                            context: {},
+                            renderDuration: 2.4,
+                            renderCount: 1,
+                            changed: [],
+                            children: [],
+                          },
                         ],
+                        truncated: false,
+                        capturedAt: 100,
+                        capabilities: { highlight: true, pick: true },
                       },
                     }
-                      : { type: 'number', value: 12, description: '12' },
+                  : command.params?.expression === 'values'
+                    ? {
+                        type: 'object',
+                        subtype: 'array',
+                        objectId: 'values-1',
+                        description: 'Array(3)',
+                        preview: {
+                          overflow: false,
+                          properties: [
+                            { name: '0', type: 'number', value: '1' },
+                            { name: '1', type: 'number', value: '2' },
+                          ],
+                        },
+                      }
+                    : { type: 'number', value: 12, description: '12' },
             },
           }),
         );
       } else if (command.method === 'Runtime.evaluate') {
-        const isInteraction = String(command.params?.expression).includes(
-          '__pulseRNComponentInspector',
-        ) && String(command.params?.expression).includes("const action =");
+        const isInteraction =
+          String(command.params?.expression).includes('__pulseRNComponentInspector') &&
+          String(command.params?.expression).includes('const action =');
         socket.send(
           JSON.stringify({
             id: command.id,
@@ -143,29 +142,29 @@ async function createHarness(rejectDebugger = false): Promise<Harness> {
                 value: isInteraction
                   ? { supported: true, active: false, selectedId: 'fiber-1' }
                   : {
-                  available: true,
-                  rendererCount: 1,
-                  roots: ['fiber-1'],
-                  nodes: [
-                    {
-                      id: 'fiber-1',
-                      name: 'App',
-                      kind: 'function',
-                      depth: 0,
-                      props: { title: 'PulseRN' },
-                      state: {},
-                      hooks: [{ index: 0, value: '1' }],
-                      context: {},
-                      renderDuration: 2.4,
-                      renderCount: 1,
-                      changed: [],
-                      children: [],
+                      available: true,
+                      rendererCount: 1,
+                      roots: ['fiber-1'],
+                      nodes: [
+                        {
+                          id: 'fiber-1',
+                          name: 'App',
+                          kind: 'function',
+                          depth: 0,
+                          props: { title: 'PulseRN' },
+                          state: {},
+                          hooks: [{ index: 0, value: '1' }],
+                          context: {},
+                          renderDuration: 2.4,
+                          renderCount: 1,
+                          changed: [],
+                          children: [],
+                        },
+                      ],
+                      truncated: false,
+                      capturedAt: 100,
+                      capabilities: { highlight: true, pick: true },
                     },
-                  ],
-                  truncated: false,
-                  capturedAt: 100,
-                  capabilities: { highlight: true, pick: true },
-                },
               },
             },
           }),
@@ -263,6 +262,15 @@ describe('DebuggerManager', () => {
     });
     const source = manager.snapshot().sources.find((entry) => entry.name === 'debugger-demo.ts')!;
     expect(await manager.getSource(source.id)).toContain('total = 12');
+    expect(manager.searchSources('debugger-demo', 5)).toMatchObject([
+      { sourceId: source.id, name: 'debugger-demo.ts' },
+    ]);
+    expect(await manager.getSourceContext(source.id, 1, 1)).toMatchObject({
+      sourceId: source.id,
+      requestedLine: 1,
+      startLine: 1,
+      mappingStatus: 'original',
+    });
 
     await manager.addBreakpoint({
       sourceId: source.id,
@@ -272,6 +280,15 @@ describe('DebuggerManager', () => {
       hitCondition: 2,
       logMessage: 'total reached',
     });
+    await manager.addBreakpoint({
+      sourceId: source.id,
+      line: 2,
+      column: 1,
+      temporary: true,
+    });
+    expect(manager.snapshot().breakpoints.some((breakpoint) => breakpoint.temporary)).toBe(true);
+    await manager.removeTemporaryBreakpoints();
+    expect(manager.snapshot().breakpoints).toHaveLength(1);
     expect(manager.snapshot().breakpoints[0]).toMatchObject({ verified: true, line: 1 });
     expect(
       harness.commands.some((command) => command.method === 'Debugger.setBreakpointByUrl'),

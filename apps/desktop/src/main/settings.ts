@@ -34,6 +34,7 @@ export const appSettingsSchema = z.object({
   launchAtLogin: z.boolean(),
   keepRunningInBackground: z.boolean(),
   mcpEnabled: z.boolean(),
+  mcpAccessMode: z.enum(['read-only', 'debugger', 'full']),
 });
 export type AppSettings = z.infer<typeof appSettingsSchema>;
 export const appSettingsPatchSchema = appSettingsSchema.partial().strict();
@@ -66,6 +67,7 @@ const defaults: AppSettings = {
   launchAtLogin: false,
   keepRunningInBackground: true,
   mcpEnabled: false,
+  mcpAccessMode: 'read-only',
 };
 
 export class SettingsStore {
@@ -89,7 +91,18 @@ export class SettingsStore {
   private read(): AppSettings {
     try {
       const parsed: unknown = JSON.parse(readFileSync(this.filePath, 'utf8'));
-      return appSettingsSchema.parse({ ...defaults, ...appSettingsPatchSchema.parse(parsed) });
+      const legacy = z.record(z.unknown()).parse(parsed);
+      const migrated =
+        legacy['mcpAccessMode'] === undefined
+          ? {
+              ...legacy,
+              mcpAccessMode: legacy['mcpEnabled'] === true ? 'full' : 'read-only',
+            }
+          : legacy;
+      return appSettingsSchema.parse({
+        ...defaults,
+        ...appSettingsPatchSchema.parse(migrated),
+      });
     } catch {
       return { ...defaults };
     }

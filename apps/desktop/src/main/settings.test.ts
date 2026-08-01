@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -24,6 +24,7 @@ describe('SettingsStore', () => {
       motion: 'system',
       checkForUpdatesAutomatically: true,
       mcpEnabled: false,
+      mcpAccessMode: 'read-only',
     });
     store.update({
       theme: 'light',
@@ -41,6 +42,7 @@ describe('SettingsStore', () => {
       motion: 'reduced',
       checkForUpdatesAutomatically: false,
       mcpEnabled: true,
+      mcpAccessMode: 'debugger',
     });
 
     expect(new SettingsStore(filePath).get()).toMatchObject({
@@ -59,8 +61,20 @@ describe('SettingsStore', () => {
       motion: 'reduced',
       checkForUpdatesAutomatically: false,
       mcpEnabled: true,
+      mcpAccessMode: 'debugger',
     });
     expect(JSON.parse(readFileSync(filePath, 'utf8'))).not.toHaveProperty('unknown');
+  });
+
+  it('migrates legacy MCP settings without reducing existing enabled access', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'pulse-rn-settings-'));
+    const enabledPath = join(directory, 'enabled.json');
+    const disabledPath = join(directory, 'disabled.json');
+    writeFileSync(enabledPath, JSON.stringify({ mcpEnabled: true }));
+    writeFileSync(disabledPath, JSON.stringify({ mcpEnabled: false }));
+
+    expect(new SettingsStore(enabledPath).get().mcpAccessMode).toBe('full');
+    expect(new SettingsStore(disabledPath).get().mcpAccessMode).toBe('read-only');
   });
 
   it('rejects unknown or invalid preference values', () => {

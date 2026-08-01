@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { PulseRNAccessFile, PulseRNBridgeResponse } from '@pulse-rn/mcp';
 import { EventDatabase } from './database.js';
 import { McpBridge } from './mcp-bridge.js';
+import { DiagnosticService } from './diagnostic-service.js';
 import type { DebuggerManager } from './debugger-manager.js';
 import { SessionManager } from './session-manager.js';
 import type { DevToolWebSocketServer } from './websocket-server.js';
@@ -43,11 +44,14 @@ describe('McpBridge', () => {
     const directory = mkdtempSync(join(tmpdir(), 'pulse-rn-mcp-'));
     directories.push(directory);
     const database = new EventDatabase(join(directory, 'events.sqlite'));
+    let accessMode: 'read-only' | 'debugger' | 'full' = 'read-only';
     const bridge = new McpBridge(directory, {
       database: () => database,
       debugger: () => ({}) as DebuggerManager,
       sessions: new SessionManager(),
       server: () => ({}) as DevToolWebSocketServer,
+      diagnostics: () => new DiagnosticService(database, new SessionManager()),
+      accessMode: () => accessMode,
     });
 
     await bridge.start();
@@ -72,6 +76,38 @@ describe('McpBridge', () => {
         requestCount: 1,
       },
     ]);
+
+    const denied = await send(access.socketPath, {
+      id: crypto.randomUUID(),
+      token: access.token,
+      client: 'test-client',
+      tool: 'pulsern_pause',
+      arguments: {},
+    });
+    expect(denied.error).toMatchObject({
+      code: 'PULSERN_MCP_PERMISSION_DENIED',
+    });
+
+    accessMode = 'debugger';
+    const debuggerAllowed = await send(access.socketPath, {
+      id: crypto.randomUUID(),
+      token: access.token,
+      client: 'test-client',
+      tool: 'pulsern_pause',
+      arguments: {},
+    });
+    expect(debuggerAllowed.error?.code).not.toBe('PULSERN_MCP_PERMISSION_DENIED');
+
+    const fullDenied = await send(access.socketPath, {
+      id: crypto.randomUUID(),
+      token: access.token,
+      client: 'test-client',
+      tool: 'pulsern_evaluate',
+      arguments: { expression: '1 + 1' },
+    });
+    expect(fullDenied.error).toMatchObject({
+      code: 'PULSERN_MCP_PERMISSION_DENIED',
+    });
 
     const invalid = await send(access.socketPath, {
       id: crypto.randomUUID(),
