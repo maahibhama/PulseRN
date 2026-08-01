@@ -211,6 +211,34 @@ button {
   height: calc(100vh - 145px);
   overflow: auto;
 }
+.virtual-event-list {
+  position: relative;
+  overflow-anchor: none;
+}
+.virtual-event-space {
+  position: relative;
+  width: 100%;
+}
+.virtual-event-space .event {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  will-change: transform;
+}
+.event-loading {
+  position: sticky;
+  right: 0;
+  bottom: 10px;
+  width: max-content;
+  margin: -31px 10px 10px auto;
+  border: 1px solid #2b3140;
+  border-radius: 999px;
+  background: #171b24;
+  color: #9098a9;
+  padding: 5px 9px;
+  font-size: 10px;
+}
 .event {
   width: 100%;
   padding: 10px 14px;

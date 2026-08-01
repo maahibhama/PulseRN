@@ -1,15 +1,53 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { z } from 'zod';
-import { storageOperationSchema, storageResultSchema } from '@pulse-rn/protocol';
+import {
+  eventCategorySchema,
+  eventEnvelopeSchema,
+  storageOperationSchema,
+  storageResultSchema,
+} from '@pulse-rn/protocol';
 import type { AppSettings, DebuggerState, PulseRNDesktopApi } from './api.js';
 
 const SNAPSHOT_CHANNEL = 'pulse-rn:snapshot';
+const EVENTS_CHANNEL = 'pulse-rn:events';
 const STORAGE_CHANNEL = 'pulse-rn:storage';
 const SETTINGS_CHANNEL = 'pulse-rn:settings';
 const DEBUGGER_CHANNEL = 'pulse-rn:debugger';
 const snapshotSchema = z.object({
   devices: z.array(z.unknown()),
   events: z.array(z.unknown()),
+});
+const eventCursorSchema = z.object({
+  timestamp: z.number().finite().nonnegative(),
+  sequence: z.number().int().nonnegative(),
+  id: z.string().trim().min(1).max(256),
+});
+const eventQuerySchema = z
+  .object({
+    category: eventCategorySchema.optional(),
+    cursor: eventCursorSchema.optional(),
+    deviceId: z.string().trim().min(1).max(256).optional(),
+    limit: z.number().int().min(1).max(500).optional(),
+    order: z.enum(['newest', 'oldest']).optional(),
+    sessionId: z.string().trim().min(1).max(256).optional(),
+  })
+  .strict();
+const eventPageSchema = z.object({
+  events: z.array(eventEnvelopeSchema),
+  hasMore: z.boolean(),
+  nextCursor: eventCursorSchema.optional(),
+  total: z.number().int().nonnegative(),
+});
+const storedSessionSchema = z.object({
+  sessionId: z.string(),
+  appId: z.string(),
+  deviceId: z.string(),
+  appName: z.string(),
+  deviceName: z.string(),
+  platform: z.string(),
+  startedAt: z.number().finite().nonnegative(),
+  lastSeenAt: z.number().finite().nonnegative(),
+  eventCount: z.number().int().nonnegative(),
 });
 const storageRequestSchema = z.object({
   connectionId: z.string().trim().min(1).max(256),
@@ -119,6 +157,27 @@ const api: PulseRNDesktopApi = {
     };
     ipcRenderer.on(SNAPSHOT_CHANNEL, handler);
     return () => ipcRenderer.removeListener(SNAPSHOT_CHANNEL, handler);
+  },
+  async queryEvents(input = {}) {
+    const request = eventQuerySchema.parse(input);
+    const value: unknown = await ipcRenderer.invoke(EVENTS_CHANNEL, {
+      operation: 'query',
+      input: request,
+    });
+    return eventPageSchema.parse(value);
+  },
+  async getEvent(id) {
+    const value: unknown = await ipcRenderer.invoke(EVENTS_CHANNEL, {
+      operation: 'find',
+      id: z.string().trim().min(1).max(256).parse(id),
+    });
+    return value === undefined ? undefined : eventEnvelopeSchema.parse(value);
+  },
+  async listSessions() {
+    const value: unknown = await ipcRenderer.invoke(EVENTS_CHANNEL, {
+      operation: 'sessions',
+    });
+    return z.array(storedSessionSchema).parse(value);
   },
   async requestStorage(input) {
     const request = storageRequestSchema.parse(input);

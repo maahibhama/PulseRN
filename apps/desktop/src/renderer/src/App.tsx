@@ -1,5 +1,5 @@
 import type { DevToolEventEnvelope } from '@pulse-rn/protocol';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ConsolePanel } from './ConsolePanel.js';
 import { DebuggerPanel } from './DebuggerPanel.js';
 import { EventDetails } from './EventDetails.js';
@@ -50,37 +50,131 @@ function formatTime(timestamp: number): string {
 }
 
 function TimelinePanel({
-  events,
+  density,
+  liveEventId,
   selectedEventId,
   onSelect,
   order,
 }: {
-  events: DevToolEventEnvelope[];
+  density: 'comfortable' | 'compact';
+  liveEventId?: string;
   selectedEventId?: string;
-  onSelect(id: string): void;
+  onSelect(event: DevToolEventEnvelope): void;
   order: 'newest' | 'oldest';
 }) {
+  const desktopApi = window.pulseRN;
   const [paused, setPaused] = useState(false);
-  const [visibleEvents, setVisibleEvents] = useState(events);
+  const [events, setEvents] = useState<DevToolEventEnvelope[]>([]);
+  const [cursor, setCursor] =
+    useState<Awaited<ReturnType<typeof desktopApi.queryEvents>>['nextCursor']>();
+  const [hasMore, setHasMore] = useState(false);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [clearedAt, setClearedAt] = useState(0);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(600);
+  const listRef = useRef<HTMLDivElement>(null);
+  const requestGeneration = useRef(0);
+  const rowHeight = density === 'compact' ? 36 : 42;
+
+  const loadFirstPage = useCallback(async () => {
+    const generation = ++requestGeneration.current;
+    setLoading(true);
+    setError('');
+    try {
+      const page = await desktopApi.queryEvents({ limit: 250, order });
+      if (generation !== requestGeneration.current) return;
+      setEvents(page.events);
+      setCursor(page.nextCursor);
+      setHasMore(page.hasMore);
+      setTotal(page.total);
+      setScrollTop(0);
+      if (listRef.current) listRef.current.scrollTop = 0;
+    } catch (cause) {
+      if (generation === requestGeneration.current) {
+        setError(cause instanceof Error ? cause.message : 'Unable to load events.');
+      }
+    } finally {
+      if (generation === requestGeneration.current) setLoading(false);
+    }
+  }, [desktopApi, order]);
+
+  const loadMore = useCallback(async () => {
+    if (loading || !hasMore || !cursor) return;
+    setLoading(true);
+    setError('');
+    try {
+      const page = await desktopApi.queryEvents({ cursor, limit: 250, order });
+      setEvents((current) => {
+        const ids = new Set(current.map((event) => event.id));
+        return [...current, ...page.events.filter((event) => !ids.has(event.id))];
+      });
+      setCursor(page.nextCursor);
+      setHasMore(page.hasMore);
+      setTotal(page.total);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to load more events.');
+    } finally {
+      setLoading(false);
+    }
+  }, [cursor, desktopApi, hasMore, loading, order]);
 
   useEffect(() => {
-    if (!paused) setVisibleEvents(events);
-  }, [events, paused]);
+    void loadFirstPage();
+    return () => {
+      requestGeneration.current += 1;
+    };
+  }, [loadFirstPage]);
 
-  const displayed = visibleEvents.filter((event) => event.timestamp > clearedAt);
+  useEffect(() => {
+    if (!paused && liveEventId) void loadFirstPage();
+  }, [liveEventId, loadFirstPage, paused]);
+
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const resize = () => setViewportHeight(list.clientHeight);
+    resize();
+    const observer = new ResizeObserver(resize);
+    observer.observe(list);
+    return () => observer.disconnect();
+  }, []);
+
+  const displayed = useMemo(
+    () => events.filter((event) => event.timestamp > clearedAt),
+    [clearedAt, events],
+  );
+  const overscan = 8;
+  const startIndex = Math.max(0, Math.floor(scrollTop / rowHeight) - overscan);
+  const endIndex = Math.min(
+    displayed.length,
+    Math.ceil((scrollTop + viewportHeight) / rowHeight) + overscan,
+  );
+  const visibleEvents = displayed.slice(startIndex, endIndex);
+
+  const clearView = () => {
+    setClearedAt(Date.now());
+    setEvents([]);
+    setCursor(undefined);
+    setHasMore(false);
+    setTotal(0);
+  };
+
   return (
     <main className="timeline">
       <div className="panel-header">
         <div>
           <strong>Unified timeline</strong>
-          <span>{displayed.length} events</span>
+          <span>
+            {displayed.length} loaded · {total} total
+          </span>
         </div>
         <div className="actions">
           <button className={paused ? 'control-active' : ''} onClick={() => setPaused(!paused)}>
             {paused ? 'Resume' : 'Pause'}
           </button>
-          <button onClick={() => setClearedAt(Date.now())}>Clear</button>
+          <button onClick={clearView}>Clear</button>
         </div>
       </div>
       <div className="column-head">
@@ -88,30 +182,50 @@ function TimelinePanel({
         <span>Category</span>
         <span>Event</span>
       </div>
-      <div className="event-list">
+      <div
+        className="event-list virtual-event-list"
+        ref={listRef}
+        onScroll={(event) => {
+          const element = event.currentTarget;
+          setScrollTop(element.scrollTop);
+          if (element.scrollHeight - element.scrollTop - element.clientHeight < rowHeight * 10) {
+            void loadMore();
+          }
+        }}
+      >
         {displayed.length === 0 ? (
           <div className="empty">
             <div className="empty-icon">⌁</div>
-            <h2>Ready to inspect</h2>
-            <p>Connect the example React Native app to see its events here.</p>
-            <code>ws://127.0.0.1:9090</code>
+            <h2>{loading ? 'Loading events…' : 'Ready to inspect'}</h2>
+            <p>{error || 'Connect the example React Native app to see its events here.'}</p>
+            {!loading && !error && <code>ws://127.0.0.1:9090</code>}
           </div>
         ) : (
-          (order === 'newest' ? [...displayed].reverse() : displayed).map((event) => (
-            <button
-              className={event.id === selectedEventId ? 'event selected' : 'event'}
-              key={event.id}
-              onClick={() => onSelect(event.id)}
-            >
-              <time>{formatTime(event.timestamp)}</time>
-              <span className={`category ${event.category}`}>{event.category}</span>
-              <span>
-                <strong>{event.type}</strong>
-                <small>#{event.sequence}</small>
-              </span>
-            </button>
-          ))
+          <div className="virtual-event-space" style={{ height: displayed.length * rowHeight }}>
+            {visibleEvents.map((event, visibleIndex) => {
+              const index = startIndex + visibleIndex;
+              return (
+                <button
+                  className={event.id === selectedEventId ? 'event selected' : 'event'}
+                  key={event.id}
+                  onClick={() => onSelect(event)}
+                  style={{
+                    height: rowHeight,
+                    transform: `translateY(${index * rowHeight}px)`,
+                  }}
+                >
+                  <time>{formatTime(event.timestamp)}</time>
+                  <span className={`category ${event.category}`}>{event.category}</span>
+                  <span>
+                    <strong>{event.type}</strong>
+                    <small>#{event.sequence}</small>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         )}
+        {loading && displayed.length > 0 && <div className="event-loading">Loading more…</div>}
       </div>
     </main>
   );
@@ -136,10 +250,14 @@ export function App() {
   const { devices, events, selectedEventId, settings, setSnapshot, setSettings, selectEvent } =
     useDesktopStore();
   const [activeView, setActiveView] = useState<ViewName>('Timeline');
+  const [selectedPagedEvent, setSelectedPagedEvent] = useState<DevToolEventEnvelope>();
   const [systemTheme, setSystemTheme] = useState<'dark' | 'light'>(() =>
     window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
   );
-  const selected = findSelectedEvent(events, selectedEventId);
+  const selected =
+    selectedPagedEvent?.id === selectedEventId
+      ? selectedPagedEvent
+      : findSelectedEvent(events, selectedEventId);
   const desktopApi = window.pulseRN;
 
   useEffect(() => {
@@ -218,10 +336,14 @@ export function App() {
         <DebuggerPanel theme={resolvedTheme} />
       ) : activeView === 'Timeline' ? (
         <TimelinePanel
-          events={events}
+          density={settings.density}
+          liveEventId={events.at(-1)?.id}
           order={settings.timelineOrder}
           selectedEventId={selectedEventId}
-          onSelect={selectEvent}
+          onSelect={(event) => {
+            setSelectedPagedEvent(event);
+            selectEvent(event.id);
+          }}
         />
       ) : activeView === 'Console' ? (
         <ConsolePanel events={events} selectedEventId={selectedEventId} onSelect={selectEvent} />
