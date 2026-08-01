@@ -230,6 +230,14 @@ try {
   );
   assert(settings.eventRetentionDays === 7, 'Retention settings did not cross preload.');
   assert(settings.maxStoredEvents === 50_000, 'Event limit did not cross preload.');
+  const connectionInfo = await cdp.evaluate('window.pulseRN.getConnectionInfo()');
+  assert(connectionInfo.mode === 'loopback', 'Loopback is not the default connection mode.');
+  assert(connectionInfo.port === serverPort, 'Effective debugger server port was not reported.');
+  assert(
+    connectionInfo.requiresAuth === false,
+    'Loopback unexpectedly requires LAN authentication.',
+  );
+  assert(connectionInfo.accessToken === undefined, 'Connection info leaked the access token.');
   const maintenance = await cdp.evaluate('window.pulseRN.runDatabaseMaintenance()');
   assert(maintenance.retainedEvents === 600, 'Database maintenance lost retained events.');
 

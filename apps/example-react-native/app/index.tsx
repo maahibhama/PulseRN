@@ -20,6 +20,8 @@ import { runLineDebuggerDemo, runUnhandledDebuggerDemo } from '../debugger-demo'
 // to the development machine's LAN address for physical devices.
 const host =
   process.env.EXPO_PUBLIC_PULSE_RN_HOST ?? (Platform.OS === 'android' ? '10.0.2.2' : '127.0.0.1');
+const devToolPort = Number(process.env.EXPO_PUBLIC_PULSE_RN_PORT ?? 9090);
+const authToken = process.env.EXPO_PUBLIC_PULSE_RN_TOKEN;
 const mmkv = createMMKV({ id: 'pulse-rn-example' });
 
 interface DemoState {
@@ -61,7 +63,8 @@ export default function HomeScreen() {
     if (!__DEV__) return;
     const client = ReactNativeDevTool.configure({
       host,
-      port: 9090,
+      port: devToolPort,
+      ...(authToken ? { authToken } : {}),
       appName: 'PulseRN Example',
       appId: 'dev.pulsern.example',
       appVersion: Constants.expoConfig?.version,

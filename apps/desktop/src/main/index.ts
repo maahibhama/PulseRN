@@ -1,5 +1,6 @@
 import { isAbsolute, join } from 'node:path';
 import { readFile, stat, writeFile } from 'node:fs/promises';
+import { networkInterfaces } from 'node:os';
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme } from 'electron';
 import { eventCategorySchema, storageOperationSchema } from '@pulse-rn/protocol';
 import { z } from 'zod';
@@ -13,6 +14,7 @@ import {
   importSessionArchive,
   parseSessionArchive,
 } from './session-archive.js';
+import { AccessTokenStore } from './access-token.js';
 
 const SNAPSHOT_CHANNEL = 'pulse-rn:snapshot';
 const DEVICES_CHANNEL = 'pulse-rn:devices';
@@ -20,6 +22,7 @@ const EVENTS_CHANNEL = 'pulse-rn:events';
 const STORAGE_CHANNEL = 'pulse-rn:storage';
 const SETTINGS_CHANNEL = 'pulse-rn:settings';
 const DEBUGGER_CHANNEL = 'pulse-rn:debugger';
+const CONNECTION_CHANNEL = 'pulse-rn:connection';
 const DARK_APP_ICON = join(__dirname, '../../resources/pulse-rn-app-icon-dark.png');
 const LIGHT_APP_ICON = join(__dirname, '../../resources/pulse-rn-app-icon-light.png');
 const e2eUserDataDirectory = process.env['PULSE_RN_E2E_USER_DATA_DIR'];
@@ -27,13 +30,6 @@ if (!app.isPackaged && e2eUserDataDirectory && isAbsolute(e2eUserDataDirectory))
   app.setPath('userData', e2eUserDataDirectory);
 }
 const configuredServerPort = Number(process.env['PULSE_RN_E2E_SERVER_PORT']);
-const serverPort =
-  !app.isPackaged &&
-  Number.isInteger(configuredServerPort) &&
-  configuredServerPort >= 1_024 &&
-  configuredServerPort <= 65_535
-    ? configuredServerPort
-    : 9090;
 const storageRequestSchema = z.object({
   connectionId: z.string().trim().min(1).max(256),
   providerId: z.string().trim().min(1).max(256),
@@ -75,6 +71,7 @@ let server: DevToolWebSocketServer | undefined;
 let window: BrowserWindow | undefined;
 let settingsStore: SettingsStore | undefined;
 let debuggerManager: DebuggerManager | undefined;
+let accessTokenStore: AccessTokenStore | undefined;
 let isQuitting = false;
 let lastDatabaseMaintenanceAt = 0;
 
@@ -92,6 +89,76 @@ function maintainDatabase(force = false) {
   if (!force && now - lastDatabaseMaintenanceAt < 60_000) return undefined;
   lastDatabaseMaintenanceAt = now;
   return database.maintain(retentionPolicy(), now);
+}
+
+function effectiveServerPort(settings: { devToolPort: number }): number {
+  return !app.isPackaged &&
+    Number.isInteger(configuredServerPort) &&
+    configuredServerPort >= 1_024 &&
+    configuredServerPort <= 65_535
+    ? configuredServerPort
+    : settings.devToolPort;
+}
+
+function connectionInfo(revealToken = false) {
+  if (!settingsStore || !accessTokenStore) {
+    throw new Error('PulseRN connection settings are not ready.');
+  }
+  const settings = settingsStore.get();
+  const port = effectiveServerPort(settings);
+  const addresses = settings.allowLanConnections
+    ? Object.values(networkInterfaces())
+        .flatMap((entries) => entries ?? [])
+        .filter((entry) => entry.family === 'IPv4' && !entry.internal)
+        .map((entry) => `ws://${entry.address}:${port}`)
+    : [`ws://127.0.0.1:${port}`];
+  return {
+    mode: settings.allowLanConnections ? ('lan' as const) : ('loopback' as const),
+    port,
+    requiresAuth: settings.allowLanConnections,
+    addresses: [...new Set(addresses)],
+    ...(revealToken ? { accessToken: accessTokenStore.get() } : {}),
+  };
+}
+
+async function restartServer(settings = settingsStore?.get()): Promise<void> {
+  if (!settings || !accessTokenStore) throw new Error('PulseRN server settings are not ready.');
+  await server?.close();
+  server = new DevToolWebSocketServer(
+    effectiveServerPort(settings),
+    {
+      onConnected(device) {
+        database?.recordSession(device);
+        sessions.connect(device);
+        publish();
+      },
+      onDisconnected(connectionId) {
+        sessions.disconnect(connectionId);
+        publish();
+      },
+      onEvents(events) {
+        database?.insertMany(events);
+        maintainDatabase();
+        sessions.append(events);
+        publish();
+      },
+      onHealth(connectionId, health) {
+        sessions.updateHealth(connectionId, health);
+        if (window && !window.isDestroyed()) {
+          window.webContents.send(DEVICES_CHANNEL, sessions.snapshot().devices);
+        }
+      },
+      onInvalidMessage(error) {
+        console.warn('[PulseRN] Rejected invalid client message:', error);
+      },
+    },
+    settings.allowLanConnections ? '0.0.0.0' : '127.0.0.1',
+    settings.allowLanConnections ? accessTokenStore.get() : undefined,
+  );
+  await server.start();
+  if (window && !window.isDestroyed()) {
+    window.webContents.send(CONNECTION_CHANNEL, connectionInfo());
+  }
 }
 
 function appIconPath(theme: 'system' | 'dark' | 'light'): string {
@@ -152,6 +219,7 @@ function createWindow(): void {
 
 app.whenReady().then(async () => {
   settingsStore = new SettingsStore(join(app.getPath('userData'), 'settings.json'));
+  accessTokenStore = new AccessTokenStore(join(app.getPath('userData'), 'access-token'));
   debuggerManager = new DebuggerManager(
     join(app.getPath('userData'), 'debugger.json'),
     () => settingsStore?.get().metroPort ?? 8081,
@@ -281,16 +349,62 @@ app.whenReady().then(async () => {
     }
     return server.requestStorage(input.connectionId, input);
   });
-  ipcMain.handle(SETTINGS_CHANNEL, (_event, value?: unknown) => {
+  ipcMain.handle(SETTINGS_CHANNEL, async (_event, value?: unknown) => {
     if (!settingsStore) throw new Error('PulseRN settings are not ready.');
     if (value === undefined) return settingsStore.get();
+    const previous = settingsStore.get();
     const settings = settingsStore.update(value);
+    const serverChanged =
+      settings.allowLanConnections !== previous.allowLanConnections ||
+      settings.devToolPort !== previous.devToolPort;
+    if (serverChanged) {
+      try {
+        await restartServer(settings);
+      } catch (error) {
+        settingsStore.update({
+          allowLanConnections: previous.allowLanConnections,
+          devToolPort: previous.devToolPort,
+        });
+        await restartServer(previous);
+        throw error;
+      }
+    }
     nativeTheme.themeSource = settings.theme;
     applyAppIcon(settings.theme);
     if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: settings.launchAtLogin });
     maintainDatabase(true);
     if (window && !window.isDestroyed()) window.webContents.send(SETTINGS_CHANNEL, settings);
     return settings;
+  });
+  ipcMain.handle(CONNECTION_CHANNEL, async (_event, value?: unknown) => {
+    if (!accessTokenStore) throw new Error('PulseRN access token is not ready.');
+    const input = z
+      .discriminatedUnion('operation', [
+        z.object({ operation: z.literal('info') }),
+        z.object({ operation: z.literal('revealToken') }),
+        z.object({ operation: z.literal('rotateToken') }),
+      ])
+      .parse(value ?? { operation: 'info' });
+    if (input.operation === 'rotateToken') {
+      const options: Electron.MessageBoxOptions = {
+        type: 'warning',
+        title: 'Rotate LAN access token',
+        message: 'Generate a new PulseRN LAN access token?',
+        detail: 'Connected LAN devices will disconnect and must be configured with the new token.',
+        buttons: ['Cancel', 'Rotate token'],
+        defaultId: 0,
+        cancelId: 0,
+        noLink: true,
+      };
+      const confirmation = window
+        ? await dialog.showMessageBox(window, options)
+        : await dialog.showMessageBox(options);
+      if (confirmation.response !== 1) return connectionInfo();
+      accessTokenStore.rotate();
+      if (settingsStore?.get().allowLanConnections) await restartServer();
+      return connectionInfo(true);
+    }
+    return connectionInfo(input.operation === 'revealToken');
   });
   ipcMain.handle(DEBUGGER_CHANNEL, async (_event, value?: unknown) => {
     if (!debuggerManager) throw new Error('PulseRN debugger is not ready.');
@@ -368,33 +482,7 @@ app.whenReady().then(async () => {
         return debuggerManager.setPauseOnExceptions(input.mode);
     }
   });
-  server = new DevToolWebSocketServer(serverPort, {
-    onConnected(device) {
-      database?.recordSession(device);
-      sessions.connect(device);
-      publish();
-    },
-    onDisconnected(connectionId) {
-      sessions.disconnect(connectionId);
-      publish();
-    },
-    onEvents(events) {
-      database?.insertMany(events);
-      maintainDatabase();
-      sessions.append(events);
-      publish();
-    },
-    onHealth(connectionId, health) {
-      sessions.updateHealth(connectionId, health);
-      if (window && !window.isDestroyed()) {
-        window.webContents.send(DEVICES_CHANNEL, sessions.snapshot().devices);
-      }
-    },
-    onInvalidMessage(error) {
-      console.warn('[PulseRN] Rejected invalid client message:', error);
-    },
-  });
-  await server.start();
+  await restartServer();
   createWindow();
   app.on('activate', () => {
     if (window && !window.isDestroyed()) window.show();
@@ -413,6 +501,7 @@ app.on('before-quit', () => {
   ipcMain.removeHandler(STORAGE_CHANNEL);
   ipcMain.removeHandler(SETTINGS_CHANNEL);
   ipcMain.removeHandler(DEBUGGER_CHANNEL);
+  ipcMain.removeHandler(CONNECTION_CHANNEL);
   nativeTheme.removeListener('updated', handleNativeThemeUpdated);
   void server?.close();
   debuggerManager?.close();

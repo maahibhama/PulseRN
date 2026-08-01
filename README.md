@@ -8,12 +8,12 @@
 
 PulseRN is an open-source desktop debugging foundation for React Native. Its central idea is a unified, chronological timeline that will correlate app interactions, navigation, Redux, network, rendering, performance, and errors.
 
-> Status: Phase 11 complete. The inspectors, scalable persistence, session portability, transport hardening, sustained-load checks, and Electron acceptance coverage are working.
+> Status: Phase 12 complete. The inspectors, scalable persistence, session portability, authenticated LAN access, transport hardening, sustained-load checks, and Electron acceptance coverage are working.
 
 ## What works today
 
 - Electron desktop app with a sandboxed renderer and narrow preload bridge
-- Loopback-only WebSocket server on port `9090`
+- Loopback-default WebSocket server with opt-in token-authenticated LAN binding
 - Versioned JSON protocol with Zod validation and negotiation
 - React Native SDK with development-build protection, reconnection, batching, sequencing, bounded offline buffering, socket backpressure protection, transport health diagnostics, payload limits, and field redaction
 - Multiple connected-device tracking
@@ -137,13 +137,17 @@ pnpm --filter @pulse-rn/example-react-native dev
 If native dependencies change, rebuild the development app with the `ios` or `android` command
 instead of only restarting Metro.
 
-Use `10.0.2.2` for the Android emulator, `127.0.0.1` for the iOS simulator, and the desktop machine's LAN address for a physical device:
+Use `10.0.2.2` for the Android emulator and `127.0.0.1` for the iOS simulator. For a physical device,
+enable authenticated LAN connections in desktop Settings, copy the displayed address and token, then run:
 
 ```bash
-EXPO_PUBLIC_PULSE_RN_HOST=192.168.1.20 pnpm --filter @pulse-rn/example-react-native dev
+EXPO_PUBLIC_PULSE_RN_HOST=192.168.1.20 \
+EXPO_PUBLIC_PULSE_RN_TOKEN=<copied-token> \
+pnpm --filter @pulse-rn/example-react-native dev
 ```
 
-The server deliberately binds to loopback in Phase 1. To use a physical device, the desktop host binding must first be made configurable with authentication; see [SECURITY.md](docs/SECURITY.md).
+LAN traffic uses plain `ws://`; use this only on a trusted development network. See
+[SECURITY.md](docs/SECURITY.md).
 
 ## Verify
 
@@ -202,6 +206,7 @@ Open **Settings** in the Electron sidebar to configure:
 - Comfortable or compact interface density
 - Newest-first or oldest-first timeline ordering
 - Local Metro discovery port for the Hermes debugger
+- Debugger server port, authenticated LAN access, and access-token rotation
 - Event retention period, maximum stored events, maintenance, and history deletion
 - Launch at login on packaged macOS builds
 - Whether closing the window keeps PulseRN running in the background
@@ -224,7 +229,7 @@ controls, keyboard shortcuts, examples, and current limitations.
 
 ## Known limitations
 
-- The transport only accepts validated JSON and has no authentication UI.
+- LAN access is token-authenticated but not encrypted; it is restricted to trusted development networks.
 - Live updates keep a bounded 2,000-event projection in memory; inspectors page older retained history from SQLite.
 - The Expo example uses prebuild; the Community CLI example includes committed native iOS and Android projects.
 - Session export/import is not implemented yet.

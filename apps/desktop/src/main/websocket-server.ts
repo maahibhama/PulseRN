@@ -1,4 +1,5 @@
 import { createId } from '@pulse-rn/shared';
+import { timingSafeEqual } from 'node:crypto';
 import {
   decodeJson,
   negotiateProtocolVersion,
@@ -20,6 +21,15 @@ interface Callbacks {
   onInvalidMessage(error: string): void;
 }
 
+export function accessTokensMatch(expected: string, received?: string): boolean {
+  if (!received) return false;
+  const expectedBytes = Buffer.from(expected);
+  const receivedBytes = Buffer.from(received);
+  return (
+    expectedBytes.length === receivedBytes.length && timingSafeEqual(expectedBytes, receivedBytes)
+  );
+}
+
 export class DevToolWebSocketServer {
   private server?: WebSocketServer;
   private readonly sockets = new Map<string, WebSocket>();
@@ -38,6 +48,7 @@ export class DevToolWebSocketServer {
     private readonly port: number,
     private readonly callbacks: Callbacks,
     private readonly host = '127.0.0.1',
+    private readonly authToken?: string,
   ) {}
 
   start(): Promise<void> {
@@ -61,6 +72,14 @@ export class DevToolWebSocketServer {
       for (const client of this.server.clients) client.close(1001, 'Server shutting down');
       this.server.close(() => resolve());
     });
+  }
+
+  address(): { address: string; port: number } {
+    const address = this.server?.address();
+    if (!address || typeof address === 'string') {
+      throw new Error('PulseRN WebSocket server is not listening.');
+    }
+    return { address: address.address, port: address.port };
   }
 
   requestStorage(
@@ -111,6 +130,17 @@ export class DevToolWebSocketServer {
         const message = result.data;
         if (!negotiated) {
           if (message.kind !== 'client-hello') return socket.close(1008, 'Handshake required');
+          if (this.authToken && !accessTokensMatch(this.authToken, message.authToken)) {
+            socket.send(
+              JSON.stringify({
+                kind: 'server-hello',
+                accepted: false,
+                reason: 'Authentication failed',
+                serverTime: Date.now(),
+              }),
+            );
+            return socket.close(1008, 'Authentication failed');
+          }
           const protocolVersion = negotiateProtocolVersion(message.supportedProtocolVersions);
           if (!protocolVersion) {
             socket.send(

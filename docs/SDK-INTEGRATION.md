@@ -30,7 +30,22 @@ if (__DEV__) {
 }
 ```
 
-Android Emulator maps the host loopback address to `10.0.2.2`. The iOS simulator can use `127.0.0.1`. Physical devices require a reachable LAN binding, which is intentionally disabled pending authenticated remote connections.
+Android Emulator maps the host loopback address to `10.0.2.2`. The iOS simulator can use
+`127.0.0.1`. For a physical device, enable authenticated LAN connections in PulseRN Settings and
+configure the address, port, and copied token:
+
+```ts
+ReactNativeDevTool.configure({
+  appName: 'MyApp',
+  host: '192.168.1.20',
+  port: 9090,
+  authToken: 'token-copied-from-pulsern',
+}).connect();
+```
+
+LAN mode uses plain `ws://`, not TLS. Use it only on a trusted development network, rotate the token
+after sharing it, and never commit a token to source control. Loopback remains the default and does
+not require a token.
 
 ## Persistent device identity
 

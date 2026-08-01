@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import type { AppSettings, DatabaseMaintenanceReport } from '../../preload/api.js';
+import { useEffect, useState } from 'react';
+import type { AppSettings, ConnectionInfo, DatabaseMaintenanceReport } from '../../preload/api.js';
 import darkAppIcon from '../../../resources/pulse-rn-app-icon-dark.png';
 import lightAppIcon from '../../../resources/pulse-rn-app-icon-light.png';
 import darkLogo from '../../../resources/pulse-rn-dark.png';
@@ -42,6 +42,52 @@ export function SettingsPanel({ resolvedTheme, settings, onChange }: SettingsPan
   const [maintenance, setMaintenance] = useState<DatabaseMaintenanceReport>();
   const [maintenanceError, setMaintenanceError] = useState('');
   const [maintaining, setMaintaining] = useState(false);
+  const [connection, setConnection] = useState<ConnectionInfo>();
+  const [connectionError, setConnectionError] = useState('');
+
+  useEffect(() => {
+    void window.pulseRN
+      .getConnectionInfo()
+      .then(setConnection)
+      .catch((error: unknown) =>
+        setConnectionError(
+          error instanceof Error ? error.message : 'Unable to load connection info.',
+        ),
+      );
+    return window.pulseRN.onConnectionInfo(setConnection);
+  }, []);
+
+  const copyAccessToken = async () => {
+    setConnectionError('');
+    try {
+      const info = await window.pulseRN.revealConnectionToken();
+      setConnection(info);
+      if (info.accessToken) await navigator.clipboard.writeText(info.accessToken);
+    } catch (error) {
+      setConnectionError(error instanceof Error ? error.message : 'Unable to copy access token.');
+    }
+  };
+
+  const rotateAccessToken = async () => {
+    setConnectionError('');
+    try {
+      const info = await window.pulseRN.rotateConnectionToken();
+      setConnection(info);
+    } catch (error) {
+      setConnectionError(error instanceof Error ? error.message : 'Unable to rotate access token.');
+    }
+  };
+
+  const updateConnectionSettings = async (patch: Partial<AppSettings>) => {
+    setConnectionError('');
+    try {
+      await onChange(patch);
+    } catch (error) {
+      setConnectionError(
+        error instanceof Error ? error.message : 'Unable to restart the debugger server.',
+      );
+    }
+  };
 
   const runMaintenance = async (clear = false) => {
     setMaintaining(true);
@@ -100,6 +146,66 @@ export function SettingsPanel({ resolvedTheme, settings, onChange }: SettingsPan
               }}
             />
           </label>
+        </section>
+
+        <section className="settings-card">
+          <header>
+            <strong>Device connections</strong>
+            <small>
+              {settings.allowLanConnections ? 'Authenticated LAN' : 'Local computer only'}
+            </small>
+          </header>
+          <Toggle
+            checked={settings.allowLanConnections}
+            description="Bind to local network interfaces. Every device must provide the generated access token."
+            label="Allow authenticated LAN connections"
+            onChange={(allowLanConnections) =>
+              void updateConnectionSettings({ allowLanConnections })
+            }
+          />
+          <label className="setting-row">
+            <span>
+              <strong>Debugger server port</strong>
+              <small>Restarting the server disconnects currently attached devices.</small>
+            </span>
+            <input
+              aria-label="Debugger server port"
+              max={65_535}
+              min={1_024}
+              type="number"
+              value={settings.devToolPort}
+              onChange={(event) => {
+                const devToolPort = Number(event.target.value);
+                if (
+                  Number.isInteger(devToolPort) &&
+                  devToolPort >= 1_024 &&
+                  devToolPort <= 65_535
+                ) {
+                  void updateConnectionSettings({ devToolPort });
+                }
+              }}
+            />
+          </label>
+          <div className="connection-addresses">
+            {(connection?.addresses ?? []).map((address) => (
+              <code key={address}>{address}</code>
+            ))}
+            {connection?.requiresAuth && (
+              <small>Set this host, port, and `authToken` in the React Native SDK.</small>
+            )}
+            {connection?.accessToken && (
+              <code className="access-token">{connection.accessToken}</code>
+            )}
+            {connectionError && <small className="settings-error">{connectionError}</small>}
+          </div>
+          {settings.allowLanConnections && (
+            <div className="connection-actions">
+              <button onClick={() => void copyAccessToken()}>Copy access token</button>
+              <button className="danger-button" onClick={() => void rotateAccessToken()}>
+                Rotate token
+              </button>
+            </div>
+          )}
         </section>
 
         <section className="settings-card">

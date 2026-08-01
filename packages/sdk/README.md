@@ -56,6 +56,10 @@ client.connect();
 PulseRN is intended for development builds. Production connections stay disabled unless explicitly
 enabled with `allowInProduction`.
 
+Physical devices can connect through the desktop's opt-in LAN mode by setting `host`, `port`, and
+`authToken`. LAN transport is plain `ws://`; use it only on a trusted development network and never
+commit the copied token.
+
 Use `getOrCreatePulseRNDeviceId(AsyncStorage)` and pass the result as `deviceId` when device history
 should remain stable across development app launches. The storage library remains an application
 dependency and is not imported eagerly by PulseRN.

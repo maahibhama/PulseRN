@@ -197,6 +197,46 @@ button {
   background: var(--panel-soft);
   color: var(--text);
 }
+
+.connection-addresses {
+  display: grid;
+  gap: 7px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--border);
+}
+
+.connection-addresses code {
+  overflow: hidden;
+  padding: 8px 10px;
+  border-radius: 7px;
+  background: var(--panel-soft);
+  color: var(--accent);
+  text-overflow: ellipsis;
+}
+
+.connection-addresses .access-token {
+  color: var(--warning);
+  user-select: all;
+}
+
+.connection-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 18px 14px;
+}
+
+.connection-actions button {
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 7px 10px;
+  background: var(--panel-soft);
+  color: var(--text);
+}
+
+.connection-actions .danger-button {
+  color: var(--danger);
+}
 .device-pill.degraded small {
   color: #e0a15c;
 }

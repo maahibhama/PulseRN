@@ -70,10 +70,20 @@ export interface AppSettings {
   density: 'comfortable' | 'compact';
   timelineOrder: 'newest' | 'oldest';
   metroPort: number;
+  devToolPort: number;
+  allowLanConnections: boolean;
   eventRetentionDays: number;
   maxStoredEvents: number;
   launchAtLogin: boolean;
   keepRunningInBackground: boolean;
+}
+
+export interface ConnectionInfo {
+  mode: 'loopback' | 'lan';
+  port: number;
+  requiresAuth: boolean;
+  addresses: string[];
+  accessToken?: string;
 }
 
 export interface DebuggerTarget {
@@ -172,6 +182,10 @@ export interface PulseRNDesktopApi {
   getSettings(): Promise<AppSettings>;
   updateSettings(patch: Partial<AppSettings>): Promise<AppSettings>;
   onSettings(listener: (settings: AppSettings) => void): () => void;
+  getConnectionInfo(): Promise<ConnectionInfo>;
+  revealConnectionToken(): Promise<ConnectionInfo>;
+  rotateConnectionToken(): Promise<ConnectionInfo>;
+  onConnectionInfo(listener: (info: ConnectionInfo) => void): () => void;
   getDebuggerState(): Promise<DebuggerState>;
   onDebuggerState(listener: (state: DebuggerState) => void): () => void;
   discoverDebuggerTargets(): Promise<DebuggerState>;

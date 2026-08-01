@@ -16,6 +16,7 @@ const EVENTS_CHANNEL = 'pulse-rn:events';
 const STORAGE_CHANNEL = 'pulse-rn:storage';
 const SETTINGS_CHANNEL = 'pulse-rn:settings';
 const DEBUGGER_CHANNEL = 'pulse-rn:debugger';
+const CONNECTION_CHANNEL = 'pulse-rn:connection';
 const connectedDeviceSchema = z.object({
   connectionId: z.string(),
   deviceId: z.string(),
@@ -78,6 +79,8 @@ const settingsSchema = z.object({
   density: z.enum(['comfortable', 'compact']),
   timelineOrder: z.enum(['newest', 'oldest']),
   metroPort: z.number().int().min(1).max(65_535),
+  devToolPort: z.number().int().min(1_024).max(65_535),
+  allowLanConnections: z.boolean(),
   eventRetentionDays: z.number().int().min(1).max(365),
   maxStoredEvents: z.number().int().min(1_000).max(1_000_000),
   launchAtLogin: z.boolean(),
@@ -98,6 +101,13 @@ const sessionArchiveResultSchema = z.object({
   events: z.number().int().nonnegative(),
 });
 const settingsPatchSchema = settingsSchema.partial().strict();
+const connectionInfoSchema = z.object({
+  mode: z.enum(['loopback', 'lan']),
+  port: z.number().int().min(1_024).max(65_535),
+  requiresAuth: z.boolean(),
+  addresses: z.array(z.string().max(2_048)).max(100),
+  accessToken: z.string().length(43).optional(),
+});
 const debuggerLocationSchema = z.object({
   sourceId: z.string(),
   line: z.number().int().min(1),
@@ -270,6 +280,29 @@ const api: PulseRNDesktopApi = {
     };
     ipcRenderer.on(SETTINGS_CHANNEL, handler);
     return () => ipcRenderer.removeListener(SETTINGS_CHANNEL, handler);
+  },
+  async getConnectionInfo() {
+    return connectionInfoSchema.parse(
+      await ipcRenderer.invoke(CONNECTION_CHANNEL, { operation: 'info' }),
+    );
+  },
+  async revealConnectionToken() {
+    return connectionInfoSchema.parse(
+      await ipcRenderer.invoke(CONNECTION_CHANNEL, { operation: 'revealToken' }),
+    );
+  },
+  async rotateConnectionToken() {
+    return connectionInfoSchema.parse(
+      await ipcRenderer.invoke(CONNECTION_CHANNEL, { operation: 'rotateToken' }),
+    );
+  },
+  onConnectionInfo(listener) {
+    const handler = (_event: Electron.IpcRendererEvent, value: unknown) => {
+      const result = connectionInfoSchema.safeParse(value);
+      if (result.success) listener(result.data);
+    };
+    ipcRenderer.on(CONNECTION_CHANNEL, handler);
+    return () => ipcRenderer.removeListener(CONNECTION_CHANNEL, handler);
   },
   async getDebuggerState() {
     return debuggerStateSchema.parse(await invokeDebugger({ operation: 'state' }));

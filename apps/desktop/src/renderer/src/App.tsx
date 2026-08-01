@@ -390,7 +390,7 @@ export function App() {
         ))}
         <div className="sidebar-footer">
           <span className={devices.length ? 'status online' : 'status'} />
-          WebSocket :9090
+          {settings.allowLanConnections ? 'LAN · token' : 'Loopback'} :{settings.devToolPort}
         </div>
       </aside>
       {activeView === 'Debugger' ? (

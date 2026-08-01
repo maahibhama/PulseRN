@@ -14,6 +14,8 @@ describe('SettingsStore', () => {
       theme: 'system',
       density: 'comfortable',
       metroPort: 8081,
+      devToolPort: 9090,
+      allowLanConnections: false,
       eventRetentionDays: 30,
       maxStoredEvents: 100_000,
     });
@@ -22,6 +24,8 @@ describe('SettingsStore', () => {
       density: 'compact',
       launchAtLogin: true,
       metroPort: 8090,
+      devToolPort: 9191,
+      allowLanConnections: true,
       eventRetentionDays: 7,
       maxStoredEvents: 50_000,
     });
@@ -31,6 +35,8 @@ describe('SettingsStore', () => {
       density: 'compact',
       launchAtLogin: true,
       metroPort: 8090,
+      devToolPort: 9191,
+      allowLanConnections: true,
       eventRetentionDays: 7,
       maxStoredEvents: 50_000,
     });
@@ -45,6 +51,7 @@ describe('SettingsStore', () => {
     expect(() => store.update({ unknown: true })).toThrow();
     expect(() => store.update({ metroPort: 0 })).toThrow();
     expect(() => store.update({ metroPort: 65_536 })).toThrow();
+    expect(() => store.update({ devToolPort: 1_023 })).toThrow();
     expect(() => store.update({ eventRetentionDays: 0 })).toThrow();
     expect(() => store.update({ maxStoredEvents: 999 })).toThrow();
   });

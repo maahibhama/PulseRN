@@ -15,6 +15,12 @@ send, reconnect, clock-offset, and native WebSocket-buffer metrics. Health updat
 validated IPC subscription so they do not retransmit the in-memory event projection. The SDK stops
 dequeueing batches while the native socket buffer exceeds its configured threshold.
 
+The SDK server binds to `127.0.0.1` by default. LAN mode is an explicit preference that restarts the
+server on `0.0.0.0` and requires a generated 256-bit token in every client hello. The token is stored
+separately from renderer-visible settings with user-only permissions, compared in constant time, and
+revealed only through narrow copy/rotation commands. LAN mode authenticates clients but does not add
+TLS encryption.
+
 The JavaScript debugger is a separate, Electron-main-owned connection to a single Hermes runtime
 through Metro's loopback Chrome DevTools Protocol proxy. Electron validates target discovery and CDP
 messages, resolves source maps, persists debugger preferences, and exposes only narrow debugger

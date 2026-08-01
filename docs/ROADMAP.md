@@ -11,5 +11,6 @@
 - **Phase 9 — JavaScript debugger (complete):** Hermes target discovery through Metro, original sources and source maps, breakpoints, pause/resume, line stepping, call stacks, scopes, watches, expression evaluation, and exception pausing.
 - **Phase 10 — Scalable foundation (complete):** versioned SQLite migrations, persisted session metadata, validated cursor-based event queries, a bounded virtualized Timeline, paginated inspector queries, configurable retention, malformed-record recovery, negotiated transport health, categorized drop accounting, native WebSocket backpressure protection, a 25,000-event sustained-load profile, and real Electron acceptance coverage.
 - **Phase 11 — Session portability (complete):** opt-in persistent SDK device identity, a stored-session browser, versioned session archives, schema-validated imports, native export/import dialogs, duplicate-safe restoration, and retained-count reconciliation.
+- **Phase 12 — Authenticated LAN access (complete):** loopback-safe defaults, explicit LAN opt-in, 256-bit user-only access tokens, constant-time handshake authentication, token copy/rotation controls, configurable server port, trusted-network warnings, and physical-device configuration.
 
-Later phases add authenticated optional LAN binding and signed update delivery.
+Later phases add TLS transport and signed update delivery.
