@@ -12,6 +12,7 @@ export const appSettingsSchema = z.object({
   tlsEnabled: z.boolean(),
   eventRetentionDays: z.number().int().min(1).max(365),
   maxStoredEvents: z.number().int().min(1_000).max(1_000_000),
+  checkForUpdatesAutomatically: z.boolean(),
   launchAtLogin: z.boolean(),
   keepRunningInBackground: z.boolean(),
 });
@@ -28,6 +29,7 @@ const defaults: AppSettings = {
   tlsEnabled: false,
   eventRetentionDays: 30,
   maxStoredEvents: 100_000,
+  checkForUpdatesAutomatically: true,
   launchAtLogin: false,
   keepRunningInBackground: true,
 };

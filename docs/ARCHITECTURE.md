@@ -34,6 +34,14 @@ user-only JSON file in Electron's platform-specific `userData` directory. Electr
 native theme, login-item, and macOS window-lifecycle preferences; renderer-only display preferences
 are applied from the same synchronized settings object.
 
+Desktop updates are owned entirely by Electron main through `electron-updater`. A packaged build must
+contain the release-time `pulseRNAutoUpdate` marker before checks, downloads, or installation are
+enabled. Signed macOS and Windows x64 CI builds and Linux release builds receive that marker;
+development and unsigned previews remain disabled. The renderer receives only validated state and
+narrow check/download/install commands. Downloads are never automatic, installation requires native
+confirmation, and the updater uses electron-builder's generated SHA-512 metadata from GitHub
+Releases.
+
 Storage inspection uses a narrow request/response path from renderer IPC through Electron main to a
 specific negotiated WebSocket connection. The SDK dispatches commands only to registered providers
 and returns bounded results. This provider boundary supports AsyncStorage now and future MMKV/custom

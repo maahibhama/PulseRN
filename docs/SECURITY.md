@@ -37,6 +37,13 @@ Please report vulnerabilities privately to the repository maintainers. Do not op
   capped at 20 entries, and remains subject to payload limits. Applications should not embed secrets
   directly in arbitrary error-message or stack strings.
 - No `eval`, remote content, navigation, or arbitrary window opening is allowed.
+- Desktop update operations stay in Electron main. Development and unsigned preview packages cannot
+  invoke the updater. Enabled builds use generated SHA-512 release metadata, disable automatic
+  downloads and install-on-quit, expose only validated status through preload, and require native
+  confirmation before restart/install.
+- Signed CI builds fail when configured signing credentials do not produce valid macOS or Windows
+  signatures. Certificates, private keys, and notarization credentials belong only in GitHub Actions
+  secrets and must never be committed.
 
 Do not expose the LAN port to the public internet. Rotate the token after sharing it, when a device
 is lost, or after using an untrusted network. Protect and rotate the TLS private key separately.

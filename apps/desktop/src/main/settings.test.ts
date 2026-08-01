@@ -19,6 +19,7 @@ describe('SettingsStore', () => {
       tlsEnabled: false,
       eventRetentionDays: 30,
       maxStoredEvents: 100_000,
+      checkForUpdatesAutomatically: true,
     });
     store.update({
       theme: 'light',
@@ -30,6 +31,7 @@ describe('SettingsStore', () => {
       tlsEnabled: true,
       eventRetentionDays: 7,
       maxStoredEvents: 50_000,
+      checkForUpdatesAutomatically: false,
     });
 
     expect(new SettingsStore(filePath).get()).toMatchObject({
@@ -42,6 +44,7 @@ describe('SettingsStore', () => {
       tlsEnabled: true,
       eventRetentionDays: 7,
       maxStoredEvents: 50_000,
+      checkForUpdatesAutomatically: false,
     });
     expect(JSON.parse(readFileSync(filePath, 'utf8'))).not.toHaveProperty('unknown');
   });

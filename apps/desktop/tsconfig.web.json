@@ -6,5 +6,10 @@
     "module": "ESNext",
     "types": ["vite/client"]
   },
-  "include": ["src/renderer/src/**/*.ts", "src/renderer/src/**/*.tsx", "src/preload/api.ts"]
+  "include": [
+    "src/renderer/src/**/*.ts",
+    "src/renderer/src/**/*.tsx",
+    "src/preload/api.ts",
+    "src/update-types.ts"
+  ]
 }

@@ -14,11 +14,11 @@
     "dev": "electron-vite dev",
     "dist": "pnpm build && electron-builder",
     "dist:linux": "pnpm build && electron-builder --linux AppImage deb --x64",
-    "dist:mac": "pnpm build && electron-builder --mac dmg --arm64 --x64",
+    "dist:mac": "pnpm build && electron-builder --mac dmg --arm64 --x64 -c.mac.identity=null -c.mac.hardenedRuntime=false -c.mac.notarize=false",
     "dist:win:arm64": "pnpm build && electron-builder --win nsis --arm64",
     "dist:win:x64": "pnpm build && electron-builder --win nsis --x64",
     "lint": "eslint src",
-    "pack": "pnpm build && electron-builder --dir",
+    "pack": "pnpm build && electron-builder --dir -c.mac.identity=null -c.mac.hardenedRuntime=false -c.mac.notarize=false",
     "preview": "electron-vite preview",
     "test": "vitest run",
     "test:e2e": "pnpm build && node test/e2e/electron-smoke.mjs",
@@ -29,6 +29,7 @@
     "@monaco-editor/react": "^4.7.0",
     "@pulse-rn/protocol": "workspace:*",
     "@pulse-rn/shared": "workspace:*",
+    "electron-updater": "6.8.9",
     "monaco-editor": "^0.52.2",
     "react": "19.0.0",
     "react-dom": "19.0.0",
@@ -52,6 +53,7 @@
     "productName": "PulseRN",
     "copyright": "Copyright © 2026 PulseRN contributors",
     "asar": true,
+    "electronUpdaterCompatibility": ">=2.16",
     "directories": {
       "buildResources": "resources",
       "output": "release"
@@ -65,10 +67,20 @@
     "mac": {
       "category": "public.app-category.developer-tools",
       "icon": "resources/icon.icns",
-      "identity": null,
+      "hardenedRuntime": true,
+      "notarize": true,
+      "entitlements": "resources/entitlements.mac.plist",
+      "entitlementsInherit": "resources/entitlements.mac.plist",
       "target": [
         {
           "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
           "arch": [
             "arm64",
             "x64"
