@@ -1,5 +1,18 @@
 import type { DeviceInfo, DevToolEventCategory, JsonValue } from './protocol-types.js';
 
+export type PulseRNEnvironment = 'development' | 'test' | 'production';
+export type ClientConnectionState =
+  'idle' | 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
+export type DroppedEventReason =
+  'category-disabled' | 'sampled' | 'payload-limit' | 'queue-overflow' | 'console-rate-limit';
+
+export interface DroppedEventNotice {
+  reason: DroppedEventReason;
+  category: DevToolEventCategory;
+  type: string;
+  totalDroppedEvents: number;
+}
+
 export interface DevToolConfig {
   host?: string;
   port?: number;
@@ -24,6 +37,11 @@ export interface DevToolConfig {
   diagnosticsIntervalMs?: number;
   maxSocketBufferBytes?: number;
   onDiagnostics?: (diagnostics: ClientDiagnostics) => void;
+  onConnectionStateChange?: (state: ClientConnectionState) => void;
+  onDroppedEvent?: (notice: DroppedEventNotice) => void;
+  environment?: PulseRNEnvironment;
+  categories?: Partial<Record<DevToolEventCategory, boolean>>;
+  sampling?: Partial<Record<DevToolEventCategory, number>>;
   allowInProduction?: boolean;
   isDevelopment?: boolean;
   enableConsole?: boolean;
@@ -54,6 +72,7 @@ export interface DevToolConfig {
 }
 
 export interface ClientDiagnostics {
+  connectionState: ClientConnectionState;
   connected: boolean;
   queuedEvents: number;
   droppedEvents: number;
@@ -66,6 +85,14 @@ export interface ClientDiagnostics {
   socketBufferedBytes: number;
   clockOffsetMs: number;
   lastEventAt?: number;
+}
+
+export interface ClientDiagnosticSummary extends ClientDiagnostics {
+  appId: string;
+  deviceId: string;
+  sessionId: string;
+  environment: PulseRNEnvironment;
+  enabledCategories: DevToolEventCategory[];
 }
 
 export interface TrackEventInput {

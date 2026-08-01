@@ -1,7 +1,14 @@
 import { DevToolClient } from './client.js';
 import type { CaptureErrorOptions, DevToolConfig, TrackEventInput } from './types.js';
-export { getOrCreatePulseRNDeviceId } from './identity.js';
-export type { PulseRNIdentityStorage } from './identity.js';
+import type { PulseRNIdentityStorage, PulseRNSessionOptions } from './identity.js';
+import { getOrCreatePulseRNIdentity } from './identity.js';
+export { getOrCreatePulseRNDeviceId, getOrCreatePulseRNIdentity } from './identity.js';
+export type {
+  PulseRNIdentityStorage,
+  PulseRNSessionIdentity,
+  PulseRNSessionOptions,
+} from './identity.js';
+export { pulseRNEventCategories, validatePulseRNConfig } from './configuration.js';
 
 let activeClient: DevToolClient | undefined;
 
@@ -14,6 +21,14 @@ export const ReactNativeDevTool = {
     activeClient?.disconnect();
     activeClient = new DevToolClient(config);
     return activeClient;
+  },
+  async configureWithIdentity(
+    config: DevToolConfig,
+    storage: PulseRNIdentityStorage,
+    options: PulseRNSessionOptions,
+  ): Promise<DevToolClient> {
+    const identity = await getOrCreatePulseRNIdentity(storage, options);
+    return this.configure({ ...config, ...identity });
   },
   track(event: TrackEventInput): void {
     activeClient?.track(event);
@@ -76,8 +91,13 @@ export type {
 export type { NetworkEventPayload, NetworkLifecycleEventPayload } from './protocol-types.js';
 export type {
   CaptureErrorOptions,
+  ClientConnectionState,
+  ClientDiagnosticSummary,
   ClientDiagnostics,
   DevToolConfig,
+  DroppedEventNotice,
+  DroppedEventReason,
+  PulseRNEnvironment,
   TrackEventInput,
   WebSocketFactory,
   WebSocketLike,

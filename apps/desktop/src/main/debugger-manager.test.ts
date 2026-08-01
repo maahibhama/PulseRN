@@ -16,12 +16,13 @@ interface Harness {
 
 const harnesses: Harness[] = [];
 
-async function createHarness(): Promise<Harness> {
+async function createHarness(rejectDebugger = false): Promise<Harness> {
   const http = createServer();
   const sockets = new WebSocketServer({
     server: http,
     path: '/inspector/debug',
     verifyClient: ({ origin }: { origin: string }) => {
+      if (rejectDebugger) return false;
       try {
         return new URL(origin).hostname === '127.0.0.1';
       } catch {
@@ -134,8 +135,11 @@ afterEach(async () => {
     harnesses.splice(0).map(
       (harness) =>
         new Promise<void>((resolve) => {
+          for (const client of harness.sockets.clients) client.terminate();
           harness.sockets.close();
-          harness.http.close(() => resolve());
+          harness.http.closeAllConnections?.();
+          harness.http.close();
+          resolve();
         }),
     ),
   );
@@ -165,17 +169,33 @@ describe('DebuggerManager', () => {
     const source = manager.snapshot().sources.find((entry) => entry.name === 'debugger-demo.ts')!;
     expect(await manager.getSource(source.id)).toContain('total = 12');
 
-    await manager.addBreakpoint({ sourceId: source.id, line: 1, column: 1 });
+    await manager.addBreakpoint({
+      sourceId: source.id,
+      line: 1,
+      column: 1,
+      condition: 'total > 0',
+      hitCondition: 2,
+      logMessage: 'total reached',
+    });
     expect(manager.snapshot().breakpoints[0]).toMatchObject({ verified: true, line: 1 });
     expect(
       harness.commands.some((command) => command.method === 'Debugger.setBreakpointByUrl'),
     ).toBe(true);
+    expect(
+      harness.commands.find((command) => command.method === 'Debugger.setBreakpointByUrl')?.params
+        ?.condition,
+    ).toContain('__pulseRNDebuggerHits');
+    expect(
+      harness.commands.find((command) => command.method === 'Debugger.setBreakpointByUrl')?.params
+        ?.condition,
+    ).toContain('[PulseRN logpoint] total reached');
 
     harness.socket!.send(
       JSON.stringify({
         method: 'Debugger.paused',
         params: {
           reason: 'other',
+          hitBreakpoints: ['breakpoint-1'],
           callFrames: [
             {
               callFrameId: 'frame-1',
@@ -188,6 +208,7 @@ describe('DebuggerManager', () => {
       }),
     );
     await vi.waitFor(() => expect(manager.snapshot().status).toBe('paused'));
+    expect(manager.snapshot().breakpoints[0]?.hitCount).toBe(1);
     expect(manager.snapshot().callFrames[0]?.location).toMatchObject({
       sourceId: source.id,
       line: 1,
@@ -208,7 +229,33 @@ describe('DebuggerManager', () => {
         harness.commands.filter((command) => command.method === 'Debugger.setBreakpointByUrl'),
       ).toHaveLength(2);
     });
+    expect(manager.snapshot().capabilities).toMatchObject({
+      asyncStacks: false,
+      pauseOnExceptions: true,
+      blackboxing: true,
+      logpoints: true,
+    });
 
+    harness.socket!.terminate();
+    await vi.waitFor(() => expect(manager.snapshot().status).toBe('reconnecting'));
+    await vi.waitFor(() => expect(manager.snapshot().status).toBe('connected'), {
+      timeout: 3_000,
+    });
+
+    manager.close();
+  });
+
+  it('turns a Metro 401 into an actionable debugger conflict diagnostic', async () => {
+    const harness = await createHarness(true);
+    const directory = mkdtempSync(join(tmpdir(), 'pulse-rn-debugger-401-'));
+    const manager = new DebuggerManager(
+      join(directory, 'debugger.json'),
+      () => harness.port,
+      vi.fn(),
+    );
+    await manager.discover();
+    await expect(manager.connect('target-1')).rejects.toThrow('401');
+    expect(manager.snapshot().error).toContain('HTTP 401');
     manager.close();
   });
 });

@@ -3,6 +3,7 @@ import type {
   AppSettings,
   ConnectionInfo,
   DatabaseMaintenanceReport,
+  DebuggerState,
   DesktopUpdateState,
 } from '../../preload/api.js';
 import darkAppIcon from '../../../resources/pulse-rn-app-icon-dark.png';
@@ -11,6 +12,8 @@ import darkLogo from '../../../resources/pulse-rn-dark.png';
 import lightLogo from '../../../resources/pulse-rn-light.png';
 
 interface SettingsPanelProps {
+  deviceCount: number;
+  eventCount: number;
   resolvedTheme: 'dark' | 'light';
   settings: AppSettings;
   onChange(patch: Partial<AppSettings>): Promise<void>;
@@ -43,7 +46,13 @@ function Toggle({
   );
 }
 
-export function SettingsPanel({ resolvedTheme, settings, onChange }: SettingsPanelProps) {
+export function SettingsPanel({
+  deviceCount,
+  eventCount,
+  resolvedTheme,
+  settings,
+  onChange,
+}: SettingsPanelProps) {
   const [maintenance, setMaintenance] = useState<DatabaseMaintenanceReport>();
   const [maintenanceError, setMaintenanceError] = useState('');
   const [maintaining, setMaintaining] = useState(false);
@@ -51,6 +60,7 @@ export function SettingsPanel({ resolvedTheme, settings, onChange }: SettingsPan
   const [connectionError, setConnectionError] = useState('');
   const [updateState, setUpdateState] = useState<DesktopUpdateState>();
   const [updateError, setUpdateError] = useState('');
+  const [debuggerState, setDebuggerState] = useState<DebuggerState>();
 
   useEffect(() => {
     void window.pulseRN
@@ -63,6 +73,56 @@ export function SettingsPanel({ resolvedTheme, settings, onChange }: SettingsPan
       );
     return window.pulseRN.onConnectionInfo(setConnection);
   }, []);
+
+  useEffect(() => {
+    void window.pulseRN
+      .getDebuggerState()
+      .then(setDebuggerState)
+      .catch(() => undefined);
+    return window.pulseRN.onDebuggerState(setDebuggerState);
+  }, []);
+
+  const refreshOnboarding = async () => {
+    try {
+      await window.pulseRN.discoverDebuggerTargets();
+      setDebuggerState(await window.pulseRN.getDebuggerState());
+    } catch {
+      setDebuggerState(await window.pulseRN.getDebuggerState());
+    }
+  };
+
+  const onboardingSteps = [
+    {
+      label: 'Install @pulse-rn/sdk',
+      detail: 'Add the root SDK import to a development build.',
+      complete: deviceCount > 0 || eventCount > 0,
+    },
+    {
+      label: `Desktop server on port ${settings.devToolPort}`,
+      detail: 'The local debugger WebSocket port is valid and ready.',
+      complete: settings.devToolPort >= 1_024 && settings.devToolPort <= 65_535,
+    },
+    {
+      label: 'Connect a device',
+      detail: 'Start the Expo or React Native CLI example.',
+      complete: deviceCount > 0,
+    },
+    {
+      label: `Discover Metro on port ${settings.metroPort}`,
+      detail: 'Metro must be running on the same computer.',
+      complete: (debuggerState?.targets.length ?? 0) > 0,
+    },
+    {
+      label: 'Verify Hermes',
+      detail: 'A Hermes CDP target must be discoverable.',
+      complete: Boolean(debuggerState?.activeTargetId) || (debuggerState?.targets.length ?? 0) > 0,
+    },
+    {
+      label: 'Capture the first event',
+      detail: 'Trigger any instrumented action in the app.',
+      complete: eventCount > 0,
+    },
+  ];
 
   useEffect(() => {
     void window.pulseRN
@@ -164,9 +224,38 @@ export function SettingsPanel({ resolvedTheme, settings, onChange }: SettingsPan
           </div>
         </section>
 
+        {!settings.onboardingDismissed && (
+          <section className="settings-card onboarding-card" aria-labelledby="onboarding-title">
+            <header>
+              <strong id="onboarding-title">First-run checklist</strong>
+              <small>
+                {onboardingSteps.filter((step) => step.complete).length}/{onboardingSteps.length}{' '}
+                ready
+              </small>
+            </header>
+            <ol>
+              {onboardingSteps.map((step) => (
+                <li className={step.complete ? 'complete' : ''} key={step.label}>
+                  <span aria-hidden="true">{step.complete ? '✓' : '○'}</span>
+                  <div>
+                    <strong>{step.label}</strong>
+                    <small>{step.detail}</small>
+                  </div>
+                </li>
+              ))}
+            </ol>
+            <div className="connection-actions">
+              <button onClick={() => void refreshOnboarding()}>Refresh checks</button>
+              <button onClick={() => void onChange({ onboardingDismissed: true })}>
+                Dismiss checklist
+              </button>
+            </div>
+          </section>
+        )}
+
         <section className="settings-card">
           <header>
-            <strong>JavaScript debugger</strong>
+            <strong>Debugger</strong>
             <small>Hermes through Metro</small>
           </header>
           <label className="setting-row">
@@ -192,7 +281,7 @@ export function SettingsPanel({ resolvedTheme, settings, onChange }: SettingsPan
 
         <section className="settings-card">
           <header>
-            <strong>Device connections</strong>
+            <strong>Connections</strong>
             <small>
               {settings.allowLanConnections ? 'Authenticated LAN' : 'Local computer only'}
             </small>
@@ -224,6 +313,46 @@ export function SettingsPanel({ resolvedTheme, settings, onChange }: SettingsPan
                   devToolPort <= 65_535
                 ) {
                   void updateConnectionSettings({ devToolPort });
+                }
+              }}
+            />
+          </label>
+          <label className="setting-row">
+            <span>
+              <strong>Pairing code lifetime</strong>
+              <small>One-time LAN pairing codes expire automatically.</small>
+            </span>
+            <select
+              value={settings.pairingCodeLifetimeMinutes}
+              onChange={(event) =>
+                void onChange({ pairingCodeLifetimeMinutes: Number(event.target.value) })
+              }
+            >
+              <option value={1}>1 minute</option>
+              <option value={5}>5 minutes</option>
+              <option value={10}>10 minutes</option>
+              <option value={30}>30 minutes</option>
+            </select>
+          </label>
+          <label className="setting-row">
+            <span>
+              <strong>Pairing retry limit</strong>
+              <small>A code is invalidated after this many failed attempts.</small>
+            </span>
+            <input
+              aria-label="Pairing retry limit"
+              max={20}
+              min={1}
+              type="number"
+              value={settings.pairingRetryLimit}
+              onChange={(event) => {
+                const pairingRetryLimit = Number(event.target.value);
+                if (
+                  Number.isInteger(pairingRetryLimit) &&
+                  pairingRetryLimit >= 1 &&
+                  pairingRetryLimit <= 20
+                ) {
+                  void onChange({ pairingRetryLimit });
                 }
               }}
             />
@@ -284,7 +413,7 @@ export function SettingsPanel({ resolvedTheme, settings, onChange }: SettingsPan
 
         <section className="settings-card">
           <header>
-            <strong>Event history</strong>
+            <strong>Storage</strong>
             <small>Bounded local SQLite storage</small>
           </header>
           <label className="setting-row">
@@ -352,6 +481,105 @@ export function SettingsPanel({ resolvedTheme, settings, onChange }: SettingsPan
 
         <section className="settings-card">
           <header>
+            <strong>Capture</strong>
+            <small>Bounded instrumentation budgets</small>
+          </header>
+          <label className="setting-row">
+            <span>
+              <strong>Console event limit</strong>
+              <small>Maximum console events retained by a loaded inspector session.</small>
+            </span>
+            <input
+              aria-label="Console event limit"
+              max={100_000}
+              min={1}
+              type="number"
+              value={settings.consoleCaptureLimit}
+              onChange={(event) => {
+                const consoleCaptureLimit = Number(event.target.value);
+                if (Number.isInteger(consoleCaptureLimit) && consoleCaptureLimit >= 1) {
+                  void onChange({ consoleCaptureLimit });
+                }
+              }}
+            />
+          </label>
+          <label className="setting-row">
+            <span>
+              <strong>Network body budget</strong>
+              <small>Maximum captured text body size per request in KiB.</small>
+            </span>
+            <input
+              aria-label="Network body budget in KiB"
+              max={16_384}
+              min={0}
+              type="number"
+              value={Math.round(settings.networkBodyCaptureBytes / 1_024)}
+              onChange={(event) => {
+                const kib = Number(event.target.value);
+                if (Number.isInteger(kib) && kib >= 0 && kib <= 16_384) {
+                  void onChange({ networkBodyCaptureBytes: kib * 1_024 });
+                }
+              }}
+            />
+          </label>
+          <label className="setting-row">
+            <span>
+              <strong>Diagnostics interval</strong>
+              <small>Connection health sampling interval in milliseconds.</small>
+            </span>
+            <input
+              aria-label="Diagnostics interval"
+              max={60_000}
+              min={250}
+              step={250}
+              type="number"
+              value={settings.diagnosticsIntervalMs}
+              onChange={(event) => {
+                const diagnosticsIntervalMs = Number(event.target.value);
+                if (
+                  Number.isInteger(diagnosticsIntervalMs) &&
+                  diagnosticsIntervalMs >= 250 &&
+                  diagnosticsIntervalMs <= 60_000
+                ) {
+                  void onChange({ diagnosticsIntervalMs });
+                }
+              }}
+            />
+          </label>
+        </section>
+
+        <section className="settings-card">
+          <header>
+            <strong>Privacy</strong>
+            <small>Redaction before persistence and export</small>
+          </header>
+          <label className="setting-row">
+            <span>
+              <strong>Sensitive field names</strong>
+              <small>Comma-separated, case-insensitive keys redacted from captured data.</small>
+            </span>
+            <input
+              aria-label="Sensitive field names"
+              type="text"
+              value={settings.redactionFields.join(', ')}
+              onChange={(event) => {
+                const redactionFields = event.target.value
+                  .split(',')
+                  .map((field) => field.trim())
+                  .filter(Boolean)
+                  .slice(0, 100);
+                void onChange({ redactionFields });
+              }}
+            />
+          </label>
+          <p className="settings-note">
+            PulseRN keeps captured data local by default. Pairing credentials are never included in
+            events, exports, or diagnostics.
+          </p>
+        </section>
+
+        <section className="settings-card">
+          <header>
             <strong>Appearance</strong>
             <small>Changes apply immediately</small>
           </header>
@@ -403,13 +631,46 @@ export function SettingsPanel({ resolvedTheme, settings, onChange }: SettingsPan
               <option value="oldest">Oldest first</option>
             </select>
           </label>
+          <label className="setting-row">
+            <span>
+              <strong>Motion</strong>
+              <small>Follow system preferences or override interface animation.</small>
+            </span>
+            <select
+              value={settings.motion}
+              onChange={(event) =>
+                void onChange({ motion: event.target.value as AppSettings['motion'] })
+              }
+            >
+              <option value="system">System</option>
+              <option value="reduced">Reduced</option>
+              <option value="full">Full</option>
+            </select>
+          </label>
         </section>
 
         <section className="settings-card">
           <header>
-            <strong>Software updates</strong>
+            <strong>Updates</strong>
             <small>PulseRN {updateState?.currentVersion ?? '—'}</small>
           </header>
+          <label className="setting-row">
+            <span>
+              <strong>Update channel</strong>
+              <small>Stable receives production releases; beta includes previews.</small>
+            </span>
+            <select
+              value={settings.updateChannel}
+              onChange={(event) =>
+                void onChange({
+                  updateChannel: event.target.value as AppSettings['updateChannel'],
+                })
+              }
+            >
+              <option value="stable">Stable</option>
+              <option value="beta">Beta</option>
+            </select>
+          </label>
           <Toggle
             checked={settings.checkForUpdatesAutomatically}
             description="Check GitHub Releases after PulseRN starts. Downloads and installation still require your approval."
@@ -467,7 +728,7 @@ export function SettingsPanel({ resolvedTheme, settings, onChange }: SettingsPan
 
         <section className="settings-card">
           <header>
-            <strong>macOS</strong>
+            <strong>Appearance · macOS</strong>
             <small>Native application behavior</small>
           </header>
           <Toggle
@@ -486,7 +747,7 @@ export function SettingsPanel({ resolvedTheme, settings, onChange }: SettingsPan
 
         <section className="settings-card logo-library">
           <header>
-            <strong>Brand assets</strong>
+            <strong>Appearance · Brand assets</strong>
             <small>Theme-specific PulseRN logos</small>
           </header>
           <div>

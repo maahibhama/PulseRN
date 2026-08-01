@@ -8,9 +8,9 @@ Please report vulnerabilities privately to the repository maintainers. Do not op
 
 - WebSocket listens only on `127.0.0.1` unless authenticated LAN access is explicitly enabled.
 - LAN mode binds to `0.0.0.0` and requires explicit one-time pairing or a trusted reconnect token.
-  Pairing codes expire after five minutes and five failures. Reconnect tokens have 256 bits of
-  entropy; only SHA-256 hashes are persisted with user-only permissions, and tokens can be revoked
-  per device.
+  Pairing codes have a validated 1–30 minute lifetime and 1–20 retry limit (five each by default).
+  Reconnect tokens have 256 bits of entropy; only SHA-256 hashes are persisted with user-only
+  permissions, and tokens can be revoked per device.
 - LAN WebSocket handshakes validate the Host header and reject browser origins whose host does not
   match the requested PulseRN host. Native clients without an Origin header still require pairing.
 - TLS can be enabled with a user-supplied PEM certificate and matching private key. PulseRN validates
@@ -41,8 +41,9 @@ Please report vulnerabilities privately to the repository maintainers. Do not op
   capped at 20 entries, and remains subject to payload limits. Applications should not embed secrets
   directly in arbitrary error-message or stack strings.
 - No `eval`, remote content, navigation, or arbitrary window opening is allowed.
-- Desktop update operations stay in Electron main. Development and unsigned preview packages cannot
-  invoke the updater. Enabled builds use generated SHA-512 release metadata, disable automatic
+- Desktop update operations stay in Electron main. Development, Linux, Windows ARM64, and unsigned
+  preview packages cannot invoke the updater. Enabled signed builds use generated SHA-512 release
+  metadata, reject invalid channels, downgrades, and mismatched downloads, disable automatic
   downloads and install-on-quit, expose only validated status through preload, and require native
   confirmation before restart/install.
 - Signed CI builds fail when configured signing credentials do not produce valid macOS or Windows

@@ -217,54 +217,57 @@ export function ConsolePanel({
         </div>
       )}
       <div className="console-toolbar">
-        <div className="level-filters">
-          {LEVELS.map((level) => (
-            <button
-              className={levels.has(level) ? `level-filter ${level} enabled` : 'level-filter'}
-              key={level}
-              onClick={() => toggleLevel(level)}
-            >
-              {level}
-            </button>
-          ))}
-          <button onClick={() => applyPreset('all')}>All</button>
-          <button onClick={() => applyPreset('problems')}>Problems</button>
-          <button onClick={() => applyPreset('verbose')}>Verbose</button>
+        <div className="console-filter-controls">
+          <div className="level-filters">
+            {LEVELS.map((level) => (
+              <button
+                className={levels.has(level) ? `level-filter ${level} enabled` : 'level-filter'}
+                key={level}
+                onClick={() => toggleLevel(level)}
+              >
+                {level}
+              </button>
+            ))}
+            <button onClick={() => applyPreset('all')}>All</button>
+            <button onClick={() => applyPreset('problems')}>Problems</button>
+            <button onClick={() => applyPreset('verbose')}>Verbose</button>
+          </div>
+          <select
+            aria-label="Filter console source"
+            onChange={(event) => setSource(event.target.value)}
+          >
+            <option value="">All sources</option>
+            {sources.map((entry) => (
+              <option key={entry}>{entry}</option>
+            ))}
+          </select>
+          <label>
+            <input
+              checked={groupBySource}
+              onChange={(event) => setGroupBySource(event.target.checked)}
+              type="checkbox"
+            />
+            Group sources
+          </label>
+          <select
+            aria-label="Console display limit"
+            onChange={(event) => setDisplayLimit(Number(event.target.value))}
+            value={displayLimit}
+          >
+            <option value={250}>250 logs</option>
+            <option value={500}>500 logs</option>
+            <option value={1_000}>1,000 logs</option>
+            <option value={2_000}>2,000 logs</option>
+          </select>
         </div>
         <textarea
           aria-label="Search console logs"
+          className="console-search"
           onChange={(event) => setSearch(event.target.value)}
-          placeholder={'Search message and stack\nEach line must match'}
-          rows={2}
+          placeholder="Search messages and stacks · each line must match"
+          rows={1}
           value={search}
         />
-        <select
-          aria-label="Filter console source"
-          onChange={(event) => setSource(event.target.value)}
-        >
-          <option value="">All sources</option>
-          {sources.map((entry) => (
-            <option key={entry}>{entry}</option>
-          ))}
-        </select>
-        <label>
-          <input
-            checked={groupBySource}
-            onChange={(event) => setGroupBySource(event.target.checked)}
-            type="checkbox"
-          />
-          Group sources
-        </label>
-        <select
-          aria-label="Console display limit"
-          onChange={(event) => setDisplayLimit(Number(event.target.value))}
-          value={displayLimit}
-        >
-          <option value={250}>250 logs</option>
-          <option value={500}>500 logs</option>
-          <option value={1_000}>1,000 logs</option>
-          <option value={2_000}>2,000 logs</option>
-        </select>
       </div>
       {selected && selected.payload.arguments.some((argument) => typeof argument === 'object') && (
         <section className="console-arguments">

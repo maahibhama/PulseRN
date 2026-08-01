@@ -19,6 +19,9 @@ describe('SettingsStore', () => {
       tlsEnabled: false,
       eventRetentionDays: 30,
       maxStoredEvents: 100_000,
+      consoleCaptureLimit: 6_000,
+      updateChannel: 'stable',
+      motion: 'system',
       checkForUpdatesAutomatically: true,
     });
     store.update({
@@ -31,6 +34,10 @@ describe('SettingsStore', () => {
       tlsEnabled: true,
       eventRetentionDays: 7,
       maxStoredEvents: 50_000,
+      consoleCaptureLimit: 2_000,
+      redactionFields: ['token', 'apiKey'],
+      updateChannel: 'beta',
+      motion: 'reduced',
       checkForUpdatesAutomatically: false,
     });
 
@@ -44,6 +51,10 @@ describe('SettingsStore', () => {
       tlsEnabled: true,
       eventRetentionDays: 7,
       maxStoredEvents: 50_000,
+      consoleCaptureLimit: 2_000,
+      redactionFields: ['token', 'apiKey'],
+      updateChannel: 'beta',
+      motion: 'reduced',
       checkForUpdatesAutomatically: false,
     });
     expect(JSON.parse(readFileSync(filePath, 'utf8'))).not.toHaveProperty('unknown');
@@ -60,5 +71,9 @@ describe('SettingsStore', () => {
     expect(() => store.update({ devToolPort: 1_023 })).toThrow();
     expect(() => store.update({ eventRetentionDays: 0 })).toThrow();
     expect(() => store.update({ maxStoredEvents: 999 })).toThrow();
+    expect(() => store.update({ redactionFields: [''] })).toThrow();
+    expect(() => store.update({ networkBodyCaptureBytes: 17 * 1_024 * 1_024 })).toThrow();
+    expect(() => store.update({ pairingRetryLimit: 21 })).toThrow();
+    expect(() => store.update({ updateChannel: 'nightly' })).toThrow();
   });
 });

@@ -1,5 +1,4 @@
 import {
-  cpSync,
   existsSync,
   mkdtempSync,
   mkdirSync,
@@ -25,6 +24,7 @@ if (requestedTag && requestedTag !== expectedTag) {
 }
 
 const temporaryDirectory = mkdtempSync(join(tmpdir(), 'pulse-rn-sdk-'));
+const npmCache = join(temporaryDirectory, 'npm-cache');
 
 try {
   execFileSync('pnpm', ['exec', 'turbo', 'run', 'build', '--filter=@pulse-rn/sdk...'], {
@@ -90,7 +90,11 @@ try {
 
   for (const file of ['index.js', 'index.cjs', 'index.d.ts', 'index.d.cts']) {
     const contents = readFileSync(join(packageRoot, 'dist', file), 'utf8');
-    if (contents.includes('@pulse-rn/') || contents.includes('workspace:')) {
+    if (
+      /\bfrom\s*['"]@pulse-rn\//.test(contents) ||
+      /\brequire\(\s*['"]@pulse-rn\//.test(contents) ||
+      contents.includes('workspace:')
+    ) {
       throw new Error(`Published dist/${file} references an internal workspace package.`);
     }
   }
@@ -104,6 +108,8 @@ try {
     'createPulseRNClient',
     'diffStates',
     'getActiveRoute',
+    'getOrCreatePulseRNIdentity',
+    'validatePulseRNConfig',
   ];
   const esm = await import(pathToFileURL(join(packageRoot, manifest.module)).href);
   const require = createRequire(import.meta.url);
@@ -115,9 +121,25 @@ try {
   }
 
   const consumerRoot = join(temporaryDirectory, 'consumer');
-  const installedPackage = join(consumerRoot, 'node_modules', '@pulse-rn', 'sdk');
-  mkdirSync(join(consumerRoot, 'node_modules', '@pulse-rn'), { recursive: true });
-  cpSync(packageRoot, installedPackage, { recursive: true });
+  mkdirSync(consumerRoot);
+  writeFileSync(
+    join(consumerRoot, 'package.json'),
+    JSON.stringify({ name: 'pulse-rn-isolated-consumer', private: true, type: 'module' }, null, 2),
+  );
+  execFileSync(
+    'npm',
+    [
+      'install',
+      archive,
+      '--ignore-scripts',
+      '--no-audit',
+      '--no-fund',
+      '--package-lock=false',
+      '--cache',
+      npmCache,
+    ],
+    { cwd: consumerRoot, stdio: 'inherit' },
+  );
   writeFileSync(
     join(consumerRoot, 'consumer.mts'),
     `import {
@@ -128,6 +150,8 @@ try {
   createPulseRNClient,
   diffStates,
   getActiveRoute,
+  getOrCreatePulseRNIdentity,
+  validatePulseRNConfig,
 } from '@pulse-rn/sdk';
 
 void [
@@ -138,6 +162,8 @@ void [
   createPulseRNClient,
   diffStates,
   getActiveRoute,
+  getOrCreatePulseRNIdentity,
+  validatePulseRNConfig,
 ];
 `,
   );
@@ -164,6 +190,48 @@ void [
     ['-p', join(consumerRoot, 'tsconfig.json')],
     { cwd: consumerRoot, stdio: 'inherit' },
   );
+
+  execFileSync(
+    process.execPath,
+    [
+      '--input-type=commonjs',
+      '--eval',
+      "const sdk = require('@pulse-rn/sdk'); if (!sdk.createPulseRNClient) process.exit(1)",
+    ],
+    { cwd: consumerRoot, stdio: 'inherit' },
+  );
+
+  for (const consumer of ['expo', 'react-native-cli']) {
+    const root = join(temporaryDirectory, consumer);
+    mkdirSync(root);
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({ name: `pulse-rn-${consumer}-consumer`, private: true }, null, 2),
+    );
+    execFileSync(
+      'npm',
+      [
+        'install',
+        archive,
+        '--ignore-scripts',
+        '--no-audit',
+        '--no-fund',
+        '--package-lock=false',
+        '--cache',
+        npmCache,
+      ],
+      { cwd: root, stdio: 'inherit' },
+    );
+    const installedManifest = JSON.parse(
+      readFileSync(join(root, 'node_modules', '@pulse-rn', 'sdk', 'package.json'), 'utf8'),
+    );
+    if (
+      !installedManifest['react-native'] ||
+      !existsSync(join(root, 'node_modules', '@pulse-rn', 'sdk', installedManifest['react-native']))
+    ) {
+      throw new Error(`${consumer} consumer cannot resolve the React Native SDK entry.`);
+    }
+  }
 
   if (!existsSync(archive)) throw new Error('SDK tarball disappeared during validation.');
   console.log(`Verified ${manifest.name}@${manifest.version}: ${archive}`);

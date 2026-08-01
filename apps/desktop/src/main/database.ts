@@ -6,7 +6,7 @@ import { eventEnvelopeSchema, type DevToolEventEnvelope } from '@pulse-rn/protoc
 import type { ConnectedDevice } from './session-manager.js';
 import type { DisconnectInfo } from './session-manager.js';
 
-const CURRENT_SCHEMA_VERSION = 6;
+const CURRENT_SCHEMA_VERSION = 7;
 
 export interface EventCursor {
   timestamp: number;
@@ -123,6 +123,29 @@ export interface EventAnnotation {
   body: string;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface StorageAuditRecord {
+  id: string;
+  connectionId: string;
+  providerId: string;
+  key: string;
+  operation: 'set' | 'delete' | 'restore';
+  success: boolean;
+  createdAt: number;
+  backupId?: string;
+  error?: string;
+}
+
+export interface StorageSnapshotRecord {
+  id: string;
+  connectionId: string;
+  providerId: string;
+  key: string;
+  value: string;
+  valueType: 'string' | 'number' | 'boolean' | 'json' | 'binary' | 'unknown';
+  valueSize: number;
+  createdAt: number;
 }
 
 export interface DatabaseRecoveryReport {
@@ -360,6 +383,35 @@ export class EventDatabase {
           ON event_annotations(event_id, updated_at DESC);
         CREATE INDEX idx_event_annotations_session
           ON event_annotations(session_id, updated_at DESC);
+      `,
+      7: `
+        CREATE TABLE storage_audit (
+          id TEXT PRIMARY KEY,
+          connection_id TEXT NOT NULL,
+          provider_id TEXT NOT NULL,
+          storage_key TEXT NOT NULL,
+          operation TEXT NOT NULL CHECK (operation IN ('set', 'delete', 'restore')),
+          backup_id TEXT,
+          success INTEGER NOT NULL CHECK (success IN (0, 1)),
+          error TEXT,
+          created_at INTEGER NOT NULL
+        );
+        CREATE INDEX idx_storage_audit_created
+          ON storage_audit(created_at DESC);
+        CREATE INDEX idx_storage_audit_provider_key
+          ON storage_audit(provider_id, storage_key, created_at DESC);
+        CREATE TABLE storage_snapshots (
+          id TEXT PRIMARY KEY,
+          connection_id TEXT NOT NULL,
+          provider_id TEXT NOT NULL,
+          storage_key TEXT NOT NULL,
+          value TEXT NOT NULL,
+          value_type TEXT NOT NULL,
+          value_size INTEGER NOT NULL,
+          created_at INTEGER NOT NULL
+        );
+        CREATE INDEX idx_storage_snapshots_provider_key
+          ON storage_snapshots(provider_id, storage_key, created_at DESC);
       `,
     };
     const sql = migrations[version];
@@ -1262,6 +1314,147 @@ export class EventDatabase {
 
   recoveryReport(): DatabaseRecoveryReport {
     return { ...this.recovery };
+  }
+
+  recordStorageAudit(
+    input: Omit<StorageAuditRecord, 'id' | 'createdAt'> & {
+      id?: string;
+      createdAt?: number;
+    },
+  ): StorageAuditRecord {
+    const record: StorageAuditRecord = {
+      id: input.id ?? randomUUID(),
+      connectionId: input.connectionId,
+      providerId: input.providerId,
+      key: input.key,
+      operation: input.operation,
+      success: input.success,
+      createdAt: input.createdAt ?? Date.now(),
+      ...(input.backupId ? { backupId: input.backupId } : {}),
+      ...(input.error ? { error: input.error } : {}),
+    };
+    this.database
+      .prepare(
+        `
+          INSERT INTO storage_audit (
+            id, connection_id, provider_id, storage_key, operation, backup_id,
+            success, error, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+      )
+      .run(
+        record.id,
+        record.connectionId,
+        record.providerId,
+        record.key,
+        record.operation,
+        record.backupId ?? null,
+        record.success ? 1 : 0,
+        record.error ?? null,
+        record.createdAt,
+      );
+    return record;
+  }
+
+  listStorageAudit(limit = 100): StorageAuditRecord[] {
+    return this.database
+      .prepare(
+        `
+          SELECT
+            id, connection_id AS connectionId, provider_id AS providerId,
+            storage_key AS key, operation, backup_id AS backupId,
+            success, error, created_at AS createdAt
+          FROM storage_audit
+          ORDER BY created_at DESC, id DESC
+          LIMIT ?
+        `,
+      )
+      .all(Math.min(500, Math.max(1, limit)))
+      .map((row) => {
+        const record = row as unknown as Omit<
+          StorageAuditRecord,
+          'success' | 'backupId' | 'error'
+        > & {
+          success: number;
+          backupId: string | null;
+          error: string | null;
+        };
+        return {
+          id: record.id,
+          connectionId: record.connectionId,
+          providerId: record.providerId,
+          key: record.key,
+          operation: record.operation,
+          success: record.success === 1,
+          createdAt: record.createdAt,
+          ...(record.backupId ? { backupId: record.backupId } : {}),
+          ...(record.error ? { error: record.error } : {}),
+        };
+      });
+  }
+
+  saveStorageSnapshot(
+    input: Omit<StorageSnapshotRecord, 'id' | 'createdAt'> & {
+      id?: string;
+      createdAt?: number;
+    },
+  ): StorageSnapshotRecord {
+    const snapshot: StorageSnapshotRecord = {
+      ...input,
+      id: input.id ?? randomUUID(),
+      createdAt: input.createdAt ?? Date.now(),
+    };
+    this.database
+      .prepare(
+        `
+          INSERT INTO storage_snapshots (
+            id, connection_id, provider_id, storage_key, value, value_type,
+            value_size, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+      )
+      .run(
+        snapshot.id,
+        snapshot.connectionId,
+        snapshot.providerId,
+        snapshot.key,
+        snapshot.value,
+        snapshot.valueType,
+        snapshot.valueSize,
+        snapshot.createdAt,
+      );
+    return snapshot;
+  }
+
+  listStorageSnapshots(providerId?: string, key?: string): StorageSnapshotRecord[] {
+    const conditions: string[] = [];
+    const values: string[] = [];
+    if (providerId) {
+      conditions.push('provider_id = ?');
+      values.push(providerId);
+    }
+    if (key) {
+      conditions.push('storage_key = ?');
+      values.push(key);
+    }
+    return this.database
+      .prepare(
+        `
+          SELECT
+            id, connection_id AS connectionId, provider_id AS providerId,
+            storage_key AS key, value, value_type AS valueType,
+            value_size AS valueSize, created_at AS createdAt
+          FROM storage_snapshots
+          ${conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''}
+          ORDER BY created_at DESC, id DESC
+          LIMIT 500
+        `,
+      )
+      .all(...values) as unknown as StorageSnapshotRecord[];
+  }
+
+  deleteStorageSnapshot(id: string): boolean {
+    return this.database.prepare('DELETE FROM storage_snapshots WHERE id = ?').run(id).changes > 0;
   }
 
   importSessionData(

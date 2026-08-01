@@ -80,4 +80,41 @@ describe('UpdateManager', () => {
       message: 'release service unavailable',
     });
   });
+
+  it('enforces update channels and rejects rollback or mismatched download metadata', async () => {
+    const updater = new FakeUpdater();
+    const manager = new UpdateManager(updater, {
+      enabled: true,
+      currentVersion: '1.2.0',
+      channel: 'stable',
+      onState: vi.fn(),
+    });
+
+    updater.emit('update-available', { version: '1.3.0-beta.1' });
+    expect(manager.snapshot()).toMatchObject({ status: 'error' });
+    updater.emit('update-available', { version: '1.1.9' });
+    expect(manager.snapshot().message).toContain('rollback');
+    updater.emit('update-available', { version: '1.3.0' });
+    expect(manager.snapshot()).toMatchObject({ status: 'available', availableVersion: '1.3.0' });
+    await manager.download();
+    updater.emit('update-downloaded', { version: '1.2.5' });
+    expect(manager.snapshot().message).toContain('does not match');
+
+    manager.setChannel('beta');
+    expect(updater.allowPrerelease).toBe(true);
+    updater.emit('update-available', { version: '1.4.0-beta.1' });
+    expect(manager.snapshot()).toMatchObject({
+      status: 'available',
+      availableVersion: '1.4.0-beta.1',
+    });
+    manager.setChannel('stable');
+    expect(manager.snapshot()).toMatchObject({
+      status: 'idle',
+      availableVersion: undefined,
+    });
+    manager.setChannel('beta');
+    updater.emit('update-available', { version: '1.4.0-beta.1' });
+    updater.emit('update-available', { version: '1.3.5' });
+    expect(manager.snapshot().message).toContain('rollback');
+  });
 });

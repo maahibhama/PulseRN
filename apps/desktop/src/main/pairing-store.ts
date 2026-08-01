@@ -85,13 +85,14 @@ export class PairingStore {
     this.records = this.read();
   }
 
-  begin(now = Date.now()): PairingCode {
+  begin(now = Date.now(), lifetimeMinutes = 5, attempts = 5): PairingCode {
     const code = generateCode();
     this.challenge = {
       code,
       hash: hash(code),
-      expiresAt: now + PAIRING_TTL_MS,
-      remainingAttempts: PAIRING_ATTEMPTS,
+      expiresAt:
+        now + Math.min(30, Math.max(1, Math.trunc(lifetimeMinutes))) * (PAIRING_TTL_MS / 5),
+      remainingAttempts: Math.min(20, Math.max(1, Math.trunc(attempts || PAIRING_ATTEMPTS))),
     };
     return this.pairingCode(now)!;
   }

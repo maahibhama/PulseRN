@@ -78,9 +78,9 @@ describe('EventDatabase', () => {
     legacy.close();
 
     const database = new EventDatabase(path);
-    expect(database.schemaVersion()).toBe(6);
+    expect(database.schemaVersion()).toBe(7);
     expect(database.migrationHistory().map((migration) => migration.version)).toEqual([
-      1, 2, 3, 4, 5, 6,
+      1, 2, 3, 4, 5, 6, 7,
     ]);
     expect(database.query().events).toEqual([existing]);
     expect(database.listSessions()).toMatchObject([
@@ -168,9 +168,9 @@ describe('EventDatabase', () => {
     legacy.close();
 
     const database = new EventDatabase(path);
-    expect(database.schemaVersion()).toBe(6);
+    expect(database.schemaVersion()).toBe(7);
     expect(database.migrationHistory().map((migration) => migration.version)).toEqual([
-      1, 2, 3, 4, 5, 6,
+      1, 2, 3, 4, 5, 6, 7,
     ]);
     database.close();
   });
@@ -224,6 +224,34 @@ describe('EventDatabase', () => {
     expect(newer.hasPrevious).toBe(true);
     expect(newer.hasNext).toBe(true);
     expect(database.listSessions()[0]?.eventCount).toBe(1_205);
+    database.close();
+  });
+
+  it('persists storage audit metadata and explicit sanitized snapshots', () => {
+    const database = new EventDatabase(databasePath());
+    const audit = database.recordStorageAudit({
+      connectionId: 'connection-1',
+      providerId: 'async-storage',
+      key: 'theme',
+      operation: 'set',
+      backupId: 'storage-backup-1',
+      success: true,
+      createdAt: 10,
+    });
+    const snapshot = database.saveStorageSnapshot({
+      connectionId: 'connection-1',
+      providerId: 'async-storage',
+      key: 'theme',
+      value: '"dark"',
+      valueType: 'json',
+      valueSize: 6,
+      createdAt: 20,
+    });
+
+    expect(database.listStorageAudit()).toEqual([audit]);
+    expect(database.listStorageSnapshots('async-storage', 'theme')).toEqual([snapshot]);
+    expect(database.deleteStorageSnapshot(snapshot.id)).toBe(true);
+    expect(database.listStorageSnapshots()).toEqual([]);
     database.close();
   });
 
@@ -461,7 +489,7 @@ describe('EventDatabase', () => {
     expect(recovery.status).toBe('recovered');
     expect(recovery.backupPath && existsSync(recovery.backupPath)).toBe(true);
     expect(recovery.lossesUnknown).toBe(true);
-    expect(database.schemaVersion()).toBe(6);
+    expect(database.schemaVersion()).toBe(7);
     expect(database.query().total).toBe(0);
     database.close();
   });
@@ -503,7 +531,7 @@ describe('EventDatabase', () => {
 
     const reopened = new EventDatabase(path);
     expect(reopened.findById('interrupted')).toBeUndefined();
-    expect(reopened.schemaVersion()).toBe(6);
+    expect(reopened.schemaVersion()).toBe(7);
     reopened.close();
   });
 

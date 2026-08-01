@@ -16,6 +16,19 @@ function credentials(pairingCode?: string, reconnectToken?: string) {
 }
 
 describe('PairingStore', () => {
+  it('applies configured pairing expiry and retry limits', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'pulse-rn-pairing-'));
+    const store = new PairingStore(join(directory, 'pairing.json'));
+    const pairing = store.begin(1_000, 1, 2);
+
+    expect(pairing.expiresAt).toBe(61_000);
+    expect(pairing.remainingAttempts).toBe(2);
+    store.authenticate(credentials('INVALID'), 2_000);
+    expect(store.pairingCode(2_000)?.remainingAttempts).toBe(1);
+    store.authenticate(credentials('INVALID'), 3_000);
+    expect(store.pairingCode(3_000)).toBeUndefined();
+  });
+
   it('consumes one-time codes and persists only hashed reconnect tokens', () => {
     const directory = mkdtempSync(join(tmpdir(), 'pulse-rn-pairing-'));
     const path = join(directory, 'trusted-devices.json');

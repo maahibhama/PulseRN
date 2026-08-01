@@ -30,16 +30,23 @@ import { PerformanceMonitor } from './performance-monitor';
 import type { StorageProvider } from './storage-provider';
 import type {
   CaptureErrorOptions,
+  ClientConnectionState,
+  ClientDiagnosticSummary,
   ClientDiagnostics,
   DevToolConfig,
+  DroppedEventReason,
   TrackEventInput,
   WebSocketFactory,
   WebSocketLike,
 } from './types.js';
+import { pulseRNEventCategories, validatePulseRNConfig } from './configuration.js';
 
 const SDK_VERSION = '0.2.1';
 const CONNECTING = 0;
 const OPEN = 1;
+type RegisteredStorageProvider = StorageProvider & {
+  capabilities: NonNullable<StorageProvider['capabilities']>;
+};
 
 function boundedNumber(
   value: number | undefined,
@@ -102,18 +109,26 @@ export class DevToolClient {
   private pairingCode?: string;
   private reconnectToken?: string;
   private lastEventAt?: number;
+  private connectionState: ClientConnectionState = 'idle';
+  private readonly connectionListeners = new Set<(state: ClientConnectionState) => void>();
+  private readonly samplingCounts = new Map<DevToolEventEnvelope['category'], number>();
   private restoreConsole?: () => void;
   private restoreErrors?: () => void;
   private networkRestores: (() => void)[] = [];
   private recentEvents: ErrorContextEvent[] = [];
   private currentScreen?: string;
-  private readonly storageProviders = new Map<string, StorageProvider>();
+  private readonly storageProviders = new Map<string, RegisteredStorageProvider>();
+  private readonly storageBackups = new Map<
+    string,
+    { providerId: string; key: string; value: string | null }
+  >();
   readonly performance: PerformanceMonitor;
   readonly deviceId: string;
   readonly sessionId: string;
   readonly appId: string;
 
   constructor(config: DevToolConfig, factory: WebSocketFactory = defaultWebSocketFactory) {
+    validatePulseRNConfig(config);
     this.config = {
       host: '127.0.0.1',
       port: 9090,
@@ -172,13 +187,20 @@ export class DevToolClient {
 
   connect(): this {
     const isDevelopment =
-      this.config.isDevelopment ?? (typeof __DEV__ === 'boolean' ? __DEV__ : true);
+      this.config.isDevelopment ??
+      (this.config.environment
+        ? this.config.environment !== 'production'
+        : typeof __DEV__ === 'boolean'
+          ? __DEV__
+          : true);
     if (!isDevelopment && !this.config.allowInProduction) {
+      this.setConnectionState('disconnected');
       return this;
     }
     if (this.socket?.readyState === CONNECTING || this.socket?.readyState === OPEN) return this;
 
     this.manuallyClosed = false;
+    this.setConnectionState(this.reconnectAttempt > 0 ? 'reconnecting' : 'connecting');
     if (this.config.enablePerformance) this.performance.start();
     if (this.config.enableConsole && !this.restoreConsole) {
       this.restoreConsole = installConsoleInterceptor(
@@ -191,6 +213,12 @@ export class DevToolClient {
           if (this.consoleCaptureTimes.length >= (this.config.maxConsoleEventsPerMinute ?? 6_000)) {
             this.droppedEvents += 1;
             this.consoleDroppedEvents += 1;
+            this.config.onDroppedEvent?.({
+              reason: 'console-rate-limit',
+              category: 'console',
+              type: `console.${level}`,
+              totalDroppedEvents: this.droppedEvents,
+            });
             this.reportDiagnostics();
             return;
           }
@@ -251,7 +279,7 @@ export class DevToolClient {
     try {
       this.socket = this.factory(`${scheme}://${this.config.host}:${this.config.port}`);
     } catch (error) {
-      this.emitError(toCapturedError(error, 'sdk_internal'));
+      this.emitError(toCapturedError(error, 'sdk_internal', { classification: 'connection' }));
       this.handleClose();
       return this;
     }
@@ -260,7 +288,9 @@ export class DevToolClient {
     this.socket.onclose = () => this.handleClose();
     this.socket.onerror = () => {
       this.emitError(
-        toCapturedError(new Error('PulseRN WebSocket connection error.'), 'sdk_internal'),
+        toCapturedError(new Error('PulseRN WebSocket connection error.'), 'sdk_internal', {
+          classification: 'connection',
+        }),
       );
     };
     return this;
@@ -280,11 +310,27 @@ export class DevToolClient {
     this.restoreErrors = undefined;
     this.performance.stop();
     for (const restore of this.networkRestores.splice(0)) restore();
+    this.storageBackups.clear();
     this.socket?.close();
     this.socket = undefined;
+    this.setConnectionState('disconnected');
   }
 
   track(input: TrackEventInput): void {
+    if (this.config.categories?.[input.category] === false) {
+      this.drop(input, 'category-disabled');
+      return;
+    }
+    const samplingRate = this.config.sampling?.[input.category] ?? 1;
+    if (samplingRate < 1) {
+      const count = (this.samplingCounts.get(input.category) ?? 0) + 1;
+      this.samplingCounts.set(input.category, count);
+      const interval = samplingRate <= 0 ? Number.POSITIVE_INFINITY : Math.ceil(1 / samplingRate);
+      if (count % interval !== 1 % interval) {
+        this.drop(input, 'sampled');
+        return;
+      }
+    }
     const originalConsolePayload =
       input.category === 'console' ? JSON.stringify(input.payload) : undefined;
     let payload = redact(input.payload, { fields: this.config.redaction?.fields }) as JsonValue;
@@ -306,6 +352,7 @@ export class DevToolClient {
     ) {
       this.droppedEvents += 1;
       this.oversizedEvents += 1;
+      this.notifyDrop(input, 'payload-limit');
       this.reportDiagnostics();
       return;
     }
@@ -355,6 +402,7 @@ export class DevToolClient {
       this.queue.shift();
       this.droppedEvents += 1;
       this.queueOverflowEvents += 1;
+      this.notifyDrop(input, 'queue-overflow');
     }
     this.queue.push(event);
     this.lastEventAt = event.timestamp;
@@ -400,6 +448,7 @@ export class DevToolClient {
 
   getStats(): ClientDiagnostics {
     return {
+      connectionState: this.connectionState,
       queuedEvents: this.queue.length,
       droppedEvents: this.droppedEvents,
       connected: this.negotiated,
@@ -413,6 +462,27 @@ export class DevToolClient {
       clockOffsetMs: this.clockOffsetMs,
       ...(this.lastEventAt === undefined ? {} : { lastEventAt: this.lastEventAt }),
     };
+  }
+
+  getDiagnosticSummary(): ClientDiagnosticSummary {
+    return {
+      ...this.getStats(),
+      appId: this.appId,
+      deviceId: this.deviceId,
+      sessionId: this.sessionId,
+      environment:
+        this.config.environment ??
+        ((this.config.isDevelopment ?? true) ? 'development' : 'production'),
+      enabledCategories: pulseRNEventCategories.filter(
+        (category) => this.config.categories?.[category] !== false,
+      ),
+    };
+  }
+
+  subscribeConnectionState(listener: (state: ClientConnectionState) => void): () => void {
+    this.connectionListeners.add(listener);
+    listener(this.connectionState);
+    return () => this.connectionListeners.delete(listener);
   }
 
   attachAxios(instance: AxiosInstanceLike): () => void {
@@ -438,9 +508,19 @@ export class DevToolClient {
 
   registerStorageProvider(provider: StorageProvider): () => void {
     if (!provider.id.trim()) throw new Error('Storage provider ID must not be empty.');
-    this.storageProviders.set(provider.id, provider);
+    const registered: RegisteredStorageProvider = {
+      ...provider,
+      capabilities: provider.capabilities ?? {
+        paginatedKeys: false,
+        lazyValues: false,
+        mutations: true,
+        typedValues: false,
+        snapshots: false,
+      },
+    };
+    this.storageProviders.set(provider.id, registered);
     return () => {
-      if (this.storageProviders.get(provider.id) === provider)
+      if (this.storageProviders.get(provider.id) === registered)
         this.storageProviders.delete(provider.id);
     };
   }
@@ -468,9 +548,26 @@ export class DevToolClient {
 
   private emitError(error: CapturedError): void {
     if (!this.config.enableErrors) return;
+    const latest = (category: DevToolEventEnvelope['category']) =>
+      [...this.recentEvents].reverse().find((event) => event.category === category);
+    const metadata =
+      error.metadata && typeof error.metadata === 'object' && !Array.isArray(error.metadata)
+        ? error.metadata
+        : undefined;
+    const correlations = {
+      ...(this.currentScreen ? { route: this.currentScreen } : {}),
+      ...(typeof metadata?.['requestId'] === 'string' && metadata['requestId']
+        ? { requestId: metadata['requestId'] }
+        : {}),
+      ...(latest('redux') ? { reduxEventId: latest('redux')!.id } : {}),
+      ...(latest('console') ? { consoleEventId: latest('console')!.id } : {}),
+      ...(latest('performance') ? { performanceEventId: latest('performance')!.id } : {}),
+    };
     const payload: ErrorEventPayload = {
       ...error,
       context: [],
+      ...(this.config.appVersion ? { appVersion: this.config.appVersion } : {}),
+      ...(Object.keys(correlations).length > 0 ? { correlations } : {}),
     };
     this.track({ category: 'error', type: `error.${error.source}`, payload });
   }
@@ -536,6 +633,7 @@ export class DevToolClient {
         return;
       }
       this.negotiated = true;
+      this.setConnectionState('connected');
       if (result.data.reconnectToken) {
         this.reconnectToken = result.data.reconnectToken;
         this.pairingCode = undefined;
@@ -616,6 +714,9 @@ export class DevToolClient {
         } else if (command.operation === 'set') {
           if (command.key === undefined || command.value === undefined)
             throw new Error('A key and value are required.');
+          if (!provider.capabilities.mutations)
+            throw new Error(`${provider.name} does not support mutations.`);
+          const backupId = await this.backupStorageValue(provider, command.key);
           await provider.setItem(command.key, command.value);
           response = {
             kind: 'storage-result',
@@ -623,10 +724,37 @@ export class DevToolClient {
             providerId: command.providerId,
             operation: command.operation,
             success: true,
+            backupId,
+          };
+        } else if (command.operation === 'delete') {
+          if (command.key === undefined) throw new Error('A key is required.');
+          if (!provider.capabilities.mutations)
+            throw new Error(`${provider.name} does not support mutations.`);
+          const backupId = await this.backupStorageValue(provider, command.key);
+          await provider.removeItem(command.key);
+          response = {
+            kind: 'storage-result',
+            requestId: command.requestId,
+            providerId: command.providerId,
+            operation: command.operation,
+            success: true,
+            backupId,
           };
         } else {
-          if (command.key === undefined) throw new Error('A key is required.');
-          await provider.removeItem(command.key);
+          if (!provider.capabilities.mutations)
+            throw new Error(`${provider.name} does not support mutations.`);
+          if (command.backupId === undefined) throw new Error('A backup ID is required.');
+          const backup = this.storageBackups.get(command.backupId);
+          if (
+            !backup ||
+            backup.providerId !== command.providerId ||
+            (command.key !== undefined && backup.key !== command.key)
+          ) {
+            throw new Error('The storage backup is unavailable or belongs to another provider.');
+          }
+          if (backup.value === null) await provider.removeItem(backup.key);
+          else await provider.setItem(backup.key, backup.value);
+          this.storageBackups.delete(command.backupId);
           response = {
             kind: 'storage-result',
             requestId: command.requestId,
@@ -653,11 +781,29 @@ export class DevToolClient {
       operation: command.operation,
       ...(command.key === undefined ? {} : { key: command.key }),
       success: response.success,
-      mutation: command.operation === 'set' || command.operation === 'delete',
+      mutation: ['set', 'delete', 'restore'].includes(command.operation),
       duration: Math.max(0, (globalThis.performance?.now?.() ?? Date.now()) - startedAt),
       ...(response.error ? { error: response.error } : {}),
     };
     this.track({ category: 'storage', type: `storage.${command.operation}`, payload });
+  }
+
+  private async backupStorageValue(
+    provider: RegisteredStorageProvider,
+    key: string,
+  ): Promise<string> {
+    const backupId = createId('storage-backup');
+    this.storageBackups.set(backupId, {
+      providerId: provider.id,
+      key,
+      value: await provider.getItem(key),
+    });
+    while (this.storageBackups.size > 100) {
+      const oldest = this.storageBackups.keys().next().value as string | undefined;
+      if (oldest === undefined) break;
+      this.storageBackups.delete(oldest);
+    }
+    return backupId;
   }
 
   private sanitizeStorageValue(value: string | null): string | null {
@@ -707,7 +853,11 @@ export class DevToolClient {
     if (this.diagnosticsTimer) clearInterval(this.diagnosticsTimer);
     this.diagnosticsTimer = undefined;
     this.socket = undefined;
-    if (this.manuallyClosed || !this.config.reconnect) return;
+    if (this.manuallyClosed || !this.config.reconnect) {
+      this.setConnectionState('disconnected');
+      return;
+    }
+    this.setConnectionState('reconnecting');
     this.reconnectAttempts += 1;
     const delay = Math.min(
       this.config.reconnectBaseDelayMs * 2 ** this.reconnectAttempt++,
@@ -749,6 +899,28 @@ export class DevToolClient {
     } catch {
       this.handleClose();
     }
+  }
+
+  private setConnectionState(state: ClientConnectionState): void {
+    if (this.connectionState === state) return;
+    this.connectionState = state;
+    this.config.onConnectionStateChange?.(state);
+    for (const listener of this.connectionListeners) listener(state);
+  }
+
+  private drop(input: TrackEventInput, reason: DroppedEventReason): void {
+    this.droppedEvents += 1;
+    this.notifyDrop(input, reason);
+    this.reportDiagnostics();
+  }
+
+  private notifyDrop(input: TrackEventInput, reason: DroppedEventReason): void {
+    this.config.onDroppedEvent?.({
+      reason,
+      category: input.category,
+      type: input.type,
+      totalDroppedEvents: this.droppedEvents,
+    });
   }
 }
 

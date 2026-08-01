@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Integration help
+    url: https://github.com/maahibhama/PulseRN/discussions
+    about: Ask setup and usage questions in Discussions.
+  - name: Security report
+    url: https://github.com/maahibhama/PulseRN/security/advisories/new
+    about: Privately report a vulnerability.

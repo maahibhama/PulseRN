@@ -151,6 +151,37 @@ export interface StorageRequestInput {
   value?: string;
   cursor?: string;
   limit?: number;
+  backupId?: string;
+}
+
+export interface StorageAuditRecord {
+  id: string;
+  connectionId: string;
+  providerId: string;
+  key: string;
+  operation: 'set' | 'delete' | 'restore';
+  success: boolean;
+  createdAt: number;
+  backupId?: string;
+  error?: string;
+}
+
+export interface StorageSnapshotRecord {
+  id: string;
+  connectionId: string;
+  providerId: string;
+  key: string;
+  value: string;
+  valueType: 'string' | 'number' | 'boolean' | 'json' | 'binary' | 'unknown';
+  valueSize: number;
+  createdAt: number;
+}
+
+export interface StorageExportResult {
+  canceled: boolean;
+  filePath?: string;
+  exported: number;
+  excluded: number;
 }
 
 export interface AppSettings {
@@ -163,6 +194,20 @@ export interface AppSettings {
   tlsEnabled: boolean;
   eventRetentionDays: number;
   maxStoredEvents: number;
+  consoleCaptureLimit: number;
+  networkBodyCaptureBytes: number;
+  diagnosticsIntervalMs: number;
+  redactionFields: string[];
+  performanceFpsThreshold: number;
+  performanceStallThresholdMs: number;
+  performanceScreenThresholdMs: number;
+  performanceNetworkThresholdMs: number;
+  performanceMemoryGrowthMb: number;
+  pairingCodeLifetimeMinutes: number;
+  pairingRetryLimit: number;
+  updateChannel: 'stable' | 'beta';
+  motion: 'system' | 'reduced' | 'full';
+  onboardingDismissed: boolean;
   checkForUpdatesAutomatically: boolean;
   launchAtLogin: boolean;
   keepRunningInBackground: boolean;
@@ -213,6 +258,7 @@ export interface DebuggerSource {
   name: string;
   internal: boolean;
   original: boolean;
+  group?: string;
 }
 
 export interface DebuggerLocation {
@@ -226,6 +272,9 @@ export interface DebuggerBreakpoint extends DebuggerLocation {
   appId?: string;
   enabled: boolean;
   condition?: string;
+  hitCondition?: number;
+  logMessage?: string;
+  hitCount?: number;
   verified: boolean;
   error?: string;
 }
@@ -263,7 +312,14 @@ export interface DebuggerWatch {
 }
 
 export interface DebuggerState {
-  status: 'disconnected' | 'discovering' | 'connecting' | 'connected' | 'paused' | 'error';
+  status:
+    | 'disconnected'
+    | 'discovering'
+    | 'connecting'
+    | 'reconnecting'
+    | 'connected'
+    | 'paused'
+    | 'error';
   targets: DebuggerTarget[];
   activeTargetId?: string;
   sources: DebuggerSource[];
@@ -272,12 +328,21 @@ export interface DebuggerState {
   selectedCallFrameId?: string;
   watches: DebuggerWatch[];
   pauseOnExceptions: 'none' | 'uncaught' | 'all';
+  blackboxInternal: boolean;
+  capabilities: {
+    asyncStacks: boolean;
+    pauseOnExceptions: boolean;
+    blackboxing: boolean;
+    logpoints: boolean;
+  };
   pauseReason?: string;
   error?: string;
 }
 
 export interface AddBreakpointInput extends DebuggerLocation {
   condition?: string;
+  hitCondition?: number;
+  logMessage?: string;
 }
 
 export interface PulseRNDesktopApi {
@@ -311,6 +376,17 @@ export interface PulseRNDesktopApi {
   runDatabaseMaintenance(): Promise<DatabaseMaintenanceReport>;
   clearStoredEvents(): Promise<DatabaseMaintenanceReport>;
   requestStorage(input: StorageRequestInput): Promise<StorageResult>;
+  listStorageAudit(): Promise<StorageAuditRecord[]>;
+  createStorageSnapshot(input: {
+    connectionId: string;
+    providerId: string;
+    key: string;
+  }): Promise<StorageSnapshotRecord>;
+  listStorageSnapshots(providerId?: string, key?: string): Promise<StorageSnapshotRecord[]>;
+  deleteStorageSnapshot(id: string): Promise<boolean>;
+  exportStorageValues(
+    items: { connectionId: string; providerId: string; key: string }[],
+  ): Promise<StorageExportResult>;
   getSettings(): Promise<AppSettings>;
   updateSettings(patch: Partial<AppSettings>): Promise<AppSettings>;
   onSettings(listener: (settings: AppSettings) => void): () => void;
@@ -343,4 +419,5 @@ export interface PulseRNDesktopApi {
   removeDebuggerWatch(id: string): Promise<DebuggerState>;
   evaluateDebuggerExpression(expression: string): Promise<DebuggerRemoteValue>;
   setPauseOnExceptions(mode: 'none' | 'uncaught' | 'all'): Promise<DebuggerState>;
+  setDebuggerBlackboxInternal(enabled: boolean): Promise<DebuggerState>;
 }

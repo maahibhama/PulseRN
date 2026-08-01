@@ -22,8 +22,34 @@ export interface DesktopUpdaterAdapter extends EventEmitter {
 interface UpdateManagerOptions {
   enabled: boolean;
   currentVersion: string;
+  channel?: 'stable' | 'beta';
   disabledReason?: string;
   onState(state: DesktopUpdateState): void;
+}
+
+function parseVersion(version: string): { core: number[]; prerelease: string[] } | undefined {
+  const match = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/.exec(version);
+  if (!match) return undefined;
+  return {
+    core: [Number(match[1]), Number(match[2]), Number(match[3])],
+    prerelease: match[4]?.split('.') ?? [],
+  };
+}
+
+function compareVersions(left: string, right: string): number | undefined {
+  const a = parseVersion(left);
+  const b = parseVersion(right);
+  if (!a || !b) return undefined;
+  for (let index = 0; index < 3; index += 1) {
+    const difference = (a.core[index] ?? 0) - (b.core[index] ?? 0);
+    if (difference !== 0) return difference;
+  }
+  if (a.prerelease.length === 0 || b.prerelease.length === 0) {
+    return a.prerelease.length === b.prerelease.length ? 0 : a.prerelease.length === 0 ? 1 : -1;
+  }
+  return a.prerelease.join('.').localeCompare(b.prerelease.join('.'), undefined, {
+    numeric: true,
+  });
 }
 
 function versionFrom(value: UpdateInfo): string | undefined {
@@ -38,11 +64,15 @@ function errorMessage(error: unknown, fallback: string): string {
 
 export class UpdateManager {
   private state: DesktopUpdateState;
+  private channel: 'stable' | 'beta';
+  private highestAcceptedVersion: string;
 
   constructor(
     private readonly updater: DesktopUpdaterAdapter,
     private readonly options: UpdateManagerOptions,
   ) {
+    this.channel = options.channel ?? (options.currentVersion.includes('-') ? 'beta' : 'stable');
+    this.highestAcceptedVersion = options.currentVersion;
     this.state = options.enabled
       ? {
           enabled: true,
@@ -57,17 +87,41 @@ export class UpdateManager {
         };
     updater.autoDownload = false;
     updater.autoInstallOnAppQuit = false;
-    updater.allowPrerelease = options.currentVersion.includes('-');
+    updater.allowPrerelease = this.channel === 'beta';
     if (!options.enabled) return;
     updater.on('checking-for-update', () => this.update({ status: 'checking' }));
-    updater.on('update-available', (info: UpdateInfo) =>
+    updater.on('update-available', (info: UpdateInfo) => {
+      const version = versionFrom(info);
+      const currentComparison = version
+        ? compareVersions(version, this.options.currentVersion)
+        : undefined;
+      const highestComparison = version
+        ? compareVersions(version, this.highestAcceptedVersion)
+        : undefined;
+      if (
+        !version ||
+        currentComparison === undefined ||
+        currentComparison <= 0 ||
+        highestComparison === undefined ||
+        highestComparison < 0 ||
+        (this.channel === 'stable' && version.includes('-'))
+      ) {
+        this.update({
+          status: 'error',
+          availableVersion: undefined,
+          progress: undefined,
+          message: 'Rejected update metadata with an invalid channel, version, or rollback.',
+        });
+        return;
+      }
+      this.highestAcceptedVersion = version;
       this.update({
         status: 'available',
-        availableVersion: versionFrom(info),
+        availableVersion: version,
         progress: undefined,
         message: undefined,
-      }),
-    );
+      });
+    });
     updater.on('update-not-available', () =>
       this.update({
         status: 'up-to-date',
@@ -83,14 +137,23 @@ export class UpdateManager {
           : undefined;
       this.update({ status: 'downloading', progress: percent });
     });
-    updater.on('update-downloaded', (info: UpdateInfo) =>
+    updater.on('update-downloaded', (info: UpdateInfo) => {
+      const version = versionFrom(info) ?? this.state.availableVersion;
+      if (!version || version !== this.state.availableVersion) {
+        this.update({
+          status: 'error',
+          progress: undefined,
+          message: 'Downloaded update metadata does not match the approved version.',
+        });
+        return;
+      }
       this.update({
         status: 'downloaded',
-        availableVersion: versionFrom(info) ?? this.state.availableVersion,
+        availableVersion: version,
         progress: 100,
         message: 'The update is ready to install.',
-      }),
-    );
+      });
+    });
     updater.on('update-cancelled', () =>
       this.update({ status: 'idle', progress: undefined, message: 'Update download cancelled.' }),
     );
@@ -105,6 +168,24 @@ export class UpdateManager {
 
   snapshot(): DesktopUpdateState {
     return { ...this.state };
+  }
+
+  setChannel(channel: 'stable' | 'beta'): DesktopUpdateState {
+    this.channel = channel;
+    this.updater.allowPrerelease = channel === 'beta';
+    if (
+      channel === 'stable' &&
+      this.state.availableVersion?.includes('-') &&
+      ['available', 'downloading', 'downloaded'].includes(this.state.status)
+    ) {
+      this.update({
+        status: 'idle',
+        availableVersion: undefined,
+        progress: undefined,
+        message: 'The prerelease update was removed after switching to the stable channel.',
+      });
+    }
+    return this.snapshot();
   }
 
   async check(): Promise<DesktopUpdateState> {
