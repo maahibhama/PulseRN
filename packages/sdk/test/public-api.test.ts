@@ -25,9 +25,16 @@ describe('single-entry SDK API', () => {
   it('creates an unconnected client without native integration dependencies', () => {
     const client = createPulseRNClient({ appName: 'PublicApiTest' });
     expect(client.getStats()).toEqual({
+      clockOffsetMs: 0,
       connected: false,
       droppedEvents: 0,
+      oversizedEvents: 0,
+      queueOverflowEvents: 0,
       queuedEvents: 0,
+      reconnectAttempts: 0,
+      sentBatches: 0,
+      sentEvents: 0,
+      socketBufferedBytes: 0,
     });
     client.disconnect();
   });

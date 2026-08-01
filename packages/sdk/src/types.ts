@@ -18,6 +18,9 @@ export interface DevToolConfig {
   reconnect?: boolean;
   reconnectBaseDelayMs?: number;
   reconnectMaxDelayMs?: number;
+  diagnosticsIntervalMs?: number;
+  maxSocketBufferBytes?: number;
+  onDiagnostics?: (diagnostics: ClientDiagnostics) => void;
   allowInProduction?: boolean;
   isDevelopment?: boolean;
   enableConsole?: boolean;
@@ -39,6 +42,20 @@ export interface DevToolConfig {
   };
 }
 
+export interface ClientDiagnostics {
+  connected: boolean;
+  queuedEvents: number;
+  droppedEvents: number;
+  oversizedEvents: number;
+  queueOverflowEvents: number;
+  sentEvents: number;
+  sentBatches: number;
+  reconnectAttempts: number;
+  socketBufferedBytes: number;
+  clockOffsetMs: number;
+  lastEventAt?: number;
+}
+
 export interface TrackEventInput {
   category: DevToolEventCategory;
   type: string;
@@ -56,6 +73,7 @@ export interface CaptureErrorOptions {
 
 export interface WebSocketLike {
   readonly readyState: number;
+  readonly bufferedAmount?: number;
   onopen: (() => void) | null;
   onmessage: ((event: { data: unknown }) => void) | null;
   onclose: (() => void) | null;

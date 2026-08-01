@@ -3,9 +3,10 @@ import { PROTOCOL_VERSION } from '@pulse-rn/protocol';
 import { DevToolClient } from '../src/client.js';
 import type { WebSocketLike } from '../src/types.js';
 
-function createSocket(): WebSocketLike & { sent: string[] } {
+function createSocket(): WebSocketLike & { bufferedAmount: number; sent: string[] } {
   return {
     readyState: 1,
+    bufferedAmount: 0,
     sent: [],
     onopen: null,
     onmessage: null,
@@ -63,8 +64,62 @@ describe('DevToolClient', () => {
     for (let index = 0; index < 3; index += 1) {
       client.track({ category: 'system', type: 'test', payload: { index } });
     }
-    expect(client.getStats()).toMatchObject({ queuedEvents: 2, droppedEvents: 1 });
+    expect(client.getStats()).toMatchObject({
+      queuedEvents: 2,
+      droppedEvents: 1,
+      queueOverflowEvents: 1,
+      oversizedEvents: 0,
+    });
     client.disconnect();
+  });
+
+  it('negotiates health reports and preserves queued events during socket backpressure', () => {
+    vi.useFakeTimers();
+    const socket = createSocket();
+    const onDiagnostics = vi.fn();
+    const client = new DevToolClient(
+      {
+        appName: 'Example',
+        batchIntervalMs: 10,
+        batchSize: 1,
+        diagnosticsIntervalMs: 250,
+        isDevelopment: true,
+        maxSocketBufferBytes: 16 * 1024,
+        onDiagnostics,
+      },
+      () => socket,
+    ).connect();
+    socket.onopen?.();
+    socket.onmessage?.({
+      data: JSON.stringify({
+        kind: 'server-hello',
+        accepted: true,
+        protocolVersion: PROTOCOL_VERSION,
+        connectionId: 'connection-1',
+        serverTime: Date.now(),
+        capabilities: ['client-health'],
+      }),
+    });
+    expect(JSON.parse(socket.sent[1] ?? '{}')).toMatchObject({
+      kind: 'client-health',
+      queuedEvents: 0,
+    });
+
+    socket.bufferedAmount = 32 * 1024;
+    client.track({ category: 'system', type: 'test', payload: { value: 1 } });
+    expect(client.getStats()).toMatchObject({ queuedEvents: 1, sentEvents: 0 });
+    expect(socket.sent.some((message) => JSON.parse(message).kind === 'event-batch')).toBe(false);
+
+    socket.bufferedAmount = 0;
+    vi.advanceTimersByTime(11);
+    expect(client.getStats()).toMatchObject({
+      queuedEvents: 0,
+      sentEvents: 1,
+      sentBatches: 1,
+    });
+    expect(onDiagnostics).toHaveBeenCalled();
+    client.disconnect();
+    vi.useRealTimers();
   });
 
   it('handles storage requests and redacts structured values', async () => {

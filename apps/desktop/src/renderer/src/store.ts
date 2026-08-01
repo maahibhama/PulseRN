@@ -7,6 +7,7 @@ interface DesktopState extends DesktopSnapshot {
   selectedEventId?: string;
   settings: AppSettings;
   setSnapshot(snapshot: DesktopSnapshot): void;
+  setDevices(devices: ConnectedDevice[]): void;
   setSettings(settings: AppSettings): void;
   selectEvent(id: string): void;
 }
@@ -19,10 +20,13 @@ export const useDesktopStore = create<DesktopState>((set) => ({
     density: 'comfortable',
     timelineOrder: 'newest',
     metroPort: 8081,
+    eventRetentionDays: 30,
+    maxStoredEvents: 100_000,
     launchAtLogin: false,
     keepRunningInBackground: true,
   },
   setSnapshot: (snapshot) => set(snapshot),
+  setDevices: (devices) => set({ devices }),
   setSettings: (settings) => set({ settings }),
   selectEvent: (selectedEventId) => set({ selectedEventId }),
 }));

@@ -166,4 +166,74 @@ describe('EventDatabase', () => {
     expect(database.listSessions()[0]?.eventCount).toBe(2);
     database.close();
   });
+
+  it('filters a page by multiple inspector categories', () => {
+    const database = new EventDatabase(databasePath());
+    database.insertMany([
+      event(1),
+      event(2, {
+        category: 'error',
+        type: 'error.captured',
+        payload: {
+          source: 'manual',
+          name: 'Error',
+          message: 'Example',
+          fatal: false,
+          context: [],
+        },
+      }),
+      event(3),
+    ]);
+
+    const page = database.query({ categories: ['console', 'error'], order: 'oldest' });
+
+    expect(page.events.map((entry) => entry.category)).toEqual(['console', 'error', 'console']);
+    expect(page.total).toBe(3);
+    database.close();
+  });
+
+  it('removes expired and overflow events while repairing session counts', () => {
+    const database = new EventDatabase(databasePath());
+    database.recordSession({
+      connectionId: 'connection-1',
+      sessionId: 'session-1',
+      deviceId: 'device-1',
+      appId: 'app-1',
+      connectedAt: 1_000,
+      device: {
+        name: 'iPhone',
+        appName: 'Example',
+        platform: 'ios',
+        sdkVersion: '0.2.1',
+      },
+    });
+    const now = 40 * 24 * 60 * 60 * 1_000;
+    database.insertMany([
+      event(0, { timestamp: 1 }),
+      ...Array.from({ length: 1_005 }, (_, index) =>
+        event(index + 1, { timestamp: now - 1_000 + index }),
+      ),
+    ]);
+
+    const report = database.maintain({ maxAgeDays: 30, maxEvents: 1_000 }, now);
+
+    expect(report).toMatchObject({
+      integrity: 'ok',
+      removedExpired: 1,
+      removedOverflow: 5,
+      retainedEvents: 1_000,
+    });
+    expect(database.listSessions()[0]?.eventCount).toBe(1_000);
+    expect(database.query({ order: 'oldest', limit: 1 }).events[0]?.id).toBe('event-000006');
+    database.close();
+  });
+
+  it('clears persisted events and session counts', () => {
+    const database = new EventDatabase(databasePath());
+    database.insertMany([event(1), event(2)]);
+
+    expect(database.clear().retainedEvents).toBe(0);
+    expect(database.query().total).toBe(0);
+    database.close();
+  });
 });

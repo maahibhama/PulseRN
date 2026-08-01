@@ -32,7 +32,27 @@ if (__DEV__) {
 
 Android Emulator maps the host loopback address to `10.0.2.2`. The iOS simulator can use `127.0.0.1`. Physical devices require a reachable LAN binding, which is intentionally disabled pending authenticated remote connections.
 
-`allowInProduction` defaults to false. Leave it disabled. Events created offline remain in a bounded queue; the oldest event is dropped when the queue is full, and the dropped count is available through `client.getStats()`.
+`allowInProduction` defaults to false. Leave it disabled. Events created offline remain in a
+bounded queue; the oldest event is dropped when the queue is full. PulseRN also pauses dequeueing
+while the native WebSocket send buffer is saturated.
+
+Inspect or subscribe to local transport diagnostics:
+
+```ts
+const client = ReactNativeDevTool.configure({
+  appName: 'MyApp',
+  onDiagnostics(diagnostics) {
+    // Avoid logging this through an intercepted console in a real application.
+    updateDeveloperStatus(diagnostics);
+  },
+});
+
+client.getStats();
+```
+
+Diagnostics distinguish oversized-payload drops from queue-overflow drops and include queue depth,
+sent events/batches, reconnect attempts, socket-buffer bytes, and approximate desktop clock offset.
+`diagnosticsIntervalMs` defaults to 2 seconds. `maxSocketBufferBytes` defaults to 1 MiB.
 
 ## Console capture
 

@@ -1,4 +1,4 @@
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme } from 'electron';
 import { eventCategorySchema, storageOperationSchema } from '@pulse-rn/protocol';
 import { z } from 'zod';
@@ -9,12 +9,25 @@ import { DevToolWebSocketServer } from './websocket-server.js';
 import { DebuggerManager } from './debugger-manager.js';
 
 const SNAPSHOT_CHANNEL = 'pulse-rn:snapshot';
+const DEVICES_CHANNEL = 'pulse-rn:devices';
 const EVENTS_CHANNEL = 'pulse-rn:events';
 const STORAGE_CHANNEL = 'pulse-rn:storage';
 const SETTINGS_CHANNEL = 'pulse-rn:settings';
 const DEBUGGER_CHANNEL = 'pulse-rn:debugger';
 const DARK_APP_ICON = join(__dirname, '../../resources/pulse-rn-app-icon-dark.png');
 const LIGHT_APP_ICON = join(__dirname, '../../resources/pulse-rn-app-icon-light.png');
+const e2eUserDataDirectory = process.env['PULSE_RN_E2E_USER_DATA_DIR'];
+if (!app.isPackaged && e2eUserDataDirectory && isAbsolute(e2eUserDataDirectory)) {
+  app.setPath('userData', e2eUserDataDirectory);
+}
+const configuredServerPort = Number(process.env['PULSE_RN_E2E_SERVER_PORT']);
+const serverPort =
+  !app.isPackaged &&
+  Number.isInteger(configuredServerPort) &&
+  configuredServerPort >= 1_024 &&
+  configuredServerPort <= 65_535
+    ? configuredServerPort
+    : 9090;
 const storageRequestSchema = z.object({
   connectionId: z.string().trim().min(1).max(256),
   providerId: z.string().trim().min(1).max(256),
@@ -30,6 +43,7 @@ const eventCursorSchema = z.object({
 const eventQuerySchema = z
   .object({
     category: eventCategorySchema.optional(),
+    categories: z.array(eventCategorySchema).min(1).max(8).optional(),
     cursor: eventCursorSchema.optional(),
     deviceId: z.string().trim().min(1).max(256).optional(),
     limit: z.number().int().min(1).max(500).optional(),
@@ -41,6 +55,8 @@ const eventRequestSchema = z.discriminatedUnion('operation', [
   z.object({ operation: z.literal('query'), input: eventQuerySchema }),
   z.object({ operation: z.literal('find'), id: z.string().trim().min(1).max(256) }),
   z.object({ operation: z.literal('sessions') }),
+  z.object({ operation: z.literal('maintain') }),
+  z.object({ operation: z.literal('clear') }),
 ]);
 const sessions = new SessionManager();
 let database: EventDatabase | undefined;
@@ -49,6 +65,23 @@ let window: BrowserWindow | undefined;
 let settingsStore: SettingsStore | undefined;
 let debuggerManager: DebuggerManager | undefined;
 let isQuitting = false;
+let lastDatabaseMaintenanceAt = 0;
+
+function retentionPolicy() {
+  const settings = settingsStore?.get();
+  return {
+    maxAgeDays: settings?.eventRetentionDays ?? 30,
+    maxEvents: settings?.maxStoredEvents ?? 100_000,
+  };
+}
+
+function maintainDatabase(force = false) {
+  if (!database) throw new Error('PulseRN database is not ready.');
+  const now = Date.now();
+  if (!force && now - lastDatabaseMaintenanceAt < 60_000) return undefined;
+  lastDatabaseMaintenanceAt = now;
+  return database.maintain(retentionPolicy(), now);
+}
 
 function appIconPath(theme: 'system' | 'dark' | 'light'): string {
   const resolvedTheme =
@@ -121,9 +154,10 @@ app.whenReady().then(async () => {
   applyAppIcon(initialSettings.theme);
   nativeTheme.on('updated', handleNativeThemeUpdated);
   database = new EventDatabase(join(app.getPath('userData'), 'pulse-rn.sqlite'));
+  maintainDatabase(true);
   sessions.hydrate(database.recent());
   ipcMain.handle(SNAPSHOT_CHANNEL, () => sessions.snapshot());
-  ipcMain.handle(EVENTS_CHANNEL, (_event, value: unknown) => {
+  ipcMain.handle(EVENTS_CHANNEL, async (_event, value: unknown) => {
     if (!database) throw new Error('PulseRN database is not ready.');
     const input = eventRequestSchema.parse(value);
     switch (input.operation) {
@@ -133,6 +167,28 @@ app.whenReady().then(async () => {
         return database.findById(input.id);
       case 'sessions':
         return database.listSessions();
+      case 'maintain':
+        return maintainDatabase(true);
+      case 'clear': {
+        const options: Electron.MessageBoxOptions = {
+          type: 'warning',
+          title: 'Clear stored debugger events',
+          message: 'Delete every event stored by PulseRN?',
+          detail: 'This removes local debugger history from all sessions and cannot be undone.',
+          buttons: ['Cancel', 'Delete all events'],
+          defaultId: 0,
+          cancelId: 0,
+          noLink: true,
+        };
+        const confirmation = window
+          ? await dialog.showMessageBox(window, options)
+          : await dialog.showMessageBox(options);
+        if (confirmation.response !== 1) throw new Error('Event deletion cancelled.');
+        const report = database.clear();
+        sessions.hydrate([]);
+        publish();
+        return report;
+      }
     }
   });
   ipcMain.handle(STORAGE_CHANNEL, async (_event, value: unknown) => {
@@ -166,6 +222,7 @@ app.whenReady().then(async () => {
     nativeTheme.themeSource = settings.theme;
     applyAppIcon(settings.theme);
     if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: settings.launchAtLogin });
+    maintainDatabase(true);
     if (window && !window.isDestroyed()) window.webContents.send(SETTINGS_CHANNEL, settings);
     return settings;
   });
@@ -245,7 +302,7 @@ app.whenReady().then(async () => {
         return debuggerManager.setPauseOnExceptions(input.mode);
     }
   });
-  server = new DevToolWebSocketServer(9090, {
+  server = new DevToolWebSocketServer(serverPort, {
     onConnected(device) {
       database?.recordSession(device);
       sessions.connect(device);
@@ -257,8 +314,15 @@ app.whenReady().then(async () => {
     },
     onEvents(events) {
       database?.insertMany(events);
+      maintainDatabase();
       sessions.append(events);
       publish();
+    },
+    onHealth(connectionId, health) {
+      sessions.updateHealth(connectionId, health);
+      if (window && !window.isDestroyed()) {
+        window.webContents.send(DEVICES_CHANNEL, sessions.snapshot().devices);
+      }
     },
     onInvalidMessage(error) {
       console.warn('[PulseRN] Rejected invalid client message:', error);

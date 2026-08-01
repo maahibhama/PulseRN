@@ -12,11 +12,26 @@ export interface EventCursor {
 
 export interface EventQuery {
   category?: DevToolEventEnvelope['category'];
+  categories?: DevToolEventEnvelope['category'][];
   cursor?: EventCursor;
   deviceId?: string;
   limit?: number;
   order?: 'newest' | 'oldest';
   sessionId?: string;
+}
+
+export interface RetentionPolicy {
+  maxAgeDays: number;
+  maxEvents: number;
+}
+
+export interface DatabaseMaintenanceReport {
+  integrity: 'ok' | 'recovered';
+  removedExpired: number;
+  removedOverflow: number;
+  removedInvalid: number;
+  retainedEvents: number;
+  completedAt: number;
 }
 
 export interface EventPage {
@@ -217,6 +232,11 @@ export class EventDatabase {
       filters.push('category = ?');
       filterValues.push(input.category);
     }
+    if (input.categories?.length) {
+      const categories = [...new Set(input.categories)];
+      filters.push(`category IN (${categories.map(() => '?').join(', ')})`);
+      filterValues.push(...categories);
+    }
     const baseWhere = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
     const cursorOperator = order === 'newest' ? '<' : '>';
     const cursorFilter = input.cursor
@@ -301,6 +321,81 @@ export class EventDatabase {
     } catch {
       return undefined;
     }
+  }
+
+  maintain(policy: RetentionPolicy, now = Date.now()): DatabaseMaintenanceReport {
+    const maxAgeDays = Math.max(1, Math.min(Math.trunc(policy.maxAgeDays), 365));
+    const maxEvents = Math.max(1_000, Math.min(Math.trunc(policy.maxEvents), 1_000_000));
+    const cutoff = now - maxAgeDays * 24 * 60 * 60 * 1_000;
+    this.database.exec('BEGIN IMMEDIATE;');
+    try {
+      const invalid = this.database
+        .prepare('DELETE FROM events WHERE NOT json_valid(envelope_json)')
+        .run().changes;
+      const expired = this.database
+        .prepare('DELETE FROM events WHERE timestamp < ?')
+        .run(cutoff).changes;
+      const overflow = this.database
+        .prepare(
+          `
+            DELETE FROM events
+            WHERE id IN (
+              SELECT id FROM events
+              ORDER BY timestamp DESC, sequence DESC, id DESC
+              LIMIT -1 OFFSET ?
+            )
+          `,
+        )
+        .run(maxEvents).changes;
+      this.refreshSessionCounts();
+      const retained = (
+        this.database.prepare('SELECT COUNT(*) AS count FROM events').get() as unknown as {
+          count: number;
+        }
+      ).count;
+      this.database.exec('COMMIT;');
+      return {
+        integrity: invalid > 0 ? 'recovered' : 'ok',
+        removedExpired: Number(expired),
+        removedOverflow: Number(overflow),
+        removedInvalid: Number(invalid),
+        retainedEvents: retained,
+        completedAt: now,
+      };
+    } catch (error) {
+      this.database.exec('ROLLBACK;');
+      throw error;
+    }
+  }
+
+  clear(): DatabaseMaintenanceReport {
+    const completedAt = Date.now();
+    this.database.exec('BEGIN IMMEDIATE;');
+    try {
+      const removed = this.database.prepare('DELETE FROM events').run().changes;
+      this.refreshSessionCounts();
+      this.database.exec('COMMIT;');
+      return {
+        integrity: 'ok',
+        removedExpired: 0,
+        removedOverflow: Number(removed),
+        removedInvalid: 0,
+        retainedEvents: 0,
+        completedAt,
+      };
+    } catch (error) {
+      this.database.exec('ROLLBACK;');
+      throw error;
+    }
+  }
+
+  private refreshSessionCounts(): void {
+    this.database.exec(`
+      UPDATE sessions
+      SET event_count = (
+        SELECT COUNT(*) FROM events WHERE events.session_id = sessions.session_id
+      );
+    `);
   }
 
   listSessions(limit = 100): StoredSession[] {

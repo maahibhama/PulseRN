@@ -1,4 +1,4 @@
-import type { DevToolEventEnvelope } from '@pulse-rn/protocol';
+import type { DevToolEventCategory, DevToolEventEnvelope } from '@pulse-rn/protocol';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ConsolePanel } from './ConsolePanel.js';
 import { DebuggerPanel } from './DebuggerPanel.js';
@@ -13,6 +13,7 @@ import { StoragePanel } from './StoragePanel.js';
 import darkAppIcon from '../../../resources/pulse-rn-app-icon-dark.png';
 import lightAppIcon from '../../../resources/pulse-rn-app-icon-light.png';
 import { deviceLabel, findSelectedEvent, useDesktopStore } from './store.js';
+import { useInspectorEvents } from './useInspectorEvents.js';
 
 type ViewName =
   | 'Timeline'
@@ -38,6 +39,15 @@ const navItems: { name: ViewName; icon: string; available: boolean }[] = [
   { name: 'Debugger', icon: '⏵', available: true },
   { name: 'Settings', icon: '⚙', available: true },
 ];
+
+const inspectorCategories: Partial<Record<ViewName, DevToolEventCategory[]>> = {
+  Console: ['console'],
+  Network: ['network'],
+  Redux: ['redux'],
+  Navigation: ['navigation'],
+  Performance: ['performance', 'network', 'redux', 'navigation'],
+  Errors: ['error'],
+};
 
 function formatTime(timestamp: number): string {
   return new Date(timestamp).toLocaleTimeString([], {
@@ -247,8 +257,16 @@ function UpcomingPanel({ view }: { view: ViewName }) {
 }
 
 export function App() {
-  const { devices, events, selectedEventId, settings, setSnapshot, setSettings, selectEvent } =
-    useDesktopStore();
+  const {
+    devices,
+    events,
+    selectedEventId,
+    settings,
+    setDevices,
+    setSnapshot,
+    setSettings,
+    selectEvent,
+  } = useDesktopStore();
   const [activeView, setActiveView] = useState<ViewName>('Timeline');
   const [selectedPagedEvent, setSelectedPagedEvent] = useState<DevToolEventEnvelope>();
   const [systemTheme, setSystemTheme] = useState<'dark' | 'light'>(() =>
@@ -259,12 +277,29 @@ export function App() {
       ? selectedPagedEvent
       : findSelectedEvent(events, selectedEventId);
   const desktopApi = window.pulseRN;
+  const activeInspectorCategories = inspectorCategories[activeView];
+  const latestEvent = events.at(-1);
+  const inspectorPage = useInspectorEvents(
+    activeInspectorCategories,
+    latestEvent && activeInspectorCategories?.includes(latestEvent.category)
+      ? latestEvent.id
+      : undefined,
+  );
+  const selectInspectorEvent = (id: string) => {
+    setSelectedPagedEvent(inspectorPage.events.find((event) => event.id === id));
+    selectEvent(id);
+  };
 
   useEffect(() => {
     if (!desktopApi) return;
     void desktopApi.getSnapshot().then(setSnapshot);
     return desktopApi.onSnapshot(setSnapshot);
   }, [desktopApi, setSnapshot]);
+
+  useEffect(() => {
+    if (!desktopApi) return;
+    return desktopApi.onDevices(setDevices);
+  }, [desktopApi, setDevices]);
 
   useEffect(() => {
     if (!desktopApi) return;
@@ -280,6 +315,21 @@ export function App() {
   }, []);
 
   const resolvedTheme = settings.theme === 'system' ? systemTheme : settings.theme;
+  const queuedEvents = devices.reduce(
+    (total, device) => total + (device.health?.queuedEvents ?? 0),
+    0,
+  );
+  const droppedEvents = devices.reduce(
+    (total, device) => total + (device.health?.droppedEvents ?? 0),
+    0,
+  );
+  const healthReports = devices.filter((device) => device.health !== undefined).length;
+  const connectionTitle =
+    devices.length === 0
+      ? 'Waiting for a PulseRN SDK connection.'
+      : healthReports === 0
+        ? 'Connected. Upgrade the SDK to receive queue and drop diagnostics.'
+        : `${queuedEvents} queued · ${droppedEvents} dropped across ${healthReports} reporting device${healthReports === 1 ? '' : 's'}.`;
   useEffect(() => {
     document.documentElement.dataset['theme'] = resolvedTheme;
     document.documentElement.dataset['density'] = settings.density;
@@ -304,13 +354,21 @@ export function App() {
           <img alt="" src={resolvedTheme === 'light' ? lightAppIcon : darkAppIcon} />
           <span>PulseRN</span>
         </div>
-        <div className="device-pill">
+        <div
+          className={`device-pill ${droppedEvents > 0 ? 'degraded' : ''}`}
+          title={connectionTitle}
+        >
           <span className={devices.length ? 'status online' : 'status'} />
           {devices.length === 0
             ? 'Waiting for device'
             : devices.length === 1
               ? deviceLabel(devices[0]!)
               : `${devices.length} devices connected`}
+          {healthReports > 0 && (
+            <small>
+              {queuedEvents} queued · {droppedEvents} dropped
+            </small>
+          )}
         </div>
         <div className="phase-pill">Phase 9 · JavaScript Debugger</div>
       </header>
@@ -346,23 +404,43 @@ export function App() {
           }}
         />
       ) : activeView === 'Console' ? (
-        <ConsolePanel events={events} selectedEventId={selectedEventId} onSelect={selectEvent} />
+        <ConsolePanel
+          events={inspectorPage.events}
+          selectedEventId={selectedEventId}
+          onSelect={selectInspectorEvent}
+        />
       ) : activeView === 'Network' ? (
-        <NetworkPanel events={events} selectedEventId={selectedEventId} onSelect={selectEvent} />
+        <NetworkPanel
+          events={inspectorPage.events}
+          selectedEventId={selectedEventId}
+          onSelect={selectInspectorEvent}
+        />
       ) : activeView === 'Redux' ? (
-        <ReduxPanel events={events} selectedEventId={selectedEventId} onSelect={selectEvent} />
+        <ReduxPanel
+          events={inspectorPage.events}
+          selectedEventId={selectedEventId}
+          onSelect={selectInspectorEvent}
+        />
       ) : activeView === 'Navigation' ? (
-        <NavigationPanel events={events} selectedEventId={selectedEventId} onSelect={selectEvent} />
+        <NavigationPanel
+          events={inspectorPage.events}
+          selectedEventId={selectedEventId}
+          onSelect={selectInspectorEvent}
+        />
       ) : activeView === 'Performance' ? (
         <PerformancePanel
-          events={events}
+          events={inspectorPage.events}
           selectedEventId={selectedEventId}
-          onSelect={selectEvent}
+          onSelect={selectInspectorEvent}
         />
       ) : activeView === 'Storage' ? (
         <StoragePanel devices={devices} />
       ) : activeView === 'Errors' ? (
-        <ErrorsPanel events={events} selectedEventId={selectedEventId} onSelect={selectEvent} />
+        <ErrorsPanel
+          events={inspectorPage.events}
+          selectedEventId={selectedEventId}
+          onSelect={selectInspectorEvent}
+        />
       ) : activeView === 'Settings' ? (
         <SettingsPanel
           resolvedTheme={resolvedTheme}
@@ -371,6 +449,24 @@ export function App() {
         />
       ) : (
         <UpcomingPanel view={activeView} />
+      )}
+      {inspectorCategories[activeView] && (
+        <div className="inspector-pagination">
+          <span>
+            {inspectorPage.events.length} of {inspectorPage.total}
+          </span>
+          {inspectorPage.error && <span className="pagination-error">{inspectorPage.error}</span>}
+          <button
+            disabled={!inspectorPage.hasMore || inspectorPage.loading}
+            onClick={() => void inspectorPage.loadMore()}
+          >
+            {inspectorPage.loading
+              ? 'Loading…'
+              : inspectorPage.hasMore
+                ? 'Load older'
+                : 'All loaded'}
+          </button>
+        </div>
       )}
       {activeView !== 'Debugger' && <EventDetails event={selected} />}
     </div>

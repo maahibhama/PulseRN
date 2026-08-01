@@ -2,7 +2,14 @@
 
 Protocol version: `1.0.0`.
 
-Clients first send `client-hello` with supported versions, stable IDs, app metadata, and device metadata. The server responds with `server-hello`. Event batches are rejected until negotiation succeeds.
+Clients first send `client-hello` with supported versions, stable IDs, app metadata, and device
+metadata. The server responds with `server-hello` and optional capabilities. Event batches are
+rejected until negotiation succeeds.
+
+Desktops advertising the `client-health` capability accept bounded `client-health` reports with
+queue depth, categorized drops, sent counts, reconnect attempts, native WebSocket buffer size, and
+approximate clock offset. New SDKs do not send these reports to older desktops that omit the
+capability.
 
 Every event contains an ID, negotiated protocol version, session/device/app IDs, wall-clock timestamp, monotonic sequence within the client session, category, type, and JSON payload. Optional `correlationId` and `parentId` fields support the future unified timeline.
 
@@ -39,6 +46,11 @@ Limits in Phase 1:
 - Event batch: 500 events
 - Default SDK event payload: 256 KiB
 - Default queue: 5,000 events
+- Default socket backpressure threshold: 1 MiB
+- Default health interval: 2 seconds
 - Handshake timeout: 5 seconds
 
 Invalid JSON or schema-invalid data is ignored and logged by Electron main; it never reaches the renderer or crashes the server.
+
+Desktop persistence is outside the device protocol. Validated preload queries accept one category or
+a bounded category list, allowing every inspector to page its retained SQLite history independently.

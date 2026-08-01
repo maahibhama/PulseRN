@@ -1,6 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { z } from 'zod';
 import {
+  clientHealthSchema,
+  deviceInfoSchema,
   eventCategorySchema,
   eventEnvelopeSchema,
   storageOperationSchema,
@@ -9,13 +11,27 @@ import {
 import type { AppSettings, DebuggerState, PulseRNDesktopApi } from './api.js';
 
 const SNAPSHOT_CHANNEL = 'pulse-rn:snapshot';
+const DEVICES_CHANNEL = 'pulse-rn:devices';
 const EVENTS_CHANNEL = 'pulse-rn:events';
 const STORAGE_CHANNEL = 'pulse-rn:storage';
 const SETTINGS_CHANNEL = 'pulse-rn:settings';
 const DEBUGGER_CHANNEL = 'pulse-rn:debugger';
+const connectedDeviceSchema = z.object({
+  connectionId: z.string(),
+  deviceId: z.string(),
+  sessionId: z.string(),
+  appId: z.string(),
+  connectedAt: z.number().finite().nonnegative(),
+  device: deviceInfoSchema,
+  health: clientHealthSchema
+    .extend({
+      receivedAt: z.number().finite().nonnegative(),
+    })
+    .optional(),
+});
 const snapshotSchema = z.object({
-  devices: z.array(z.unknown()),
-  events: z.array(z.unknown()),
+  devices: z.array(connectedDeviceSchema),
+  events: z.array(eventEnvelopeSchema),
 });
 const eventCursorSchema = z.object({
   timestamp: z.number().finite().nonnegative(),
@@ -25,6 +41,7 @@ const eventCursorSchema = z.object({
 const eventQuerySchema = z
   .object({
     category: eventCategorySchema.optional(),
+    categories: z.array(eventCategorySchema).min(1).max(8).optional(),
     cursor: eventCursorSchema.optional(),
     deviceId: z.string().trim().min(1).max(256).optional(),
     limit: z.number().int().min(1).max(500).optional(),
@@ -61,8 +78,18 @@ const settingsSchema = z.object({
   density: z.enum(['comfortable', 'compact']),
   timelineOrder: z.enum(['newest', 'oldest']),
   metroPort: z.number().int().min(1).max(65_535),
+  eventRetentionDays: z.number().int().min(1).max(365),
+  maxStoredEvents: z.number().int().min(1_000).max(1_000_000),
   launchAtLogin: z.boolean(),
   keepRunningInBackground: z.boolean(),
+});
+const databaseMaintenanceSchema = z.object({
+  integrity: z.enum(['ok', 'recovered']),
+  removedExpired: z.number().int().nonnegative(),
+  removedOverflow: z.number().int().nonnegative(),
+  removedInvalid: z.number().int().nonnegative(),
+  retainedEvents: z.number().int().nonnegative(),
+  completedAt: z.number().finite().nonnegative(),
 });
 const settingsPatchSchema = settingsSchema.partial().strict();
 const debuggerLocationSchema = z.object({
@@ -158,6 +185,14 @@ const api: PulseRNDesktopApi = {
     ipcRenderer.on(SNAPSHOT_CHANNEL, handler);
     return () => ipcRenderer.removeListener(SNAPSHOT_CHANNEL, handler);
   },
+  onDevices(listener) {
+    const handler = (_event: Electron.IpcRendererEvent, value: unknown) => {
+      const result = z.array(connectedDeviceSchema).safeParse(value);
+      if (result.success) listener(result.data);
+    };
+    ipcRenderer.on(DEVICES_CHANNEL, handler);
+    return () => ipcRenderer.removeListener(DEVICES_CHANNEL, handler);
+  },
   async queryEvents(input = {}) {
     const request = eventQuerySchema.parse(input);
     const value: unknown = await ipcRenderer.invoke(EVENTS_CHANNEL, {
@@ -178,6 +213,18 @@ const api: PulseRNDesktopApi = {
       operation: 'sessions',
     });
     return z.array(storedSessionSchema).parse(value);
+  },
+  async runDatabaseMaintenance() {
+    const value: unknown = await ipcRenderer.invoke(EVENTS_CHANNEL, {
+      operation: 'maintain',
+    });
+    return databaseMaintenanceSchema.parse(value);
+  },
+  async clearStoredEvents() {
+    const value: unknown = await ipcRenderer.invoke(EVENTS_CHANNEL, {
+      operation: 'clear',
+    });
+    return databaseMaintenanceSchema.parse(value);
   },
   async requestStorage(input) {
     const request = storageRequestSchema.parse(input);

@@ -20,6 +20,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "turbo run test",
+    "test:e2e": "pnpm --filter @pulse-rn/desktop test:e2e",
     "typecheck": "turbo run typecheck",
     "lint": "turbo run lint",
     "pack:desktop": "pnpm --filter @pulse-rn/desktop run pack",

@@ -6,6 +6,15 @@ PulseRN is a pnpm/Turborepo monorepo. The wire contract is independent of Electr
 
 Electron main is the trusted desktop boundary. It owns WebSocket connections, session state, SQLite, and operating-system integration. Preload exposes only typed snapshot reads/subscriptions. The renderer has `contextIsolation`, `sandbox`, and disabled Node integration.
 
+SQLite history is bounded independently of renderer lifetime. Main-process maintenance removes records
+outside the configured age and count limits, repairs session counts, and discards malformed JSON rows.
+It runs at startup, after retention changes, and at most once per minute while events are arriving.
+
+Transport health is an optional protocol capability. Compatible SDKs report bounded queue, drop,
+send, reconnect, clock-offset, and native WebSocket-buffer metrics. Health updates cross a dedicated
+validated IPC subscription so they do not retransmit the in-memory event projection. The SDK stops
+dequeueing batches while the native socket buffer exceeds its configured threshold.
+
 The JavaScript debugger is a separate, Electron-main-owned connection to a single Hermes runtime
 through Metro's loopback Chrome DevTools Protocol proxy. Electron validates target discovery and CDP
 messages, resolves source maps, persists debugger preferences, and exposes only narrow debugger
@@ -27,9 +36,14 @@ public capture API. Before batching, the SDK attaches the active navigation scre
 redacted summary of the preceding 20 events.
 
 SQLite writes use WAL mode and batched transactions. Versioned migrations preserve existing event
-databases and maintain session metadata. The Timeline reads deterministic cursor pages through a
-validated preload boundary and renders a bounded virtual window; the existing in-memory projection
-continues feeding inspectors until each receives its dedicated query model.
+databases and maintain session metadata. Timeline and category inspectors read deterministic cursor
+pages through a validated preload boundary. Category inspectors query only the histories they need,
+while the bounded in-memory projection drives live connection updates.
+
+The desktop acceptance harness launches the production renderer in the real Electron runtime and
+drives it through Chromium's loopback debugging endpoint. It verifies sandbox isolation, the narrow
+preload API, SDK WebSocket ingestion, persisted pagination, inspector navigation, settings, and
+maintenance. A separate 25,000-event load test traverses every cursor page before enforcing retention.
 
 ## Package responsibilities
 

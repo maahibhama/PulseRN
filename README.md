@@ -8,17 +8,17 @@
 
 PulseRN is an open-source desktop debugging foundation for React Native. Its central idea is a unified, chronological timeline that will correlate app interactions, navigation, Redux, network, rendering, performance, and errors.
 
-> Status: Phase 9. The Foundation, Console, Network, Redux, Navigation, Performance, Storage, Errors, and JavaScript Debugger inspectors are working.
+> Status: Phase 10 complete. The inspectors, scalable persistence, transport hardening, sustained-load checks, and Electron acceptance coverage are working.
 
 ## What works today
 
 - Electron desktop app with a sandboxed renderer and narrow preload bridge
 - Loopback-only WebSocket server on port `9090`
 - Versioned JSON protocol with Zod validation and negotiation
-- React Native SDK with development-build protection, reconnection, batching, sequencing, bounded offline buffering, payload limits, and field redaction
+- React Native SDK with development-build protection, reconnection, batching, sequencing, bounded offline buffering, socket backpressure protection, transport health diagnostics, payload limits, and field redaction
 - Multiple connected-device tracking
-- SQLite event persistence
-- Initial unified timeline and event-detail view
+- SQLite event persistence with configurable age/count retention and recovery cleanup
+- Cursor-paginated unified timeline and category inspectors with bounded timeline virtualization
 - Console interception for log, info, warn, error, and debug
 - Console filtering, search, pause, clear, payload expansion, copy, source, and stack inspection
 - Fetch and XMLHttpRequest inspection with optional Axios interceptors
@@ -200,6 +200,7 @@ Open **Settings** in the Electron sidebar to configure:
 - Comfortable or compact interface density
 - Newest-first or oldest-first timeline ordering
 - Local Metro discovery port for the Hermes debugger
+- Event retention period, maximum stored events, maintenance, and history deletion
 - Launch at login on packaged macOS builds
 - Whether closing the window keeps PulseRN running in the background
 
@@ -216,7 +217,7 @@ controls, keyboard shortcuts, examples, and current limitations.
 ## Known limitations
 
 - The transport only accepts validated JSON and has no authentication UI.
-- The UI keeps the latest 2,000 events in memory; database pagination and list virtualization arrive before high-volume instrumentation.
+- Live updates keep a bounded 2,000-event projection in memory; inspectors page older retained history from SQLite.
 - The Expo example uses prebuild; the Community CLI example includes committed native iOS and Android projects.
 - Session export/import is not implemented yet.
 - Console fields, network headers, URL query parameters, and structured request/response fields are redacted before transmission.

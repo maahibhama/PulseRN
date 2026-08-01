@@ -6,7 +6,7 @@ Thank you for helping build PulseRN. Start with an issue for substantial feature
 
 1. Fork the repository and create a focused branch.
 2. Install with `pnpm install`.
-3. Run `pnpm typecheck`, `pnpm test`, `pnpm build`, and `pnpm lint`.
+3. Run `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm lint`, and `pnpm test:e2e`.
 4. Add tests for behavioral changes.
 5. Keep pull requests limited to one phase or concern.
 
