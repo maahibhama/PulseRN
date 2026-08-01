@@ -264,8 +264,12 @@ remain subject to the configured retention limits.
 
 Open **Debugger**, refresh Metro targets, and select a Hermes development runtime. PulseRN supports
 React Native 0.76+ development builds and defaults to Metro on `127.0.0.1:8081`; change the port in
-Settings when needed. See [JavaScript debugger](docs/JAVASCRIPT-DEBUGGER.md) for breakpoint
-controls, keyboard shortcuts, examples, and current limitations.
+Settings when needed. Pause on original TypeScript, hover variables for selected-frame values, use
+the live bottom REPL, expand scopes and watches lazily, and record JavaScript render costs. The
+**Components** workbench provides a read-only React tree with props, state, hooks, styles,
+accessibility metadata, and source navigation when the development runtime exposes React DevTools
+Fiber roots. See [JavaScript debugger](docs/JAVASCRIPT-DEBUGGER.md) for breakpoint controls,
+keyboard shortcuts, component inspection, examples, and current limitations.
 
 ## Known limitations
 

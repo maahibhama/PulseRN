@@ -41,6 +41,14 @@ afterEach(() => {
 });
 
 describe('EventDatabase', () => {
+  it('ignores late session cleanup and repeated close calls during shutdown', () => {
+    const database = new EventDatabase(databasePath());
+    database.close();
+
+    expect(() => database.endSession('session-after-shutdown', Date.now())).not.toThrow();
+    expect(() => database.close()).not.toThrow();
+  });
+
   it('migrates an existing unversioned event database without losing events', () => {
     const path = databasePath();
     const legacy = new DatabaseSync(path);

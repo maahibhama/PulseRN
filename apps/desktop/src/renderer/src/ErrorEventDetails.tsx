@@ -66,10 +66,10 @@ export function ErrorEventDetails({ event }: { event: DevToolEventEnvelope }) {
   return (
     <>
       <div className="error-report-actions">
-        <button onClick={() => void copyReport('markdown')}>
+        <button type="button" onClick={() => void copyReport('markdown')}>
           {copied === 'markdown' ? 'Copied Markdown' : 'Copy GitHub Markdown'}
         </button>
-        <button onClick={() => void copyReport('json')}>
+        <button type="button" onClick={() => void copyReport('json')}>
           {copied === 'json' ? 'Copied JSON' : 'Copy sanitized JSON'}
         </button>
       </div>

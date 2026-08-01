@@ -567,8 +567,15 @@ button {
   background: #0b0d12;
 }
 .details {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
   border-left: 1px solid #252a35;
   min-width: 0;
+}
+.details > .panel-header {
+  flex: 0 0 55px;
 }
 .panel-header {
   height: 55px;
@@ -821,7 +828,8 @@ button {
 .error-columns,
 .error-entry {
   display: grid;
-  grid-template-columns: 105px 125px minmax(0, 1fr) 80px 110px;
+  grid-template-columns: 105px 120px minmax(0, 1fr) 82px 88px;
+  gap: 10px;
   align-items: center;
 }
 .error-columns {
@@ -923,8 +931,24 @@ button {
 }
 .error-report-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 7px;
   margin-top: 12px;
+}
+.error-report-actions button {
+  min-height: 30px;
+  padding: 6px 10px;
+  border: 1px solid #343b4a;
+  border-radius: 6px;
+  background: #171b24;
+  color: #aab2c1;
+  cursor: pointer;
+  font-size: 10px;
+}
+.error-report-actions button:hover {
+  border-color: #6652be;
+  background: #29233f;
+  color: #c9bdff;
 }
 .error-frames {
   display: grid;
@@ -1016,9 +1040,13 @@ button {
   text-align: center;
 }
 .detail-content {
+  min-height: 0;
+  height: auto;
+  flex: 1;
   padding: 18px;
   overflow: auto;
-  height: calc(100vh - 111px);
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 .detail-grid {
   display: grid;
@@ -1030,8 +1058,14 @@ button {
   color: #687085;
 }
 .detail-grid strong {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.error-summary strong {
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
 }
 .detail-content h3 {
   margin-top: 25px;
@@ -1063,6 +1097,8 @@ button {
   white-space: nowrap;
 }
 .stack-trace {
+  max-width: 100%;
+  overflow: auto;
   color: #9ca7bb;
   font-size: 10px;
 }
@@ -1671,6 +1707,9 @@ pre {
   overflow: hidden;
   background: #0b0d12;
 }
+.debugger-panel.wide {
+  grid-column: 2 / -1;
+}
 .debugger-toolbar {
   display: flex;
   height: 55px;
@@ -1851,6 +1890,13 @@ pre {
 .debugger-current-line {
   background: #66561c52;
 }
+.debugger-inline-values {
+  color: #8c81bf !important;
+  font-style: italic;
+}
+.debugger-inline-values.changed {
+  color: #d8b75d !important;
+}
 .debugger-sidebar {
   min-width: 0;
   overflow: auto;
@@ -2000,6 +2046,485 @@ pre {
   padding: 6px 9px 10px;
   color: #596173;
   font-size: 8px;
+}
+.debugger-workbench-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid #292f3b;
+  border-radius: 6px;
+  background: #0c0f15;
+}
+.debugger-workbench-tabs button {
+  height: 24px;
+  border: 0;
+  background: transparent;
+}
+.debugger-workbench-tabs button.active,
+.debugger-side-tabs button.active,
+.debugger-bottom-drawer nav button.active,
+.component-details > nav button.active {
+  background: #30264c;
+  color: #d7ccff;
+}
+.debugger-workspace.with-bottom-drawer {
+  height: calc(100vh - 382px);
+  min-height: 250px;
+}
+.debugger-capabilities + .debugger-workspace.with-bottom-drawer {
+  height: calc(100vh - 411px);
+}
+.debugger-banner + .debugger-capabilities + .debugger-workspace.with-bottom-drawer {
+  height: calc(100vh - 445px);
+}
+.debugger-bottom-drawer {
+  height: 35px;
+  border-top: 1px solid #2a303d;
+  background: #0f1219;
+}
+.debugger-bottom-drawer.open {
+  height: 271px;
+}
+.debugger-bottom-drawer > header {
+  display: flex;
+  height: 35px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 7px;
+  border-bottom: 1px solid #252a35;
+}
+.debugger-bottom-drawer > header nav,
+.debugger-bottom-drawer > header > div {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  gap: 3px;
+}
+.debugger-bottom-drawer > header button,
+.debugger-side-tabs button,
+.component-details > nav button {
+  height: 25px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #788194;
+  font-size: 9px;
+  text-transform: capitalize;
+}
+.debugger-console {
+  position: relative;
+  display: grid;
+  height: 235px;
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+.debugger-console-completions {
+  position: absolute;
+  z-index: 4;
+  right: 8px;
+  bottom: 38px;
+  left: 27px;
+  display: flex;
+  max-height: 96px;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: 6px;
+  overflow: auto;
+  border: 1px solid #353c4b;
+  border-radius: 5px;
+  background: #171b24;
+  box-shadow: 0 8px 25px #0008;
+}
+.debugger-console-completions button {
+  padding: 4px 7px;
+  border: 0;
+  border-radius: 3px;
+  background: #222836;
+  color: #b8c0cf;
+  font:
+    9px ui-monospace,
+    monospace;
+}
+.debugger-console-output {
+  padding: 6px 10px;
+  overflow: auto;
+  font:
+    10px/1.5 ui-monospace,
+    monospace;
+}
+.debugger-console-output > p {
+  color: #687185;
+}
+.debugger-console-entry {
+  padding: 4px 0;
+  border-bottom: 1px solid #191e27;
+}
+.debugger-console-entry > div {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 3px;
+  color: #aeb7c7;
+}
+.debugger-console-entry > div > span:first-child,
+.debugger-console-prompt > span {
+  color: #8c6de6;
+}
+.debugger-console-entry .error,
+.debugger-value-error {
+  color: #ef7f89 !important;
+}
+.debugger-console-entry pre {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+}
+.debugger-console-prompt {
+  display: grid;
+  min-height: 38px;
+  grid-template-columns: 18px minmax(0, 1fr) 45px;
+  align-items: center;
+  padding: 4px 9px;
+  border-top: 1px solid #252a35;
+}
+.debugger-console-prompt textarea {
+  min-height: 28px;
+  max-height: 90px;
+  padding: 6px 8px;
+  resize: vertical;
+  border: 1px solid transparent;
+  outline: 0;
+  background: transparent;
+  color: #cad1dc;
+  font:
+    10px/1.4 ui-monospace,
+    monospace;
+}
+.debugger-console-prompt textarea:focus {
+  border-color: #57428c;
+}
+.debugger-console-prompt button {
+  height: 27px;
+  border: 1px solid #353c4b;
+  border-radius: 4px;
+  background: #181d27;
+  color: #aeb6c5;
+  font-size: 9px;
+}
+.debugger-side-tabs {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  padding: 4px;
+  border-bottom: 1px solid #252a35;
+  background: #10131a;
+}
+.debugger-flex-section {
+  min-height: calc(100vh - 150px);
+}
+.debugger-remote-value {
+  min-width: 0;
+  color: #a99af0;
+}
+.debugger-remote-value.compact {
+  display: inline-flex;
+  align-items: center;
+}
+.debugger-remote-value code {
+  color: #a99af0;
+}
+.debugger-remote-value .value-string {
+  color: #98c78c;
+}
+.debugger-remote-value .value-number,
+.debugger-remote-value .value-bigint {
+  color: #9ab7ee;
+}
+.debugger-remote-value .value-boolean {
+  color: #d9a36f;
+}
+.debugger-disclosure {
+  width: 15px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #758096;
+}
+.debugger-preview {
+  overflow: hidden;
+  color: #657086;
+  font:
+    9px ui-monospace,
+    monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.debugger-object-properties {
+  display: grid;
+  margin: 4px 0 4px 10px;
+  padding-left: 9px;
+  border-left: 1px solid #2b3140;
+}
+.debugger-object-properties > span {
+  display: grid;
+  grid-template-columns: minmax(80px, 0.45fr) minmax(0, 1fr);
+  gap: 8px;
+  padding: 2px 0;
+}
+.debugger-object-properties strong {
+  color: #8993a6;
+  font-weight: 500;
+}
+.debugger-object-properties em {
+  color: #687185;
+  font-style: italic;
+}
+.debugger-pane {
+  overflow: auto;
+}
+.debugger-bottom-drawer > .debugger-pane {
+  height: 235px;
+}
+.react-components-workspace {
+  display: grid;
+  height: calc(100vh - 140px);
+  grid-template-columns: minmax(260px, 0.7fr) minmax(360px, 1.3fr);
+}
+.component-tree-panel {
+  min-width: 0;
+  overflow: hidden;
+  border-right: 1px solid #252a35;
+  background: #0e1117;
+}
+.component-panel-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  padding: 8px;
+  border-bottom: 1px solid #252a35;
+}
+.component-panel-toolbar > div {
+  display: flex;
+  gap: 5px;
+}
+.component-panel-toolbar button.active {
+  border-color: #7d63df;
+  background: #30264c;
+  color: #d8ceff;
+}
+.component-interaction-error {
+  padding: 7px 10px;
+  border-bottom: 1px solid #713944;
+  background: #351e24;
+  color: #ef9aa3;
+  font-size: 9px;
+}
+.component-limit-note {
+  padding: 6px 10px;
+  border-bottom: 1px solid #55461f;
+  background: #282313;
+  color: #d4b85f;
+  font-size: 8px;
+}
+.component-panel-toolbar input,
+.component-panel-toolbar button,
+.component-details button,
+.component-profiler button {
+  height: 30px;
+  padding: 0 9px;
+  border: 1px solid #2b3140;
+  border-radius: 5px;
+  background: #151923;
+  color: #aeb6c5;
+  font-size: 9px;
+}
+.component-tree {
+  height: calc(100% - 47px);
+  overflow: auto;
+}
+.component-tree > button {
+  display: flex;
+  width: 100%;
+  height: 27px;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  color: #aeb6c5;
+  text-align: left;
+}
+.component-tree > button:hover {
+  background: #171c25;
+}
+.component-tree > button.active {
+  background: #30264c;
+  color: #ded7ff;
+}
+.component-tree strong {
+  overflow: hidden;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.component-tree small,
+.component-tree em {
+  color: #687185;
+  font-size: 8px;
+  font-style: normal;
+}
+.component-tree em {
+  margin-left: auto;
+  padding-right: 8px;
+}
+.component-tree i {
+  padding-right: 8px;
+  color: #d7b75c;
+  font-size: 7px;
+  font-style: normal;
+}
+.component-kind {
+  color: #8b70df;
+}
+.component-kind.host {
+  color: #55b8d6;
+}
+.component-kind.class {
+  color: #d6a955;
+}
+.component-kind.memo,
+.component-kind.forwardRef {
+  color: #6dcf9e;
+}
+.component-details {
+  min-width: 0;
+  overflow: auto;
+  background: #10131a;
+}
+.component-details > header {
+  display: flex;
+  min-height: 58px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #252a35;
+}
+.component-details > header > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.component-details > header strong {
+  color: #d8dde6;
+}
+.component-details > header small,
+.component-details > header span,
+.component-details > footer {
+  color: #747e91;
+  font-size: 9px;
+}
+.component-details > nav {
+  display: flex;
+  gap: 3px;
+  padding: 6px 10px;
+  border-bottom: 1px solid #252a35;
+}
+.component-value-table > div {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.4fr) minmax(0, 1fr);
+  gap: 12px;
+  padding: 7px 14px;
+  border-bottom: 1px solid #1b202a;
+  font-size: 10px;
+}
+.component-value-table strong {
+  color: #8f99aa;
+  font-weight: 500;
+}
+.component-value-table code {
+  overflow: hidden;
+  color: #a99af0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.component-value-table > p {
+  padding: 16px;
+  color: #687185;
+}
+.component-details > footer,
+.component-profiler > footer {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-top: 1px solid #252a35;
+}
+.component-details > footer button {
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #8b72df;
+}
+.component-empty-state {
+  padding: 24px;
+  color: #858fa1;
+}
+.component-empty-state strong {
+  color: #c3cad5;
+}
+.component-profiler {
+  height: calc(100vh - 140px);
+  overflow: auto;
+  background: #0e1117;
+}
+.component-profiler > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid #252a35;
+}
+.component-profiler h2 {
+  margin: 0;
+  color: #d9dee7;
+  font-size: 15px;
+}
+.component-profiler p {
+  margin: 4px 0 0;
+  color: #727c8f;
+  font-size: 10px;
+}
+.component-profile-list {
+  padding: 10px;
+}
+.component-profile-list > button {
+  display: grid;
+  width: 100%;
+  height: 38px;
+  grid-template-columns: minmax(120px, 0.3fr) minmax(180px, 1fr) 70px;
+  align-items: center;
+  gap: 12px;
+  border: 0;
+  border-bottom: 1px solid #1e232d;
+  border-radius: 0;
+  background: transparent;
+  text-align: left;
+}
+.profile-bar {
+  height: 10px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: #1d2230;
+}
+.profile-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #7256d8, #3fb8d7);
 }
 .redux-columns,
 .redux-entry {
@@ -2928,13 +3453,15 @@ button.redux-tree-row {
   color: #4e5870;
 }
 :root[data-theme='light'] .request-line button,
-:root[data-theme='light'] .lazy-network-data button {
+:root[data-theme='light'] .lazy-network-data button,
+:root[data-theme='light'] .error-report-actions button {
   border-color: #d5dce8;
   background: #f5f7fb;
   color: #4e5870;
 }
 :root[data-theme='light'] .request-line button:hover,
-:root[data-theme='light'] .lazy-network-data button:hover {
+:root[data-theme='light'] .lazy-network-data button:hover,
+:root[data-theme='light'] .error-report-actions button:hover {
   border-color: #a99ce3;
   background: #ede9ff;
   color: #533bc0;
@@ -3046,4 +3573,56 @@ button.redux-tree-row {
   border-color: #d8deea;
   background: #eef2f8;
   color: #25314b;
+}
+:root[data-theme='light'] .debugger-panel,
+:root[data-theme='light'] .debugger-toolbar,
+:root[data-theme='light'] .debugger-capabilities,
+:root[data-theme='light'] .source-browser,
+:root[data-theme='light'] .debugger-sidebar,
+:root[data-theme='light'] .debugger-side-tabs,
+:root[data-theme='light'] .debugger-bottom-drawer,
+:root[data-theme='light'] .react-components-workspace,
+:root[data-theme='light'] .component-tree-panel,
+:root[data-theme='light'] .component-details,
+:root[data-theme='light'] .component-profiler {
+  border-color: #dce2ec;
+  background: #ffffff;
+}
+:root[data-theme='light'] .debugger-toolbar button,
+:root[data-theme='light'] .debugger-toolbar select,
+:root[data-theme='light'] .debugger-input input,
+:root[data-theme='light'] .source-browser input,
+:root[data-theme='light'] .debugger-variable-search,
+:root[data-theme='light'] .pause-exceptions select,
+:root[data-theme='light'] .component-panel-toolbar input,
+:root[data-theme='light'] .component-panel-toolbar button,
+:root[data-theme='light'] .component-details button,
+:root[data-theme='light'] .component-profiler button {
+  border-color: #d5dce8;
+  background: #f5f7fb;
+  color: #4e5870;
+}
+:root[data-theme='light'] .debugger-workbench-tabs,
+:root[data-theme='light'] .debugger-console-prompt textarea {
+  border-color: #d5dce8;
+  background: #f7f8fc;
+  color: #28334a;
+}
+:root[data-theme='light'] .debugger-workbench-tabs button.active,
+:root[data-theme='light'] .debugger-side-tabs button.active,
+:root[data-theme='light'] .debugger-bottom-drawer nav button.active,
+:root[data-theme='light'] .component-details > nav button.active,
+:root[data-theme='light'] .component-tree > button.active {
+  background: #ede9ff;
+  color: #533bc0;
+}
+:root[data-theme='light'] .debugger-console-output,
+:root[data-theme='light'] .component-value-table code,
+:root[data-theme='light'] .debugger-remote-value code {
+  color: #3e4960;
+}
+:root[data-theme='light'] .component-details > header strong,
+:root[data-theme='light'] .component-tree strong,
+:root[data-theme='light'] .component-profiler h2 {
+  color: #172038;
 }

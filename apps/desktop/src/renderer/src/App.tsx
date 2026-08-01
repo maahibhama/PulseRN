@@ -15,7 +15,11 @@ import { StoragePanel } from './StoragePanel.js';
 import darkAppIcon from '../../../resources/pulse-rn-app-icon-dark.png';
 import lightAppIcon from '../../../resources/pulse-rn-app-icon-light.png';
 import { deviceLabel, findSelectedEvent, useDesktopStore } from './store.js';
-import { MAX_RENDERER_EVENTS, useInspectorEvents } from './useInspectorEvents.js';
+import {
+  latestMatchingEventId,
+  MAX_RENDERER_EVENTS,
+  useInspectorEvents,
+} from './useInspectorEvents.js';
 import type {
   EventAnnotation,
   EventBookmark,
@@ -675,12 +679,10 @@ export function App() {
       : findSelectedEvent(events, selectedEventId);
   const desktopApi = window.pulseRN;
   const activeInspectorCategories = inspectorCategories[activeView];
-  const latestEvent = events.at(-1);
+  const latestInspectorEventId = latestMatchingEventId(events, activeInspectorCategories);
   const inspectorPage = useInspectorEvents(
     activeInspectorCategories,
-    latestEvent && activeInspectorCategories?.includes(latestEvent.category)
-      ? latestEvent.id
-      : undefined,
+    latestInspectorEventId,
     reopenedSession?.sessionId,
   );
   const selectInspectorEvent = (id: string) => {

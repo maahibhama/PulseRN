@@ -306,6 +306,14 @@ const remoteValueSchema = z.object({
   description: z.string(),
   value: z.unknown().optional(),
   objectId: z.string().optional(),
+  preview: z
+    .object({
+      overflow: z.boolean(),
+      properties: z.array(
+        z.object({ name: z.string(), type: z.string(), value: z.string().optional() }),
+      ),
+    })
+    .optional(),
 });
 const debuggerStateSchema = z.object({
   status: z.enum([
@@ -388,8 +396,69 @@ const debuggerPropertySchema = z.array(
   z.object({
     name: z.string(),
     value: remoteValueSchema,
+    enumerable: z.boolean().optional(),
+    writable: z.boolean().optional(),
+    accessor: z.boolean().optional(),
   }),
 );
+const reactComponentSnapshotSchema = z.object({
+  available: z.boolean(),
+  rendererCount: z.number().int().nonnegative(),
+  roots: z.array(z.string()),
+  nodes: z.array(
+    z.object({
+      id: z.string(),
+      parentId: z.string().optional(),
+      ownerId: z.string().optional(),
+      name: z.string(),
+      key: z.string().optional(),
+      kind: z.enum([
+        'function',
+        'class',
+        'host',
+        'memo',
+        'forwardRef',
+        'context',
+        'suspense',
+        'other',
+      ]),
+      depth: z.number().int().nonnegative(),
+      source: debuggerLocationSchema.optional(),
+      props: z.record(z.string()),
+      state: z.record(z.string()),
+      hooks: z.array(z.object({ index: z.number().int().nonnegative(), value: z.string() })),
+      context: z.record(z.string()),
+      renderDuration: z.number().finite().nonnegative().optional(),
+      renderCount: z.number().int().nonnegative().optional(),
+      changed: z.array(z.enum(['props', 'state', 'hooks'])),
+      nativeTag: z.number().int().optional(),
+      style: z.record(z.string()).optional(),
+      accessibility: z
+        .object({
+          label: z.string().optional(),
+          role: z.string().optional(),
+          hint: z.string().optional(),
+          disabled: z.boolean().optional(),
+        })
+        .optional(),
+      children: z.array(z.string()),
+    }),
+  ),
+  truncated: z.boolean(),
+  capturedAt: z.number().finite().nonnegative(),
+  capabilities: z.object({
+    highlight: z.boolean(),
+    pick: z.boolean(),
+  }),
+  selectedId: z.string().optional(),
+  error: z.string().optional(),
+});
+const reactComponentInteractionSchema = z.object({
+  supported: z.boolean(),
+  active: z.boolean(),
+  selectedId: z.string().optional(),
+  error: z.string().optional(),
+});
 
 async function invokeDebugger(value: unknown): Promise<unknown> {
   return ipcRenderer.invoke(DEBUGGER_CHANNEL, value);
@@ -781,6 +850,11 @@ const api: PulseRNDesktopApi = {
       await invokeDebugger({ operation: 'scope', objectId: z.string().parse(objectId) }),
     );
   },
+  async getDebuggerProperties(objectId) {
+    return debuggerPropertySchema.parse(
+      await invokeDebugger({ operation: 'properties', objectId: z.string().parse(objectId) }),
+    );
+  },
   async addDebuggerWatch(expression) {
     return debuggerStateSchema.parse(
       await invokeDebugger({
@@ -794,11 +868,43 @@ const api: PulseRNDesktopApi = {
       await invokeDebugger({ operation: 'removeWatch', id: z.string().uuid().parse(id) }),
     );
   },
-  async evaluateDebuggerExpression(expression) {
+  async evaluateDebuggerExpression(expression, options = {}) {
     return remoteValueSchema.parse(
       await invokeDebugger({
         operation: 'evaluate',
         expression: z.string().trim().min(1).max(10_000).parse(expression),
+        options: z
+          .object({
+            frameId: z.string().min(1).max(100_000).optional(),
+            allowRunning: z.boolean().optional(),
+          })
+          .parse(options),
+      }),
+    );
+  },
+  async releaseDebuggerObject(objectId) {
+    return z.boolean().parse(
+      await invokeDebugger({
+        operation: 'releaseObject',
+        objectId: z.string().min(1).max(100_000).parse(objectId),
+      }),
+    );
+  },
+  async getReactComponentSnapshot() {
+    return reactComponentSnapshotSchema.parse(
+      await invokeDebugger({ operation: 'reactComponents' }),
+    );
+  },
+  async interactWithReactComponent(action, componentId) {
+    return reactComponentInteractionSchema.parse(
+      await invokeDebugger({
+        operation: 'reactComponentInteraction',
+        action: z
+          .enum(['highlight', 'hideHighlight', 'startPicking', 'stopPicking', 'pollPicked'])
+          .parse(action),
+        componentId: componentId
+          ? z.string().min(1).max(256).parse(componentId)
+          : undefined,
       }),
     );
   },

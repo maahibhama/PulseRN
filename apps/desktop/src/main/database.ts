@@ -624,6 +624,9 @@ export class EventDatabase {
   }
 
   endSession(sessionId: string, info?: DisconnectInfo | number): void {
+    // WebSocket close events can arrive late during application teardown. Ending an
+    // already-closed session is cleanup work, so it is safe to ignore after SQLite closes.
+    if (!this.database.isOpen) return;
     const endedAt = typeof info === 'number' ? info : (info?.disconnectedAt ?? Date.now());
     this.database
       .prepare(
@@ -1617,6 +1620,6 @@ export class EventDatabase {
   }
 
   close(): void {
-    this.database.close();
+    if (this.database.isOpen) this.database.close();
   }
 }

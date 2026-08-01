@@ -30,13 +30,42 @@ breakpoint list. When execution pauses:
 
 Use `Cmd/Ctrl+P` for quick source search. Sources are grouped by path and dependencies can be
 blackboxed when Hermes supports the optional CDP method. Use the right sidebar to change call
-frames, lazily inspect and search scopes, see inline paused values, add watches, evaluate an
-expression, and configure exception pausing. Unsupported optional CDP methods disable only their
-corresponding control.
+frames, lazily inspect and search scopes, see inline paused values, add watches, and configure
+exception pausing. Hover an identifier or property chain while paused to evaluate it in the selected
+call frame. Hover evaluation does not automatically invoke function calls or getters.
+
+The resizable bottom drawer contains a live debugger console. `Enter` evaluates JavaScript,
+`Shift+Enter` creates a multiline expression, Up/Down navigates the bounded local history, and
+`Cmd/Ctrl+Space` suggests names from the selected frame's scopes. Results and nested properties load
+lazily. Console expressions run in the selected call frame while paused and in the runtime context
+while running. Captured application logs remain in the separate **Console** inspector.
+
+Unsupported optional CDP methods disable only their corresponding control.
 
 Breakpoints, watches, and pause-on-exception preference are saved in PulseRN's local user-data
 directory and restored after Metro or the application reloads. PulseRN makes five bounded reconnect
 attempts when the active Hermes target reloads and restores verified breakpoints when scripts return.
+
+## React components and profiler
+
+The **Components** workbench reads the attached development runtime's React DevTools Fiber roots and
+shows the rendered owner hierarchy, props, class state, hooks, styles, accessibility metadata,
+native tags, source locations, and the current render duration when React exposes them. **Open
+source** returns to the original source debugger.
+
+Component identities are derived from their renderer and keyed tree path, so selection survives
+ordinary refreshes. PulseRN compares successive snapshots and marks changed props, state, and hooks,
+tracks observed render counts, and provides **Rendered by** owner navigation.
+
+When the embedded React DevTools agent exposes React Native inspection events, hovering a component
+highlights its host view on the device. **Select on device** opens React Native's native inspection
+overlay; tap a view to select the matching PulseRN component. These controls are capability-gated
+because React Native embeds a version-matched React DevTools backend. Unsupported versions remain
+fully usable in read-only tree mode.
+
+The **Profiler** workbench can capture a point-in-time rank or record bounded Fiber timing samples.
+These values describe JavaScript/React render work; they are not native CPU, UI-thread, or native
+memory measurements. Component data is read-only and remains on the local computer.
 
 ## Example
 
@@ -45,5 +74,6 @@ Open `debugger-demo.ts` from either example application. Set a breakpoint inside
 nested functions, an awaited promise, and a caught exception. Use **Throw debugger exception** to
 exercise uncaught exception pausing.
 
-Production builds, JavaScriptCore, native Swift/Kotlin/C++ code, simultaneous target debugging, and
-source editing are not supported.
+Production builds, JavaScriptCore, native Swift/Kotlin/C++ code, simultaneous target debugging,
+source editing, prop/state mutation, and guaranteed component metadata in optimized production
+bundles are not supported.
