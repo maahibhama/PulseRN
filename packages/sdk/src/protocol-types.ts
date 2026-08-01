@@ -21,6 +21,8 @@ export interface ConsoleLogPayload extends JsonObject {
   level: ConsoleLogLevel;
   arguments: JsonValue[];
   message: string;
+  redacted?: boolean;
+  truncated?: boolean;
   stack?: string;
   source?: { file: string; line: number; column?: number };
 }
@@ -48,6 +50,37 @@ export interface NetworkEventPayload extends JsonObject {
   endedAt: number;
   duration: number;
   error?: { name: string; message: string };
+  timingAccuracy?: 'measured' | 'approximate';
+  initiator?: string;
+  redirectChain?: {
+    from: string;
+    to: string;
+    status?: number;
+    at: number;
+  }[];
+  capture?: {
+    requestBudgetBytes: number;
+    sessionBudgetBytes: number;
+    omittedBodies: ('request' | 'response')[];
+  };
+}
+
+export interface NetworkLifecycleEventPayload extends JsonObject {
+  phase: 'start' | 'progress' | 'redirect' | 'complete' | 'failure';
+  requestId: string;
+  transport: 'fetch' | 'xhr' | 'axios';
+  method: string;
+  url: string;
+  timestamp: number;
+  startedAt: number;
+  status?: number;
+  loadedBytes?: number;
+  totalBytes?: number;
+  redirectFrom?: string;
+  redirectTo?: string;
+  initiator?: string;
+  timingAccuracy: 'measured' | 'approximate';
+  error?: { name: string; message: string };
 }
 
 export interface ReduxStateDiff extends JsonObject {
@@ -60,10 +93,24 @@ export interface ReduxStateDiff extends JsonObject {
 export interface ReduxEventPayload extends JsonObject {
   storeId: string;
   actionType: string;
+  actionCategory?: string;
   action: JsonValue;
   previousState?: JsonValue;
   nextState?: JsonValue;
   stateDiff?: ReduxStateDiff[];
+  changedPaths?: string[];
+  stateSize?: {
+    previousBytes: number;
+    nextBytes: number;
+    warningThresholdBytes: number;
+    truncated: boolean;
+  };
+  correlations?: {
+    route?: string;
+    requestId?: string;
+    errorId?: string;
+    performanceEventId?: string;
+  };
   reducerDuration: number;
 }
 
@@ -82,6 +129,25 @@ export interface NavigationEventPayload extends JsonObject {
   previousRoute?: NavigationRoute;
   currentRoute?: NavigationRoute;
   previousRouteDuration?: number;
+  routePath?: string[];
+  routeTree?: {
+    navigatorId: string;
+    parentNavigatorId?: string;
+    route: NavigationRoute;
+    active: boolean;
+    depth: number;
+  }[];
+  parameterDiff?: ReduxStateDiff[];
+  actionGroup?: 'forward' | 'backward' | 'reset' | 'lifecycle' | 'unknown';
+  warnings?: ('duplicate_navigator_id' | 'incomplete_tracking' | 'inconsistent_ancestry')[];
+  integrationMetadata?: JsonValue;
+  correlations?: {
+    requestId?: string;
+    reduxEventId?: string;
+    performanceEventId?: string;
+    consoleEventId?: string;
+    errorId?: string;
+  };
 }
 
 export type PerformanceMetric =
@@ -94,17 +160,30 @@ export type PerformanceMetric =
   | 'screen_interactive'
   | 'screen_duration'
   | 'custom_measure'
-  | 'memory';
+  | 'memory'
+  | 'capability';
 
 export interface PerformanceEventPayload extends JsonObject {
   metric: PerformanceMetric;
   name: string;
   value: number;
-  unit: 'ms' | 'fps' | 'bytes';
+  unit: 'ms' | 'fps' | 'bytes' | 'count';
   approximate: boolean;
   startedAt?: number;
   endedAt?: number;
   metadata?: JsonValue;
+  sampling?: {
+    intervalMs: number;
+    expectedSamples: number;
+    lostSamples: number;
+    captureRate: number;
+  };
+  provenance?: 'javascript' | 'runtime';
+  capability?: {
+    name: 'animation_frame' | 'js_heap' | 'native_cpu' | 'ui_thread' | 'native_memory';
+    status: 'available' | 'unavailable';
+    reason?: string;
+  };
 }
 
 export type StorageOperation = 'providers' | 'list' | 'get' | 'set' | 'delete';
@@ -178,6 +257,8 @@ export interface ClientHello {
   appId: string;
   device: DeviceInfo;
   authToken?: string;
+  pairingCode?: string;
+  reconnectToken?: string;
 }
 
 export interface EventBatch {
@@ -192,6 +273,7 @@ export interface ClientHealth {
   droppedEvents: number;
   oversizedEvents: number;
   queueOverflowEvents: number;
+  consoleDroppedEvents?: number;
   sentEvents: number;
   sentBatches: number;
   reconnectAttempts: number;
@@ -207,6 +289,8 @@ export interface StorageCommand {
   operation: StorageOperation;
   key?: string;
   value?: string;
+  cursor?: string;
+  limit?: number;
 }
 
 export interface StorageResult {
@@ -215,8 +299,33 @@ export interface StorageResult {
   providerId: string;
   operation: StorageOperation;
   success: boolean;
-  providers?: { id: string; name: string }[];
+  providers?: {
+    id: string;
+    name: string;
+    capabilities: StorageProviderCapabilities;
+  }[];
   keys?: string[];
+  keyEntries?: {
+    key: string;
+    valueSize?: number;
+    valueType: StorageValueType;
+    sensitive: boolean;
+  }[];
+  nextCursor?: string;
+  totalKeys?: number;
   value?: string | null;
+  valueSize?: number;
+  valueType?: StorageValueType;
+  sensitive?: boolean;
+  redacted?: boolean;
   error?: string;
+}
+
+export type StorageValueType = 'string' | 'number' | 'boolean' | 'json' | 'binary' | 'unknown';
+export interface StorageProviderCapabilities {
+  paginatedKeys: boolean;
+  lazyValues: boolean;
+  mutations: boolean;
+  typedValues: boolean;
+  snapshots: boolean;
 }

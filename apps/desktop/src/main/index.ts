@@ -12,12 +12,15 @@ import { DevToolWebSocketServer } from './websocket-server.js';
 import { DebuggerManager } from './debugger-manager.js';
 import {
   createSessionArchive,
+  decodeSessionArchive,
+  encodeSessionArchive,
   importSessionArchive,
-  parseSessionArchive,
 } from './session-archive.js';
-import { AccessTokenStore } from './access-token.js';
+import { PairingStore } from './pairing-store.js';
 import { TlsCertificateStore } from './tls-certificate.js';
 import { UpdateManager, type DesktopUpdaterAdapter } from './update-manager.js';
+import { createCurlCommand, createSanitizedHar } from './network-export.js';
+import { networkEventPayloadSchema } from '@pulse-rn/protocol';
 
 const SNAPSHOT_CHANNEL = 'pulse-rn:snapshot';
 const DEVICES_CHANNEL = 'pulse-rn:devices';
@@ -40,6 +43,8 @@ const storageRequestSchema = z.object({
   operation: storageOperationSchema,
   key: z.string().max(10_000).optional(),
   value: z.string().max(1_000_000).optional(),
+  cursor: z.string().max(100).optional(),
+  limit: z.number().int().min(1).max(500).optional(),
 });
 const eventCursorSchema = z.object({
   timestamp: z.number().finite().nonnegative(),
@@ -51,16 +56,88 @@ const eventQuerySchema = z
     category: eventCategorySchema.optional(),
     categories: z.array(eventCategorySchema).min(1).max(8).optional(),
     cursor: eventCursorSchema.optional(),
+    direction: z.enum(['forward', 'backward']).optional(),
     deviceId: z.string().trim().min(1).max(256).optional(),
+    endTime: z.number().finite().nonnegative().optional(),
+    errorsOnly: z.boolean().optional(),
+    correlationId: z.string().trim().min(1).max(256).optional(),
     limit: z.number().int().min(1).max(500).optional(),
     order: z.enum(['newest', 'oldest']).optional(),
+    parentId: z.string().trim().min(1).max(256).optional(),
     sessionId: z.string().trim().min(1).max(256).optional(),
+    startTime: z.number().finite().nonnegative().optional(),
+    text: z.string().trim().min(1).max(1_000).optional(),
+    type: z.string().trim().min(1).max(256).optional(),
+    types: z.array(z.string().trim().min(1).max(256)).min(1).max(100).optional(),
   })
   .strict();
+const savedEventQuerySchema = eventQuerySchema.omit({
+  cursor: true,
+  direction: true,
+  limit: true,
+});
 const eventRequestSchema = z.discriminatedUnion('operation', [
   z.object({ operation: z.literal('query'), input: eventQuerySchema }),
   z.object({ operation: z.literal('find'), id: z.string().trim().min(1).max(256) }),
+  z.object({ operation: z.literal('listSavedFilters') }),
+  z.object({
+    operation: z.literal('saveEventFilter'),
+    id: z.string().trim().min(1).max(256).optional(),
+    name: z.string().trim().min(1).max(128),
+    query: savedEventQuerySchema,
+  }),
+  z.object({
+    operation: z.literal('deleteSavedFilter'),
+    id: z.string().trim().min(1).max(256),
+  }),
+  z.object({
+    operation: z.literal('listBookmarks'),
+    sessionId: z.string().trim().min(1).max(256).optional(),
+  }),
+  z.object({
+    operation: z.literal('addBookmark'),
+    eventId: z.string().trim().min(1).max(256),
+    label: z.string().trim().max(256).optional(),
+  }),
+  z.object({
+    operation: z.literal('deleteBookmark'),
+    id: z.string().trim().min(1).max(256),
+  }),
+  z.object({
+    operation: z.literal('listAnnotations'),
+    eventId: z.string().trim().min(1).max(256).optional(),
+    sessionId: z.string().trim().min(1).max(256).optional(),
+  }),
+  z.object({
+    operation: z.literal('saveAnnotation'),
+    id: z.string().trim().min(1).max(256).optional(),
+    eventId: z.string().trim().min(1).max(256),
+    body: z.string().trim().min(1).max(10_000),
+  }),
+  z.object({
+    operation: z.literal('deleteAnnotation'),
+    id: z.string().trim().min(1).max(256),
+  }),
+  z.object({
+    operation: z.literal('networkCurl'),
+    eventId: z.string().trim().min(1).max(256),
+  }),
+  z.object({
+    operation: z.literal('exportNetworkHar'),
+    sessionId: z.string().trim().min(1).max(256).optional(),
+  }),
   z.object({ operation: z.literal('sessions') }),
+  z.object({
+    operation: z.literal('renameSession'),
+    sessionId: z.string().trim().min(1).max(256),
+    displayName: z.string().trim().min(1).max(256),
+  }),
+  z.object({
+    operation: z.literal('deleteSession'),
+    sessionId: z.string().trim().min(1).max(256),
+  }),
+  z.object({ operation: z.literal('devices') }),
+  z.object({ operation: z.literal('retentionState') }),
   z.object({ operation: z.literal('maintain') }),
   z.object({ operation: z.literal('clear') }),
   z.object({
@@ -75,7 +152,7 @@ let server: DevToolWebSocketServer | undefined;
 let window: BrowserWindow | undefined;
 let settingsStore: SettingsStore | undefined;
 let debuggerManager: DebuggerManager | undefined;
-let accessTokenStore: AccessTokenStore | undefined;
+let pairingStore: PairingStore | undefined;
 let tlsCertificateStore: TlsCertificateStore | undefined;
 let updateManager: UpdateManager | undefined;
 let automaticUpdateTimer: ReturnType<typeof setTimeout> | undefined;
@@ -130,8 +207,8 @@ async function isAutoUpdateBuild(): Promise<boolean> {
   }
 }
 
-function connectionInfo(revealToken = false) {
-  if (!settingsStore || !accessTokenStore || !tlsCertificateStore) {
+function connectionInfo() {
+  if (!settingsStore || !pairingStore || !tlsCertificateStore) {
     throw new Error('PulseRN connection settings are not ready.');
   }
   const settings = settingsStore.get();
@@ -148,16 +225,17 @@ function connectionInfo(revealToken = false) {
     port,
     requiresAuth: settings.allowLanConnections,
     addresses: [...new Set(addresses)],
+    pairing: pairingStore.pairingCode(),
+    trustedDevices: pairingStore.list(),
     tls: {
       enabled: settings.tlsEnabled,
       ...tlsCertificateStore.info(),
     },
-    ...(revealToken ? { accessToken: accessTokenStore.get() } : {}),
   };
 }
 
 async function restartServer(settings = settingsStore?.get()): Promise<void> {
-  if (!settings || !accessTokenStore || !tlsCertificateStore) {
+  if (!settings || !pairingStore || !tlsCertificateStore) {
     throw new Error('PulseRN server settings are not ready.');
   }
   const tlsCredentials = settings.tlsEnabled ? tlsCertificateStore.credentials() : undefined;
@@ -173,8 +251,9 @@ async function restartServer(settings = settingsStore?.get()): Promise<void> {
         sessions.connect(device);
         publish();
       },
-      onDisconnected(connectionId) {
-        sessions.disconnect(connectionId);
+      onDisconnected(connectionId, info) {
+        const disconnected = sessions.disconnect(connectionId);
+        if (disconnected) database?.endSession(disconnected.sessionId, info);
         publish();
       },
       onEvents(events) {
@@ -194,7 +273,26 @@ async function restartServer(settings = settingsStore?.get()): Promise<void> {
       },
     },
     settings.allowLanConnections ? '0.0.0.0' : '127.0.0.1',
-    settings.allowLanConnections ? accessTokenStore.get() : undefined,
+    settings.allowLanConnections
+      ? (hello) => {
+          const legacyCredential = hello.authToken;
+          const result = pairingStore!.authenticate({
+            appId: hello.appId,
+            deviceId: hello.deviceId,
+            appName: hello.device.appName,
+            deviceName: hello.device.name,
+            pairingCode:
+              hello.pairingCode ?? (legacyCredential?.includes('-') ? legacyCredential : undefined),
+            reconnectToken:
+              hello.reconnectToken ??
+              (legacyCredential && !legacyCredential.includes('-') ? legacyCredential : undefined),
+          });
+          if (window && !window.isDestroyed()) {
+            window.webContents.send(CONNECTION_CHANNEL, connectionInfo());
+          }
+          return result;
+        }
+      : undefined,
     tlsCredentials,
   );
   await server.start();
@@ -261,7 +359,7 @@ function createWindow(): void {
 
 app.whenReady().then(async () => {
   settingsStore = new SettingsStore(join(app.getPath('userData'), 'settings.json'));
-  accessTokenStore = new AccessTokenStore(join(app.getPath('userData'), 'access-token'));
+  pairingStore = new PairingStore(join(app.getPath('userData'), 'trusted-devices.json'));
   tlsCertificateStore = new TlsCertificateStore(
     join(app.getPath('userData'), 'tls', 'certificate.pem'),
     join(app.getPath('userData'), 'tls', 'private-key.pem'),
@@ -311,8 +409,97 @@ app.whenReady().then(async () => {
         return database.query(input.input);
       case 'find':
         return database.findById(input.id);
+      case 'listSavedFilters':
+        return database.listSavedFilters();
+      case 'saveEventFilter':
+        return database.saveFilter(input.name, input.query, input.id);
+      case 'deleteSavedFilter':
+        return database.deleteSavedFilter(input.id);
+      case 'listBookmarks':
+        return database.listBookmarks(input.sessionId);
+      case 'addBookmark':
+        return database.addBookmark(input.eventId, input.label);
+      case 'deleteBookmark':
+        return database.deleteBookmark(input.id);
+      case 'listAnnotations':
+        return database.listAnnotations(input.eventId, input.sessionId);
+      case 'saveAnnotation':
+        return database.saveAnnotation(input.eventId, input.body, input.id);
+      case 'deleteAnnotation':
+        return database.deleteAnnotation(input.id);
+      case 'networkCurl': {
+        const event = database.findById(input.eventId);
+        const payload = event ? networkEventPayloadSchema.safeParse(event.payload) : undefined;
+        if (!payload?.success) throw new Error('The selected completed request does not exist.');
+        return createCurlCommand(payload.data);
+      }
+      case 'exportNetworkHar': {
+        const events = [];
+        let cursor;
+        do {
+          const page = database.query({
+            category: 'network',
+            type: 'network.request',
+            sessionId: input.sessionId,
+            order: 'oldest',
+            limit: 500,
+            cursor,
+          });
+          events.push(...page.events);
+          cursor = page.nextCursor;
+        } while (cursor);
+        const har = createSanitizedHar(events);
+        const result = window
+          ? await dialog.showSaveDialog(window, {
+              title: 'Export sanitized network HAR',
+              defaultPath: 'PulseRN-network.har',
+              filters: [{ name: 'HTTP Archive', extensions: ['har'] }],
+            })
+          : await dialog.showSaveDialog({
+              title: 'Export sanitized network HAR',
+              defaultPath: 'PulseRN-network.har',
+              filters: [{ name: 'HTTP Archive', extensions: ['har'] }],
+            });
+        if (result.canceled || !result.filePath) return { canceled: true, entries: 0 };
+        await writeFile(result.filePath, `${JSON.stringify(har, null, 2)}\n`, {
+          encoding: 'utf8',
+          mode: 0o600,
+        });
+        return { canceled: false, filePath: result.filePath, entries: har.log.entries.length };
+      }
       case 'sessions':
         return database.listSessions();
+      case 'renameSession':
+        return database.renameSession(input.sessionId, input.displayName);
+      case 'deleteSession': {
+        const confirmation = window
+          ? await dialog.showMessageBox(window, {
+              type: 'warning',
+              title: 'Delete debugging session',
+              message: 'Permanently delete this stored session and all of its events?',
+              buttons: ['Cancel', 'Delete session'],
+              defaultId: 0,
+              cancelId: 0,
+              noLink: true,
+            })
+          : await dialog.showMessageBox({
+              type: 'warning',
+              title: 'Delete debugging session',
+              message: 'Permanently delete this stored session and all of its events?',
+              buttons: ['Cancel', 'Delete session'],
+              defaultId: 0,
+              cancelId: 0,
+            });
+        if (confirmation.response !== 1) throw new Error('Session deletion cancelled.');
+        const result = database.deleteSession(input.sessionId);
+        sessions.hydrate(database.recent());
+        publish();
+        return result;
+      }
+      case 'devices':
+        return database.listDevices();
+      case 'retentionState':
+        return database.retentionState();
       case 'maintain':
         return maintainDatabase(true);
       case 'clear': {
@@ -337,25 +524,22 @@ app.whenReady().then(async () => {
       }
       case 'export': {
         const archive = createSessionArchive(database, input.sessionIds);
-        const singleSession = archive.sessions.length === 1 ? archive.sessions[0] : undefined;
+        const singleSession = archive.sessions.length === 1 ? archive.sessions[0]?.data : undefined;
         const result = window
           ? await dialog.showSaveDialog(window, {
-              title: 'Export PulseRN session',
-              defaultPath: `${singleSession?.appName.replace(/[^A-Za-z0-9._-]+/g, '-') || 'PulseRN-sessions'}.pulsern-session.json`,
-              filters: [{ name: 'PulseRN session', extensions: ['json'] }],
+              title: 'Export PulseRN archive',
+              defaultPath: `${singleSession?.appName.replace(/[^A-Za-z0-9._-]+/g, '-') || 'PulseRN-sessions'}.pulsern`,
+              filters: [{ name: 'PulseRN archive', extensions: ['pulsern'] }],
             })
           : await dialog.showSaveDialog({
-              title: 'Export PulseRN session',
-              defaultPath: 'PulseRN-sessions.pulsern-session.json',
-              filters: [{ name: 'PulseRN session', extensions: ['json'] }],
+              title: 'Export PulseRN archive',
+              defaultPath: 'PulseRN-sessions.pulsern',
+              filters: [{ name: 'PulseRN archive', extensions: ['pulsern'] }],
             });
         if (result.canceled || !result.filePath) {
           return { canceled: true, sessions: 0, events: 0 };
         }
-        await writeFile(result.filePath, `${JSON.stringify(archive, null, 2)}\n`, {
-          encoding: 'utf8',
-          mode: 0o600,
-        });
+        await writeFile(result.filePath, encodeSessionArchive(archive), { mode: 0o600 });
         return {
           canceled: false,
           filePath: result.filePath,
@@ -366,24 +550,22 @@ app.whenReady().then(async () => {
       case 'import': {
         const result = window
           ? await dialog.showOpenDialog(window, {
-              title: 'Import PulseRN session',
+              title: 'Import PulseRN archive',
               properties: ['openFile'],
-              filters: [{ name: 'PulseRN session', extensions: ['json'] }],
+              filters: [{ name: 'PulseRN archive', extensions: ['pulsern'] }],
             })
           : await dialog.showOpenDialog({
-              title: 'Import PulseRN session',
+              title: 'Import PulseRN archive',
               properties: ['openFile'],
-              filters: [{ name: 'PulseRN session', extensions: ['json'] }],
+              filters: [{ name: 'PulseRN archive', extensions: ['pulsern'] }],
             });
         const filePath = result.filePaths[0];
         if (result.canceled || !filePath) return { canceled: true, sessions: 0, events: 0 };
         const file = await stat(filePath);
         if (!file.isFile() || file.size > 100 * 1024 * 1024) {
-          throw new Error('PulseRN session archives must be files no larger than 100 MiB.');
+          throw new Error('PulseRN archives must be files no larger than 100 MiB.');
         }
-        const archive = parseSessionArchive(
-          JSON.parse(await readFile(filePath, 'utf8')) as unknown,
-        );
+        const archive = decodeSessionArchive(await readFile(filePath));
         const imported = importSessionArchive(database, archive);
         maintainDatabase(true);
         sessions.hydrate(database.recent());
@@ -453,23 +635,33 @@ app.whenReady().then(async () => {
     return settings;
   });
   ipcMain.handle(CONNECTION_CHANNEL, async (_event, value?: unknown) => {
-    if (!accessTokenStore) throw new Error('PulseRN access token is not ready.');
+    if (!pairingStore) throw new Error('PulseRN pairing store is not ready.');
     const input = z
       .discriminatedUnion('operation', [
         z.object({ operation: z.literal('info') }),
-        z.object({ operation: z.literal('revealToken') }),
-        z.object({ operation: z.literal('rotateToken') }),
+        z.object({ operation: z.literal('beginPairing') }),
+        z.object({
+          operation: z.literal('revoke'),
+          appId: z.string().trim().min(1).max(256),
+          deviceId: z.string().trim().min(1).max(256),
+        }),
         z.object({ operation: z.literal('installTls') }),
         z.object({ operation: z.literal('disableTls') }),
       ])
       .parse(value ?? { operation: 'info' });
-    if (input.operation === 'rotateToken') {
+    if (input.operation === 'beginPairing') {
+      pairingStore.begin();
+      const info = connectionInfo();
+      if (window && !window.isDestroyed()) window.webContents.send(CONNECTION_CHANNEL, info);
+      return info;
+    }
+    if (input.operation === 'revoke') {
       const options: Electron.MessageBoxOptions = {
         type: 'warning',
-        title: 'Rotate LAN access token',
-        message: 'Generate a new PulseRN LAN access token?',
-        detail: 'Connected LAN devices will disconnect and must be configured with the new token.',
-        buttons: ['Cancel', 'Rotate token'],
+        title: 'Revoke trusted device',
+        message: 'Revoke this device’s PulseRN reconnect token?',
+        detail: 'The device must complete pairing again before it can connect over LAN.',
+        buttons: ['Cancel', 'Revoke device'],
         defaultId: 0,
         cancelId: 0,
         noLink: true,
@@ -478,9 +670,11 @@ app.whenReady().then(async () => {
         ? await dialog.showMessageBox(window, options)
         : await dialog.showMessageBox(options);
       if (confirmation.response !== 1) return connectionInfo();
-      accessTokenStore.rotate();
-      if (settingsStore?.get().allowLanConnections) await restartServer();
-      return connectionInfo(true);
+      pairingStore.revoke(input.appId, input.deviceId);
+      server?.disconnectDevice(input.appId, input.deviceId);
+      const info = connectionInfo();
+      if (window && !window.isDestroyed()) window.webContents.send(CONNECTION_CHANNEL, info);
+      return info;
     }
     if (input.operation === 'installTls') {
       if (!settingsStore || !tlsCertificateStore) {
@@ -571,7 +765,7 @@ app.whenReady().then(async () => {
       }
       return connectionInfo();
     }
-    return connectionInfo(input.operation === 'revealToken');
+    return connectionInfo();
   });
   ipcMain.handle(UPDATE_CHANNEL, async (_event, value?: unknown) => {
     if (!updateManager) throw new Error('PulseRN updates are not ready.');

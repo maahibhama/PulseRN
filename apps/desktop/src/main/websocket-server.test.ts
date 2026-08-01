@@ -4,7 +4,12 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
 import { PROTOCOL_VERSION } from '@pulse-rn/protocol';
-import { accessTokensMatch, DevToolWebSocketServer } from './websocket-server.js';
+import {
+  accessTokensMatch,
+  DevToolWebSocketServer,
+  validateWebSocketRequest,
+} from './websocket-server.js';
+import type { IncomingMessage } from 'node:http';
 
 const servers: DevToolWebSocketServer[] = [];
 
@@ -118,5 +123,64 @@ describe('WebSocket access token authentication', () => {
       accepted: true,
       protocolVersion: PROTOCOL_VERSION,
     });
+  });
+
+  it('returns a reconnect token after one-time pairing', async () => {
+    const onConnected = vi.fn();
+    const server = new DevToolWebSocketServer(
+      0,
+      {
+        onConnected,
+        onDisconnected: vi.fn(),
+        onEvents: vi.fn(),
+        onHealth: vi.fn(),
+        onInvalidMessage: vi.fn(),
+      },
+      '127.0.0.1',
+      (message) =>
+        message.authToken === 'PAIR-CODE'
+          ? {
+              accepted: true,
+              trustStatus: 'paired',
+              reconnectToken: 'r'.repeat(43),
+            }
+          : { accepted: false, reason: 'Pairing required' },
+    );
+    servers.push(server);
+    await server.start();
+
+    await expect(handshake(server.address().port, 'PAIR-CODE')).resolves.toMatchObject({
+      accepted: true,
+      trustStatus: 'paired',
+      reconnectToken: 'r'.repeat(43),
+    });
+    expect(onConnected).toHaveBeenCalledWith(
+      expect.objectContaining({ trustStatus: 'paired', protocolVersion: PROTOCOL_VERSION }),
+    );
+  });
+
+  it('rejects cross-origin browser handshakes', () => {
+    expect(
+      validateWebSocketRequest(
+        {
+          headers: {
+            host: '192.168.1.10:9090',
+            origin: 'https://attacker.example',
+          },
+        } as IncomingMessage,
+        9090,
+      ),
+    ).toBe('Origin host does not match request host');
+    expect(
+      validateWebSocketRequest(
+        {
+          headers: {
+            host: '192.168.1.10:9090',
+            origin: 'http://192.168.1.10:8081',
+          },
+        } as IncomingMessage,
+        9090,
+      ),
+    ).toBeUndefined();
   });
 });

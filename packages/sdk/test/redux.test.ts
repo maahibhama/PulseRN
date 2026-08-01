@@ -34,6 +34,76 @@ describe('Redux middleware', () => {
     expect(next).toHaveBeenCalledOnce();
     expect(track).not.toHaveBeenCalled();
   });
+
+  it('applies allow, deny, and per-category policies independently per store', () => {
+    const mainTrack = vi.fn();
+    const analyticsTrack = vi.fn();
+    const create = (storeId: string, track: typeof mainTrack, enabledCategories: string[]) =>
+      createDevToolMiddleware({
+        client: { track },
+        storeId,
+        actionAllowList: ['checkout/*', 'internal/blocked'],
+        actionDenyList: ['internal/*'],
+        actionCategories: {
+          commerce: ['checkout/*'],
+          internal: ['internal/*'],
+        },
+        enabledCategories,
+      })({ getState: () => ({ ready: true }) })((action) => action);
+    const main = create('main', mainTrack, ['commerce']);
+    const analytics = create('analytics', analyticsTrack, ['internal']);
+
+    main({ type: 'checkout/start' });
+    main({ type: 'internal/blocked' });
+    analytics({ type: 'checkout/start' });
+
+    expect(mainTrack).toHaveBeenCalledOnce();
+    expect(mainTrack.mock.calls[0]![0].payload).toMatchObject({
+      storeId: 'main',
+      actionCategory: 'commerce',
+    });
+    expect(analyticsTrack).not.toHaveBeenCalled();
+  });
+
+  it('bounds circular and oversized states and reports correlation context', () => {
+    const circular: { items: string[]; self?: unknown } = {
+      items: Array.from({ length: 100 }, (_, index) => `item-${index}`),
+    };
+    circular.self = circular;
+    const track = vi.fn();
+    const middleware = createDevToolMiddleware({
+      client: { track },
+      maxStateProperties: 8,
+      maxStateBytes: 1_024,
+      stateSizeWarningBytes: 1_024,
+      getCorrelationContext: () => ({
+        correlationId: 'flow-1',
+        parentId: 'request-1',
+        route: 'Checkout',
+        requestId: 'request-1',
+        errorId: 'error-1',
+        performanceEventId: 'stall-1',
+      }),
+    })({ getState: () => circular })((action) => action);
+
+    middleware({ type: 'checkout/large' });
+    const tracked = track.mock.calls[0]![0];
+    expect(tracked).toMatchObject({
+      correlationId: 'flow-1',
+      parentId: 'request-1',
+      payload: {
+        correlations: {
+          route: 'Checkout',
+          requestId: 'request-1',
+          errorId: 'error-1',
+          performanceEventId: 'stall-1',
+        },
+        stateSize: { truncated: true },
+      },
+    });
+    expect(tracked.payload.changedPaths).toEqual([]);
+    expect(JSON.stringify(tracked.payload)).toContain('[Property limit]');
+  });
 });
 
 describe('diffStates', () => {

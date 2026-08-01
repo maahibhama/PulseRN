@@ -17,10 +17,18 @@ if (__DEV__) {
     appName: 'MyApp',
     enableConsole: true,
     captureConsoleStackTrace: true,
+    maxConsoleEventsPerMinute: 6_000,
+    consoleSerialization: {
+      maxDepth: 8,
+      maxProperties: 200,
+      maxStringLength: 20_000,
+    },
     enableNetwork: true,
     captureRequestBodies: true,
     captureResponseBodies: true,
     maxNetworkBodyBytes: 102_400,
+    maxNetworkRequestBytes: 262_144,
+    maxNetworkSessionBytes: 10_485_760,
     redaction: {
       fields: ['password', 'otp', 'token'],
       headers: ['authorization', 'cookie'],
@@ -31,27 +39,32 @@ if (__DEV__) {
 ```
 
 Android Emulator maps the host loopback address to `10.0.2.2`. The iOS simulator can use
-`127.0.0.1`. For a physical device, enable authenticated LAN connections in PulseRN Settings and
-configure the address, port, and copied token:
+`127.0.0.1`. For a physical device, enable authenticated LAN connections and create a one-time code
+in PulseRN. Persist the reconnect token with an application-owned development storage provider:
 
 ```ts
-ReactNativeDevTool.configure({
+const client = ReactNativeDevTool.configure({
   appName: 'MyApp',
   host: '192.168.1.20',
   port: 9090,
-  authToken: 'token-copied-from-pulsern',
+  pairingCode: 'ABCD-EFGH',
+  reconnectToken: savedReconnectToken,
+  onReconnectToken: async (token) => {
+    await saveReconnectToken(token);
+  },
   secure: true,
-}).connect();
+});
+
+client.connect();
 ```
 
 `secure: true` selects `wss://` and must match the TLS setting in the desktop app. Configure a PEM
 certificate and matching private key under **Settings → Device connections** first. The mobile
 device must trust the issuing certificate authority, and the certificate must include the configured
-hostname or IP in its subject alternative names. TLS does not replace `authToken` in LAN mode.
+hostname or IP in its subject alternative names. TLS does not replace pairing in LAN mode.
 
-Without TLS, LAN mode uses plain `ws://`. Keep it on a trusted development network, rotate the token
-after sharing it, and never commit a token or private key to source control. Loopback remains the
-default and does not require a token.
+Without TLS, LAN mode uses plain `ws://`. Keep it on a trusted development network and never commit
+a pairing code, reconnect token, or private key. Loopback remains the default and needs no pairing.
 
 ## Persistent device identity
 
@@ -102,9 +115,32 @@ Set `enableConsole: true` to intercept `console.log`, `console.info`, `console.w
 
 Stack capture is enabled with `captureConsoleStackTrace`. Disable it when minimizing development overhead is more important than source locations.
 
+Use `maxConsoleEventsPerMinute` to bound noisy applications and `consoleSerialization` to cap object
+depth, property count, and string length before transport. PulseRN marks redacted and truncated
+console payloads explicitly. The Console inspector reports console-specific transport drops and lets
+the user choose a bounded 250–2,000 record display window without deleting persisted history.
+
 ## Network capture
 
-Set `enableNetwork: true` to instrument global `fetch` and `XMLHttpRequest`. PulseRN clones fetch responses before reading them, so application code retains the original response stream. Binary content types are not captured. Text and JSON bodies are bounded by `maxNetworkBodyBytes` and marked when truncated.
+Set `enableNetwork: true` to instrument global `fetch` and `XMLHttpRequest`. PulseRN clones fetch
+responses before reading them, so application code retains the original response stream. Additive
+start, progress, redirect, completion, and failure events let the desktop show in-flight requests
+while the existing completed-request event remains available to protocol v1 readers.
+
+Binary content types are never captured. Secrets are redacted before persistence, and text/JSON
+bodies are governed by three independent budgets:
+
+- `maxNetworkBodyBytes` truncates a single body.
+- `maxNetworkRequestBytes` can omit request or response bodies when their combined capture exceeds
+  the request budget.
+- `maxNetworkSessionBytes` stops body capture for the rest of that client session once its shared
+  budget is exhausted.
+
+The desktop labels budget omissions and approximate React Native timing instead of inventing
+fine-grained DNS, connection, or transfer measurements. Its Network inspector provides lifecycle
+progress, redirect chains, request initiators, correlation IDs, a waterfall, lazy body/header/query
+views, sanitized copy-as-cURL, and sanitized HAR export. HAR and cURL generation reapply sensitive
+header redaction.
 
 For Axios instances with custom adapters, attach the optional interceptor:
 
@@ -127,6 +163,21 @@ const pulseRNMiddleware = createDevToolMiddleware({
   captureState: true,
   captureStateDiff: true,
   maxStateDepth: 10,
+  maxStateProperties: 10_000,
+  maxStateBytes: 524_288,
+  stateSizeWarningBytes: 262_144,
+  actionAllowList: ['checkout/*', 'profile/*'],
+  actionDenyList: ['analytics/noisy'],
+  actionCategories: {
+    checkout: ['checkout/*'],
+    profile: ['profile/*'],
+  },
+  enabledCategories: ['checkout', 'profile'],
+  getCorrelationContext: () => ({
+    route: currentRouteName,
+    requestId: activeRequestId,
+    correlationId: activeFlowId,
+  }),
   redactedFields: ['token', 'password'],
 });
 ```
@@ -135,6 +186,12 @@ With Redux Toolkit, append it using `middleware: (getDefaultMiddleware) =>
 getDefaultMiddleware().concat(pulseRNMiddleware)`. With Redux, pass it to `applyMiddleware`.
 Each configured `storeId` is independently filterable in the desktop app. The middleware observes
 dispatch without mutating actions or state and does not implement state replay or time travel.
+Allow/deny patterns support exact action names and a trailing `*` prefix match. Category policy is
+configured independently for each middleware/store instance. Serialization stops at the configured
+depth/property/byte limits, emits state-size and truncation metadata, and derives a bounded changed
+path summary. The desktop lazily expands state/action branches and diffs rather than stringifying a
+complete selected state eagerly. Correlation context is optional and can associate actions with the
+active route, request, error, performance stall, and parent timeline flow.
 
 ## Navigation capture
 
@@ -146,7 +203,14 @@ import { createNavigationTracker, ReactNativeDevTool } from '@pulse-rn/sdk';
 const tracker = createNavigationTracker({
   client: ReactNativeDevTool,
   navigatorId: 'root',
+  source: 'react-navigation',
+  integrationMetadata: { library: '@react-navigation/native' },
   redactedFields: ['token', 'password'],
+  getCorrelationContext: () => ({
+    correlationId: activeFlowId,
+    requestId: activeRequestId,
+    reduxEventId: latestReduxEventId,
+  }),
 });
 
 <NavigationContainer
@@ -161,6 +225,13 @@ previous and current routes, sanitized parameters, and time spent on the previou
 navigation refs can instead use `tracker.attach(navigationRef)`. Expo Router and custom navigation
 systems can call `tracker.track({ route, action, lifecycle })`.
 
+Phase 16 normalizes React Navigation, Expo Router, and manual inputs into the same route path and
+flat ownership tree while retaining `source` and `integrationMetadata`. Supply stable, unique
+`navigatorId` values and keyed routes. PulseRN warns about duplicate navigator IDs, unkeyed or
+incomplete tracking, and inconsistent ancestry. Parameter diffs, grouped forward/back/reset
+actions, screen-duration history, and optional request/Redux/performance/console/error correlations
+remain read-only.
+
 ## Performance capture
 
 Enable JavaScript-derived sampling in the SDK configuration:
@@ -174,6 +245,13 @@ ReactNativeDevTool.configure({
   captureMemory: false,
 }).connect();
 ```
+
+Performance samples identify JavaScript/runtime provenance, the sampling interval, estimated lost
+samples, and capture rate. PulseRN reports missing animation-frame and JS-heap capabilities
+explicitly. Native CPU, UI-thread, and native-memory profiling are reported as unavailable rather
+than replaced with synthetic values. The desktop provides selectable time ranges and configurable
+JS FPS, stall, slow-screen, network-latency, and memory-growth thresholds, plus comparisons when
+matching app/platform sessions are loaded.
 
 Create custom and screen measurements:
 

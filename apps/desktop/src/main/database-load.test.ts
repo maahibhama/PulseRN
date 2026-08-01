@@ -13,10 +13,10 @@ afterAll(() => {
 });
 
 describe('sustained event load', () => {
-  it('keeps insertion, cursor queries, and retention bounded at 25,000 events', () => {
+  it('keeps insertion, cursor queries, and retention bounded at 100,000 events', () => {
     const database = new EventDatabase(join(directory, 'load.sqlite'));
     const now = Date.now();
-    const events = Array.from({ length: 25_000 }, (_, sequence) => ({
+    const events = Array.from({ length: 100_000 }, (_, sequence) => ({
       id: `load-${sequence.toString().padStart(6, '0')}`,
       protocolVersion: PROTOCOL_VERSION,
       sessionId: 'load-session',
@@ -48,17 +48,17 @@ describe('sustained event load', () => {
       cursor = page.nextCursor;
     } while (cursor);
 
-    const maintenance = database.maintain({ maxAgeDays: 30, maxEvents: 10_000 }, now + 25_000);
+    const maintenance = database.maintain({ maxAgeDays: 30, maxEvents: 100_000 }, now + 100_000);
     const sortedQueryDurations = [...queryDurations].sort((left, right) => left - right);
     const queryP95Ms = sortedQueryDurations[Math.floor(sortedQueryDurations.length * 0.95)] ?? 0;
 
-    expect(loaded).toBe(25_000);
+    expect(loaded).toBe(100_000);
     expect(maintenance).toMatchObject({
-      removedOverflow: 15_000,
-      retainedEvents: 10_000,
+      removedOverflow: 0,
+      retainedEvents: 100_000,
     });
-    expect(insertDurationMs).toBeLessThan(15_000);
-    expect(queryP95Ms).toBeLessThan(1_000);
+    expect(insertDurationMs).toBeLessThan(30_000);
+    expect(queryP95Ms).toBeLessThan(250);
     database.close();
-  }, 30_000);
+  }, 45_000);
 });

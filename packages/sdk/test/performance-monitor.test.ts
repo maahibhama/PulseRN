@@ -39,4 +39,62 @@ describe('PerformanceMonitor', () => {
     expect(monitor.measure('missing', 'unknown')).toBeUndefined();
     expect(monitor.screenMounted('Unknown')).toBeUndefined();
   });
+
+  it('reports sampling quality and unavailable runtime/native capabilities explicitly', () => {
+    vi.useFakeTimers();
+    const emit = vi.fn();
+    let now = 0;
+    const monitor = new PerformanceMonitor(emit, {
+      now: () => now,
+      sampleIntervalMs: 1_000,
+      captureMemory: true,
+      runtime: {},
+    });
+    monitor.start();
+    const capabilities = emit.mock.calls.map(([payload]) => payload.capability).filter(Boolean);
+    expect(capabilities).toEqual([
+      {
+        name: 'animation_frame',
+        status: 'unavailable',
+        reason: 'requestAnimationFrame is not exposed by this React Native runtime.',
+      },
+      {
+        name: 'js_heap',
+        status: 'unavailable',
+        reason: 'JavaScript heap metrics are not exposed by this runtime.',
+      },
+      {
+        name: 'native_cpu',
+        status: 'unavailable',
+        reason: 'Native CPU profiling is outside SDK capability.',
+      },
+      {
+        name: 'ui_thread',
+        status: 'unavailable',
+        reason: 'UI-thread profiling is outside SDK capability.',
+      },
+      {
+        name: 'native_memory',
+        status: 'unavailable',
+        reason: 'Native-memory profiling is outside SDK capability.',
+      },
+    ]);
+    now = 3_100;
+    vi.advanceTimersByTime(1_000);
+    expect(emit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metric: 'event_loop_lag',
+        value: 2_100,
+        provenance: 'javascript',
+        sampling: {
+          intervalMs: 1_000,
+          expectedSamples: 1,
+          lostSamples: 2,
+          captureRate: 1 / 3,
+        },
+      }),
+    );
+    monitor.stop();
+    vi.useRealTimers();
+  });
 });

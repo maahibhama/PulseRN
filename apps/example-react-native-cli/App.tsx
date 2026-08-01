@@ -25,8 +25,11 @@ import { runLineDebuggerDemo, runUnhandledDebuggerDemo } from './debugger-demo';
 // Use adb reverse tcp:9090 tcp:9090 for an attached Android device, or replace
 // this value with your development machine's LAN address for a physical device.
 const host = Platform.OS === 'android' ? '10.0.2.2' : '127.0.0.1';
-// Paste the desktop access token here only for a temporary physical-device development session.
-const authToken: string | undefined = undefined;
+// For a physical device, paste a short-lived pairing code from PulseRN Connections.
+// After pairing, persist the reconnect token reported by `onReconnectToken` in your
+// app's secure storage and provide it here on the next launch.
+const pairingCode: string | undefined = undefined;
+const reconnectToken: string | undefined = undefined;
 // Set to true when PulseRN desktop TLS is enabled and this device trusts its certificate.
 const secure = false;
 const mmkv = createMMKV({ id: 'pulse-rn-cli-example' });
@@ -35,6 +38,7 @@ const navigationTracker = createNavigationTracker({
   client: ReactNativeDevTool,
   navigatorId: 'cli-root',
   source: 'manual',
+  integrationMetadata: { integration: 'manual-state-machine' },
   redactedFields: ['token', 'password'],
 });
 
@@ -67,6 +71,21 @@ const reduxMiddleware = createDevToolMiddleware({
   captureState: true,
   captureStateDiff: true,
   maxStateDepth: 10,
+  maxStateProperties: 5_000,
+  maxStateBytes: 512 * 1024,
+  stateSizeWarningBytes: 256 * 1024,
+  actionCategories: {
+    counter: ['counter/*'],
+    profile: ['profile/*'],
+  },
+  enabledCategories: ['counter', 'profile'],
+  actionDenyList: ['@@redux/*'],
+  getCorrelationContext: action => ({
+    route: 'Home',
+    correlationId: `redux:${String(
+      (action as { type?: unknown }).type ?? 'unknown',
+    )}`,
+  }),
   redactedFields: ['token'],
 });
 const demoStore = createStore(demoReducer, applyMiddleware(reduxMiddleware));
@@ -85,7 +104,8 @@ function App() {
       host,
       port: 9090,
       secure,
-      ...(authToken ? { authToken } : {}),
+      ...(pairingCode ? { pairingCode } : {}),
+      ...(reconnectToken ? { reconnectToken } : {}),
       appName: 'PulseRN CLI Example',
       appId: 'dev.pulsern.cli-example',
       appVersion: '0.1.0',
@@ -103,10 +123,18 @@ function App() {
       },
       enableConsole: true,
       captureConsoleStackTrace: true,
+      maxConsoleEventsPerMinute: 6_000,
+      consoleSerialization: {
+        maxDepth: 8,
+        maxProperties: 200,
+        maxStringLength: 20_000,
+      },
       enableNetwork: true,
       captureRequestBodies: true,
       captureResponseBodies: true,
       maxNetworkBodyBytes: 100 * 1024,
+      maxNetworkRequestBytes: 256 * 1024,
+      maxNetworkSessionBytes: 10 * 1024 * 1024,
       enablePerformance: true,
       performanceSampleIntervalMs: 1_000,
       javascriptStallThresholdMs: 100,
@@ -155,7 +183,11 @@ function App() {
     });
     navigationTracker.track({
       lifecycle: 'ready',
-      route: { name: 'Home', path: '/' },
+      route: { key: 'cli-home', name: 'Home', path: '/' },
+      rootState: {
+        index: 0,
+        routes: [{ key: 'cli-home', name: 'Home', path: '/' }],
+      },
     });
 
     return () => {
@@ -169,11 +201,27 @@ function App() {
     navigationTracker.track({
       lifecycle: 'state',
       action: 'navigate',
-      previousRoute: { name: 'Home', path: '/' },
+      previousRoute: { key: 'cli-home', name: 'Home', path: '/' },
       route: {
+        key: 'cli-details',
         name: 'Details',
         path: '/details',
         params: { token: 'navigation-secret' },
+      },
+      rootState: {
+        index: 0,
+        routes: [
+          {
+            key: 'cli-stack',
+            name: 'RootStack',
+            state: {
+              index: 0,
+              routes: [
+                { key: 'cli-details', name: 'Details', path: '/details' },
+              ],
+            },
+          },
+        ],
       },
     });
     setScreen('details');
@@ -183,8 +231,12 @@ function App() {
     navigationTracker.track({
       lifecycle: 'state',
       action: 'back',
-      previousRoute: { name: 'Details', path: '/details' },
-      route: { name: 'Home', path: '/' },
+      previousRoute: { key: 'cli-details', name: 'Details', path: '/details' },
+      route: { key: 'cli-home', name: 'Home', path: '/' },
+      rootState: {
+        index: 0,
+        routes: [{ key: 'cli-home', name: 'Home', path: '/' }],
+      },
     });
     setScreen('home');
   };

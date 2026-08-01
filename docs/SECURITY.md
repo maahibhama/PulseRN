@@ -7,14 +7,18 @@ Please report vulnerabilities privately to the repository maintainers. Do not op
 ## Current posture
 
 - WebSocket listens only on `127.0.0.1` unless authenticated LAN access is explicitly enabled.
-- LAN mode binds to `0.0.0.0` and requires a generated 256-bit access token in the validated
-  handshake. Tokens are stored separately with user-only permissions and compared in constant time.
+- LAN mode binds to `0.0.0.0` and requires explicit one-time pairing or a trusted reconnect token.
+  Pairing codes expire after five minutes and five failures. Reconnect tokens have 256 bits of
+  entropy; only SHA-256 hashes are persisted with user-only permissions, and tokens can be revoked
+  per device.
+- LAN WebSocket handshakes validate the Host header and reject browser origins whose host does not
+  match the requested PulseRN host. Native clients without an Origin header still require pairing.
 - TLS can be enabled with a user-supplied PEM certificate and matching private key. PulseRN validates
   the pair before use, stores both with user-only permissions, exposes certificate metadata rather
   than key material to the renderer, and serves the same validated protocol over `wss://`.
-- TLS does not replace LAN token authentication. Without TLS, LAN transport is plain `ws://` and
+- TLS does not replace LAN pairing authentication. Without TLS, LAN transport is plain `ws://` and
   must only be used on trusted development networks because network observers can capture traffic
-  and tokens.
+  and pairing credentials.
 - PulseRN does not provision trust on mobile devices. The device must trust the issuing certificate
   authority and the certificate's subject alternative names must cover the configured hostname or
   IP address.
@@ -45,6 +49,6 @@ Please report vulnerabilities privately to the repository maintainers. Do not op
   signatures. Certificates, private keys, and notarization credentials belong only in GitHub Actions
   secrets and must never be committed.
 
-Do not expose the LAN port to the public internet. Rotate the token after sharing it, when a device
-is lost, or after using an untrusted network. Protect and rotate the TLS private key separately.
-Prefer USB port forwarding or simulator loopback whenever possible.
+Do not expose the LAN port to the public internet. Revoke a trusted device when it is lost or after
+using an untrusted network. Protect and rotate the TLS private key separately. Prefer USB port
+forwarding or simulator loopback whenever possible.

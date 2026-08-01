@@ -21,7 +21,8 @@ import { runLineDebuggerDemo, runUnhandledDebuggerDemo } from '../debugger-demo'
 const host =
   process.env.EXPO_PUBLIC_PULSE_RN_HOST ?? (Platform.OS === 'android' ? '10.0.2.2' : '127.0.0.1');
 const devToolPort = Number(process.env.EXPO_PUBLIC_PULSE_RN_PORT ?? 9090);
-const authToken = process.env.EXPO_PUBLIC_PULSE_RN_TOKEN;
+const pairingCode = process.env.EXPO_PUBLIC_PULSE_RN_PAIRING_CODE;
+const reconnectToken = process.env.EXPO_PUBLIC_PULSE_RN_RECONNECT_TOKEN;
 const secure = process.env.EXPO_PUBLIC_PULSE_RN_SECURE === 'true';
 const mmkv = createMMKV({ id: 'pulse-rn-example' });
 
@@ -49,6 +50,19 @@ const reduxMiddleware = createDevToolMiddleware({
   captureState: true,
   captureStateDiff: true,
   maxStateDepth: 10,
+  maxStateProperties: 5_000,
+  maxStateBytes: 512 * 1024,
+  stateSizeWarningBytes: 256 * 1024,
+  actionCategories: {
+    counter: ['counter/*'],
+    profile: ['profile/*'],
+  },
+  enabledCategories: ['counter', 'profile'],
+  actionDenyList: ['@@redux/*'],
+  getCorrelationContext: (action) => ({
+    route: 'Home',
+    correlationId: `redux:${String((action as { type?: unknown }).type ?? 'unknown')}`,
+  }),
   redactedFields: ['token'],
 });
 const demoStore = createStore(demoReducer, applyMiddleware(reduxMiddleware));
@@ -66,7 +80,8 @@ export default function HomeScreen() {
       host,
       port: devToolPort,
       secure,
-      ...(authToken ? { authToken } : {}),
+      ...(pairingCode ? { pairingCode } : {}),
+      ...(reconnectToken ? { reconnectToken } : {}),
       appName: 'PulseRN Example',
       appId: 'dev.pulsern.example',
       appVersion: Constants.expoConfig?.version,
@@ -81,10 +96,18 @@ export default function HomeScreen() {
       },
       enableConsole: true,
       captureConsoleStackTrace: true,
+      maxConsoleEventsPerMinute: 6_000,
+      consoleSerialization: {
+        maxDepth: 8,
+        maxProperties: 200,
+        maxStringLength: 20_000,
+      },
       enableNetwork: true,
       captureRequestBodies: true,
       captureResponseBodies: true,
       maxNetworkBodyBytes: 100 * 1024,
+      maxNetworkRequestBytes: 256 * 1024,
+      maxNetworkSessionBytes: 10 * 1024 * 1024,
       enablePerformance: true,
       performanceSampleIntervalMs: 1_000,
       javascriptStallThresholdMs: 100,
@@ -126,7 +149,7 @@ export default function HomeScreen() {
     });
     navigationTracker.track({
       lifecycle: 'ready',
-      route: { name: 'Home', path: '/' },
+      route: { key: 'expo:/', name: 'Home', path: '/' },
     });
     const unsubscribe = demoStore.subscribe(() => setReduxCount(demoStore.getState().count));
     return () => {

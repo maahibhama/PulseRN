@@ -2,15 +2,24 @@ import type { DevToolEventCategory, DevToolEventEnvelope } from '@pulse-rn/proto
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 const PAGE_SIZE = 250;
+export const MAX_RENDERER_EVENTS = 2_000;
+
+function cursorOf(event: DevToolEventEnvelope | undefined) {
+  return event ? { id: event.id, sequence: event.sequence, timestamp: event.timestamp } : undefined;
+}
 
 export function useInspectorEvents(
   categories: DevToolEventCategory[] | undefined,
   liveEventId?: string,
+  sessionId?: string,
 ) {
   const [events, setEvents] = useState<DevToolEventEnvelope[]>([]);
-  const [cursor, setCursor] =
+  const [nextCursor, setNextCursor] =
     useState<Awaited<ReturnType<typeof window.pulseRN.queryEvents>>['nextCursor']>();
-  const [hasMore, setHasMore] = useState(false);
+  const [previousCursor, setPreviousCursor] =
+    useState<Awaited<ReturnType<typeof window.pulseRN.queryEvents>>['previousCursor']>();
+  const [hasNext, setHasNext] = useState(false);
+  const [hasPrevious, setHasPrevious] = useState(false);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -20,8 +29,10 @@ export function useInspectorEvents(
   const refresh = useCallback(async () => {
     if (!categories?.length) {
       setEvents([]);
-      setCursor(undefined);
-      setHasMore(false);
+      setNextCursor(undefined);
+      setPreviousCursor(undefined);
+      setHasNext(false);
+      setHasPrevious(false);
       setTotal(0);
       return;
     }
@@ -31,13 +42,16 @@ export function useInspectorEvents(
     try {
       const page = await window.pulseRN.queryEvents({
         categories,
+        ...(sessionId ? { sessionId } : {}),
         limit: PAGE_SIZE,
         order: 'newest',
       });
       if (request !== generation.current) return;
       setEvents(page.events);
-      setCursor(page.nextCursor);
-      setHasMore(page.hasMore);
+      setNextCursor(page.nextCursor);
+      setPreviousCursor(page.previousCursor);
+      setHasNext(page.hasNext);
+      setHasPrevious(page.hasPrevious);
       setTotal(page.total);
     } catch (cause) {
       if (request === generation.current) {
@@ -46,32 +60,71 @@ export function useInspectorEvents(
     } finally {
       if (request === generation.current) setLoading(false);
     }
-  }, [categoryKey]);
+  }, [categoryKey, sessionId]);
 
   const loadMore = useCallback(async () => {
-    if (!categories?.length || loading || !hasMore || !cursor) return;
+    if (!categories?.length || loading || !hasNext || !nextCursor) return;
     setLoading(true);
     setError('');
     try {
       const page = await window.pulseRN.queryEvents({
         categories,
-        cursor,
+        ...(sessionId ? { sessionId } : {}),
+        cursor: nextCursor,
+        direction: 'forward',
         limit: PAGE_SIZE,
         order: 'newest',
       });
       setEvents((current) => {
         const ids = new Set(current.map((event) => event.id));
-        return [...current, ...page.events.filter((event) => !ids.has(event.id))];
+        const combined = [...current, ...page.events.filter((event) => !ids.has(event.id))];
+        const trimmed = combined.length > MAX_RENDERER_EVENTS;
+        const bounded = trimmed ? combined.slice(-MAX_RENDERER_EVENTS) : combined;
+        setPreviousCursor(trimmed || page.hasPrevious ? cursorOf(bounded[0]) : page.previousCursor);
+        setHasPrevious(trimmed || page.hasPrevious);
+        return bounded;
       });
-      setCursor(page.nextCursor);
-      setHasMore(page.hasMore);
+      setNextCursor(page.nextCursor);
+      setHasNext(page.hasNext);
       setTotal(page.total);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to load more inspector events.');
     } finally {
       setLoading(false);
     }
-  }, [categoryKey, cursor, hasMore, loading]);
+  }, [categoryKey, hasNext, loading, nextCursor, sessionId]);
+
+  const loadNewer = useCallback(async () => {
+    if (!categories?.length || loading || !hasPrevious || !previousCursor) return;
+    setLoading(true);
+    setError('');
+    try {
+      const page = await window.pulseRN.queryEvents({
+        categories,
+        ...(sessionId ? { sessionId } : {}),
+        cursor: previousCursor,
+        direction: 'backward',
+        limit: PAGE_SIZE,
+        order: 'newest',
+      });
+      setEvents((current) => {
+        const ids = new Set(page.events.map((event) => event.id));
+        const combined = [...page.events, ...current.filter((event) => !ids.has(event.id))];
+        const trimmed = combined.length > MAX_RENDERER_EVENTS;
+        const bounded = trimmed ? combined.slice(0, MAX_RENDERER_EVENTS) : combined;
+        setNextCursor(trimmed || page.hasNext ? cursorOf(bounded.at(-1)) : page.nextCursor);
+        setHasNext(trimmed || page.hasNext);
+        return bounded;
+      });
+      setPreviousCursor(page.previousCursor);
+      setHasPrevious(page.hasPrevious);
+      setTotal(page.total);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to load newer inspector events.');
+    } finally {
+      setLoading(false);
+    }
+  }, [categoryKey, hasPrevious, loading, previousCursor, sessionId]);
 
   useEffect(() => {
     void refresh();
@@ -84,5 +137,16 @@ export function useInspectorEvents(
     if (liveEventId && categories?.length) void refresh();
   }, [liveEventId, refresh]);
 
-  return { error, events, hasMore, loadMore, loading, refresh, total };
+  return {
+    error,
+    events,
+    hasMore: hasNext,
+    hasNext,
+    hasPrevious,
+    loadMore,
+    loadNewer,
+    loading,
+    refresh,
+    total,
+  };
 }

@@ -7,6 +7,7 @@ import {
   type PerformanceEventPayload,
 } from '@pulse-rn/protocol';
 import { useEffect, useMemo, useState } from 'react';
+import { VirtualizedList } from './VirtualizedList.js';
 
 interface PerformancePanelProps {
   events: DevToolEventEnvelope[];
@@ -15,6 +16,7 @@ interface PerformancePanelProps {
 }
 
 type MetricFilter = 'all' | 'fps' | 'stalls' | 'timing' | 'related';
+type TimeRange = 'minute' | 'five-minutes' | 'all';
 
 function formatMetric(payload: PerformanceEventPayload): string {
   if (payload.unit === 'bytes') {
@@ -22,6 +24,7 @@ function formatMetric(payload: PerformanceEventPayload): string {
       ? `${(payload.value / 1_024).toFixed(1)} KB`
       : `${(payload.value / 1_048_576).toFixed(1)} MB`;
   }
+  if (payload.metric === 'capability') return payload.capability?.status ?? 'Unavailable';
   return `${payload.value.toFixed(payload.unit === 'fps' ? 1 : 2)} ${payload.unit}`;
 }
 
@@ -64,6 +67,14 @@ export function PerformancePanel({ events, selectedEventId, onSelect }: Performa
   const [clearedAt, setClearedAt] = useState(0);
   const [filter, setFilter] = useState<MetricFilter>('all');
   const [search, setSearch] = useState('');
+  const [timeRange, setTimeRange] = useState<TimeRange>('five-minutes');
+  const [fpsThreshold, setFpsThreshold] = useState(50);
+  const [stallThreshold, setStallThreshold] = useState(100);
+  const [screenThreshold, setScreenThreshold] = useState(1_000);
+  const [networkThreshold, setNetworkThreshold] = useState(500);
+  const [memoryGrowthThreshold, setMemoryGrowthThreshold] = useState(10);
+  const cutoff =
+    timeRange === 'all' ? 0 : Date.now() - (timeRange === 'minute' ? 60_000 : 5 * 60_000);
 
   useEffect(() => {
     if (!paused) setDisplayedEvents(performanceEvents);
@@ -71,6 +82,7 @@ export function PerformancePanel({ events, selectedEventId, onSelect }: Performa
 
   const metricEvents = displayedEvents.filter((event) => {
     if (event.timestamp <= clearedAt) return false;
+    if (event.timestamp < cutoff) return false;
     const parsed = performanceEventPayloadSchema.safeParse(event.payload);
     if (!parsed.success || !parsed.data.name.toLowerCase().includes(search.toLowerCase()))
       return false;
@@ -93,6 +105,7 @@ export function PerformancePanel({ events, selectedEventId, onSelect }: Performa
       ? relatedEvents.filter(
           (event) =>
             event.timestamp > clearedAt &&
+            event.timestamp >= cutoff &&
             relatedMetric(event)?.label.toLowerCase().includes(search.toLowerCase()),
         )
       : metricEvents;
@@ -109,6 +122,30 @@ export function PerformancePanel({ events, selectedEventId, onSelect }: Performa
     const parsed = performanceEventPayloadSchema.safeParse(event.payload);
     return parsed.success && parsed.data.metric === 'js_stall';
   }).length;
+  const capabilityGaps = performanceEvents.flatMap((event) => {
+    const parsed = performanceEventPayloadSchema.safeParse(event.payload);
+    return parsed.success && parsed.data.capability?.status === 'unavailable'
+      ? [parsed.data.capability]
+      : [];
+  });
+  const memoryBaseline = performanceEvents.flatMap((event) => {
+    const parsed = performanceEventPayloadSchema.safeParse(event.payload);
+    return parsed.success && parsed.data.metric === 'memory' ? [parsed.data.value] : [];
+  })[0];
+  const sessionAverages = useMemo(() => {
+    const sessions = new Map<string, number[]>();
+    for (const event of performanceEvents) {
+      const parsed = performanceEventPayloadSchema.safeParse(event.payload);
+      if (!parsed.success || parsed.data.metric === 'capability') continue;
+      const values = sessions.get(event.sessionId) ?? [];
+      values.push(parsed.data.value);
+      sessions.set(event.sessionId, values);
+    }
+    return [...sessions.entries()].map(([sessionId, values]) => ({
+      sessionId,
+      average: values.reduce((total, value) => total + value, 0) / values.length,
+    }));
+  }, [performanceEvents]);
 
   return (
     <main className="timeline performance-panel">
@@ -140,6 +177,24 @@ export function PerformancePanel({ events, selectedEventId, onSelect }: Performa
           <strong>{relatedEvents.length}</strong>
           <small>network, Redux, routes</small>
         </div>
+        <div>
+          <span>Sampling loss</span>
+          <strong>
+            {`${(
+              (1 -
+                (performanceEvents
+                  .flatMap((event) => {
+                    const parsed = performanceEventPayloadSchema.safeParse(event.payload);
+                    return parsed.success && parsed.data.sampling
+                      ? [parsed.data.sampling.captureRate]
+                      : [];
+                  })
+                  .at(-1) ?? 1)) *
+              100
+            ).toFixed(1)}%`}
+          </strong>
+          <small>SDK-reported</small>
+        </div>
         <div className="fps-chart" aria-label="Recent approximate JavaScript FPS">
           {fpsSamples.length === 0 ? (
             <small>Waiting for FPS samples…</small>
@@ -154,6 +209,21 @@ export function PerformancePanel({ events, selectedEventId, onSelect }: Performa
           )}
         </div>
       </div>
+      {capabilityGaps.length > 0 && (
+        <div className="performance-capabilities">
+          {capabilityGaps.map((capability) => (
+            <span key={capability.name} title={capability.reason}>
+              {capability.name.replaceAll('_', ' ')} unavailable
+            </span>
+          ))}
+        </div>
+      )}
+      {sessionAverages.length > 1 && (
+        <div className="performance-baseline">
+          Baseline {sessionAverages[0]!.average.toFixed(1)} → current{' '}
+          {sessionAverages.at(-1)!.average.toFixed(1)} across matching captured app sessions
+        </div>
+      )}
       <div className="performance-toolbar">
         {(['all', 'fps', 'stalls', 'timing', 'related'] as const).map((value) => (
           <button
@@ -164,6 +234,14 @@ export function PerformancePanel({ events, selectedEventId, onSelect }: Performa
             {value}
           </button>
         ))}
+        <select
+          value={timeRange}
+          onChange={(event) => setTimeRange(event.target.value as TimeRange)}
+        >
+          <option value="minute">Last minute</option>
+          <option value="five-minutes">Last 5 minutes</option>
+          <option value="all">All loaded</option>
+        </select>
         <input
           aria-label="Search performance metrics"
           onChange={(event) => setSearch(event.target.value)}
@@ -172,45 +250,106 @@ export function PerformancePanel({ events, selectedEventId, onSelect }: Performa
           value={search}
         />
       </div>
+      <details className="performance-thresholds">
+        <summary>Thresholds</summary>
+        <label>
+          JS FPS below
+          <input
+            min="1"
+            onChange={(event) => setFpsThreshold(Number(event.target.value))}
+            type="number"
+            value={fpsThreshold}
+          />
+        </label>
+        <label>
+          Stall ms
+          <input
+            min="1"
+            onChange={(event) => setStallThreshold(Number(event.target.value))}
+            type="number"
+            value={stallThreshold}
+          />
+        </label>
+        <label>
+          Slow screen ms
+          <input
+            min="1"
+            onChange={(event) => setScreenThreshold(Number(event.target.value))}
+            type="number"
+            value={screenThreshold}
+          />
+        </label>
+        <label>
+          Network ms
+          <input
+            min="1"
+            onChange={(event) => setNetworkThreshold(Number(event.target.value))}
+            type="number"
+            value={networkThreshold}
+          />
+        </label>
+        <label>
+          Memory growth MiB
+          <input
+            min="1"
+            onChange={(event) => setMemoryGrowthThreshold(Number(event.target.value))}
+            type="number"
+            value={memoryGrowthThreshold}
+          />
+        </label>
+      </details>
       <div className="performance-columns">
         <span>Metric</span>
         <span>Name</span>
         <span>Value</span>
         <span>Quality</span>
       </div>
-      <div className="performance-list">
-        {shownEvents.length === 0 ? (
+      <VirtualizedList
+        className="performance-list"
+        empty={
           <div className="empty">
             <div className="empty-icon">⌁</div>
             <h2>No performance data yet</h2>
             <p>Enable performance capture or run the example performance demo.</p>
           </div>
-        ) : (
-          [...shownEvents].reverse().map((event) => {
-            const parsed = performanceEventPayloadSchema.safeParse(event.payload);
-            const related = relatedMetric(event);
-            const metric = parsed.success ? parsed.data.metric : event.category;
-            const name = parsed.success ? parsed.data.name : (related?.label ?? event.type);
-            const value = parsed.success
-              ? formatMetric(parsed.data)
-              : `${related?.value.toFixed(2) ?? '—'} ms`;
-            return (
-              <button
-                className={
-                  event.id === selectedEventId ? 'performance-entry selected' : 'performance-entry'
-                }
-                key={event.id}
-                onClick={() => onSelect(event.id)}
-              >
-                <span className="metric-badge">{metric}</span>
-                <strong title={name}>{name}</strong>
-                <span>{value}</span>
-                <span>{parsed.success && parsed.data.approximate ? 'Approx.' : 'Measured'}</span>
-              </button>
-            );
-          })
-        )}
-      </div>
+        }
+        getKey={(event) => event.id}
+        items={[...shownEvents].reverse()}
+        renderItem={(event) => {
+          const parsed = performanceEventPayloadSchema.safeParse(event.payload);
+          const related = relatedMetric(event);
+          const metric = parsed.success ? parsed.data.metric : event.category;
+          const name = parsed.success ? parsed.data.name : (related?.label ?? event.type);
+          const value = parsed.success
+            ? formatMetric(parsed.data)
+            : `${related?.value.toFixed(2) ?? '—'} ms`;
+          const thresholdExceeded = parsed.success
+            ? (parsed.data.metric === 'js_fps' && parsed.data.value < fpsThreshold) ||
+              (['js_stall', 'event_loop_lag', 'long_task'].includes(parsed.data.metric) &&
+                parsed.data.value >= stallThreshold) ||
+              (parsed.data.metric === 'screen_duration' && parsed.data.value >= screenThreshold) ||
+              (parsed.data.metric === 'memory' &&
+                memoryBaseline !== undefined &&
+                parsed.data.value - memoryBaseline >= memoryGrowthThreshold * 1_048_576)
+            : event.category === 'network' && (related?.value ?? 0) >= networkThreshold;
+          return (
+            <button
+              className={`${event.id === selectedEventId ? 'performance-entry selected' : 'performance-entry'} ${thresholdExceeded ? 'threshold-exceeded' : ''}`}
+              key={event.id}
+              onClick={() => onSelect(event.id)}
+            >
+              <span className="metric-badge">{metric}</span>
+              <strong title={name}>{name}</strong>
+              <span>{value}</span>
+              <span>
+                {parsed.success && parsed.data.approximate ? 'JS · Approx.' : 'Measured'}
+                {thresholdExceeded ? ' · Threshold' : ''}
+              </span>
+            </button>
+          );
+        }}
+        rowHeight={44}
+      />
     </main>
   );
 }

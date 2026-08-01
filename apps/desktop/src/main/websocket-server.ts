@@ -1,25 +1,61 @@
 import { createId } from '@pulse-rn/shared';
 import { timingSafeEqual } from 'node:crypto';
 import { createServer, type Server as HttpsServer } from 'node:https';
+import type { IncomingMessage } from 'node:http';
 import {
   decodeJson,
   negotiateProtocolVersion,
   parseClientMessage,
   type ClientHealth,
+  type ClientHello,
   type DevToolEventEnvelope,
   type StorageCommand,
   type StorageOperation,
   type StorageResult,
 } from '@pulse-rn/protocol';
 import { WebSocketServer, type WebSocket } from 'ws';
-import type { ConnectedDevice } from './session-manager.js';
+import type { ConnectedDevice, DisconnectInfo } from './session-manager.js';
 
 interface Callbacks {
   onConnected(device: ConnectedDevice): void;
-  onDisconnected(connectionId: string): void;
+  onDisconnected(connectionId: string, info: DisconnectInfo): void;
   onEvents(events: DevToolEventEnvelope[]): void;
   onHealth(connectionId: string, health: ClientHealth): void;
   onInvalidMessage(error: string): void;
+}
+
+export type ConnectionAuthentication =
+  | {
+      accepted: true;
+      trustStatus: 'paired' | 'trusted' | 'legacy';
+      reconnectToken?: string;
+    }
+  | { accepted: false; reason: string };
+
+export function validateWebSocketRequest(
+  request: IncomingMessage,
+  port: number,
+): string | undefined {
+  const host = request.headers.host;
+  if (!host) return 'Missing Host header';
+  let hostUrl: URL;
+  try {
+    hostUrl = new URL(`http://${host}`);
+  } catch {
+    return 'Malformed Host header';
+  }
+  const requestedPort = Number(hostUrl.port || 80);
+  if (port !== 0 && requestedPort !== port) return 'Unexpected Host port';
+  const origin = request.headers.origin;
+  if (!origin) return undefined;
+  try {
+    const originUrl = new URL(origin);
+    if (!['http:', 'https:'].includes(originUrl.protocol)) return 'Unsupported Origin';
+    if (originUrl.hostname !== hostUrl.hostname) return 'Origin host does not match request host';
+  } catch {
+    return 'Malformed Origin header';
+  }
+  return undefined;
 }
 
 export function accessTokensMatch(expected: string, received?: string): boolean {
@@ -35,6 +71,7 @@ export class DevToolWebSocketServer {
   private server?: WebSocketServer;
   private httpsServer?: HttpsServer;
   private readonly sockets = new Map<string, WebSocket>();
+  private readonly socketDevices = new Map<string, { appId: string; deviceId: string }>();
   private readonly lastHealthAt = new Map<string, number>();
   private readonly pendingStorage = new Map<
     string,
@@ -50,7 +87,7 @@ export class DevToolWebSocketServer {
     private readonly port: number,
     private readonly callbacks: Callbacks,
     private readonly host = '127.0.0.1',
-    private readonly authToken?: string,
+    private readonly authToken?: string | ((hello: ClientHello) => ConnectionAuthentication),
     private readonly tls?: { cert: Buffer; key: Buffer },
   ) {}
 
@@ -67,7 +104,7 @@ export class DevToolWebSocketServer {
       const listeningServer = httpsServer ?? server;
       listeningServer.once('listening', () => resolve());
       listeningServer.once('error', reject);
-      server.on('connection', (socket) => this.handleConnection(socket));
+      server.on('connection', (socket, request) => this.handleConnection(socket, request));
       if (httpsServer) httpsServer.listen(this.port, this.host);
     });
   }
@@ -91,6 +128,13 @@ export class DevToolWebSocketServer {
     return { address: address.address, port: address.port };
   }
 
+  disconnectDevice(appId: string, deviceId: string): void {
+    for (const [connectionId, identity] of this.socketDevices) {
+      if (identity.appId !== appId || identity.deviceId !== deviceId) continue;
+      this.sockets.get(connectionId)?.close(1008, 'Device trust revoked');
+    }
+  }
+
   requestStorage(
     connectionId: string,
     input: {
@@ -98,6 +142,8 @@ export class DevToolWebSocketServer {
       operation: StorageOperation;
       key?: string;
       value?: string;
+      cursor?: string;
+      limit?: number;
     },
   ): Promise<StorageResult> {
     const socket = this.sockets.get(connectionId);
@@ -112,6 +158,8 @@ export class DevToolWebSocketServer {
       operation: input.operation,
       ...(input.key === undefined ? {} : { key: input.key }),
       ...(input.value === undefined ? {} : { value: input.value }),
+      ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
+      ...(input.limit === undefined ? {} : { limit: input.limit }),
     };
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -123,9 +171,15 @@ export class DevToolWebSocketServer {
     });
   }
 
-  private handleConnection(socket: WebSocket): void {
+  private handleConnection(socket: WebSocket, request: IncomingMessage): void {
     const connectionId = createId('connection');
     let negotiated = false;
+    const validationError = validateWebSocketRequest(request, this.address().port);
+    if (validationError) {
+      this.callbacks.onInvalidMessage(validationError);
+      socket.close(1008, 'Request origin rejected');
+      return;
+    }
     const handshakeTimeout = setTimeout(() => socket.close(1008, 'Handshake timeout'), 5_000);
 
     socket.on('message', (data, isBinary) => {
@@ -139,12 +193,20 @@ export class DevToolWebSocketServer {
         const message = result.data;
         if (!negotiated) {
           if (message.kind !== 'client-hello') return socket.close(1008, 'Handshake required');
-          if (this.authToken && !accessTokensMatch(this.authToken, message.authToken)) {
+          const authentication: ConnectionAuthentication =
+            typeof this.authToken === 'function'
+              ? this.authToken(message)
+              : this.authToken
+                ? accessTokensMatch(this.authToken, message.authToken)
+                  ? { accepted: true, trustStatus: 'legacy' }
+                  : { accepted: false, reason: 'Authentication failed' }
+                : { accepted: true, trustStatus: 'legacy' };
+          if (!authentication.accepted) {
             socket.send(
               JSON.stringify({
                 kind: 'server-hello',
                 accepted: false,
-                reason: 'Authentication failed',
+                reason: authentication.reason,
                 serverTime: Date.now(),
               }),
             );
@@ -164,12 +226,24 @@ export class DevToolWebSocketServer {
           }
           negotiated = true;
           this.sockets.set(connectionId, socket);
+          this.socketDevices.set(connectionId, {
+            appId: message.appId,
+            deviceId: message.deviceId,
+          });
           clearTimeout(handshakeTimeout);
           this.callbacks.onConnected({
             connectionId,
             deviceId: message.deviceId,
             sessionId: message.sessionId,
             appId: message.appId,
+            protocolVersion,
+            trustStatus:
+              typeof this.authToken === 'function'
+                ? authentication.trustStatus
+                : this.authToken
+                  ? 'legacy'
+                  : 'loopback',
+            remoteAddress: request.socket.remoteAddress,
             connectedAt: Date.now(),
             device: message.device,
           });
@@ -181,6 +255,11 @@ export class DevToolWebSocketServer {
               connectionId,
               serverTime: Date.now(),
               capabilities: ['client-health'],
+              trustStatus:
+                typeof this.authToken === 'function' ? authentication.trustStatus : 'loopback',
+              ...(authentication.reconnectToken
+                ? { reconnectToken: authentication.reconnectToken }
+                : {}),
             }),
           );
           return;
@@ -206,9 +285,10 @@ export class DevToolWebSocketServer {
         this.callbacks.onInvalidMessage(error instanceof Error ? error.message : 'Invalid JSON');
       }
     });
-    socket.once('close', () => {
+    socket.once('close', (code, reason) => {
       clearTimeout(handshakeTimeout);
       this.sockets.delete(connectionId);
+      this.socketDevices.delete(connectionId);
       this.lastHealthAt.delete(connectionId);
       for (const [requestId, pending] of this.pendingStorage) {
         if (pending.connectionId !== connectionId) continue;
@@ -216,7 +296,13 @@ export class DevToolWebSocketServer {
         pending.reject(new Error('Device disconnected during storage request.'));
         this.pendingStorage.delete(requestId);
       }
-      if (negotiated) this.callbacks.onDisconnected(connectionId);
+      if (negotiated) {
+        this.callbacks.onDisconnected(connectionId, {
+          code,
+          reason: reason.toString() || 'Connection closed',
+          disconnectedAt: Date.now(),
+        });
+      }
     });
   }
 }

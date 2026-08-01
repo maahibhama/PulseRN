@@ -40,6 +40,8 @@ export class PerformanceMonitor {
   private frameCount = 0;
   private frameWindowStartedAt = 0;
   private started = false;
+  private expectedSamples = 0;
+  private lostSamples = 0;
 
   constructor(
     private readonly emit: (payload: PerformanceEventPayload) => void,
@@ -56,10 +58,15 @@ export class PerformanceMonitor {
   start(): void {
     if (this.started) return;
     this.started = true;
+    this.expectedSamples = 0;
+    this.lostSamples = 0;
+    this.reportCapabilities();
     let expected = this.now() + this.sampleIntervalMs;
     this.timer = setInterval(() => {
       const observed = this.now();
       const lag = Math.max(0, observed - expected);
+      this.expectedSamples += 1;
+      this.lostSamples += Math.max(0, Math.floor(lag / this.sampleIntervalMs));
       expected = observed + this.sampleIntervalMs;
       this.record('event_loop_lag', 'JavaScript event-loop lag', lag, 'ms', true);
       if (lag >= this.stallThresholdMs) {
@@ -167,6 +174,48 @@ export class PerformanceMonitor {
     this.animationFrame = this.runtime.requestAnimationFrame(onFrame);
   }
 
+  private reportCapabilities(): void {
+    this.recordCapability(
+      'animation_frame',
+      Boolean(this.runtime.requestAnimationFrame),
+      'requestAnimationFrame is not exposed by this React Native runtime.',
+    );
+    if (this.captureMemory) {
+      this.recordCapability(
+        'js_heap',
+        typeof this.runtime.performance?.memory?.usedJSHeapSize === 'number',
+        'JavaScript heap metrics are not exposed by this runtime.',
+      );
+    }
+    this.recordCapability('native_cpu', false, 'Native CPU profiling is outside SDK capability.');
+    this.recordCapability('ui_thread', false, 'UI-thread profiling is outside SDK capability.');
+    this.recordCapability(
+      'native_memory',
+      false,
+      'Native-memory profiling is outside SDK capability.',
+    );
+  }
+
+  private recordCapability(
+    name: NonNullable<PerformanceEventPayload['capability']>['name'],
+    available: boolean,
+    unavailableReason: string,
+  ): void {
+    this.emit({
+      metric: 'capability',
+      name: name.replaceAll('_', ' '),
+      value: 0,
+      unit: 'count',
+      approximate: false,
+      provenance: 'runtime',
+      capability: {
+        name,
+        status: available ? 'available' : 'unavailable',
+        ...(!available ? { reason: unavailableReason } : {}),
+      },
+    });
+  }
+
   private captureMemorySample(): void {
     const usedBytes = this.runtime.performance?.memory?.usedJSHeapSize;
     if (typeof usedBytes === 'number' && Number.isFinite(usedBytes) && usedBytes >= 0) {
@@ -190,6 +239,20 @@ export class PerformanceMonitor {
       value,
       unit,
       approximate,
+      provenance: approximate ? 'javascript' : 'runtime',
+      ...(['event_loop_lag', 'js_stall', 'long_task', 'js_fps', 'memory'].includes(metric)
+        ? {
+            sampling: {
+              intervalMs: this.sampleIntervalMs,
+              expectedSamples: this.expectedSamples,
+              lostSamples: this.lostSamples,
+              captureRate:
+                this.expectedSamples + this.lostSamples === 0
+                  ? 1
+                  : this.expectedSamples / (this.expectedSamples + this.lostSamples),
+            },
+          }
+        : {}),
       ...(startedAt === undefined ? {} : { startedAt }),
       ...(endedAt === undefined ? {} : { endedAt }),
       ...(metadata === undefined ? {} : { metadata }),

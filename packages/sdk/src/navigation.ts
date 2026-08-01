@@ -1,8 +1,19 @@
-import type { JsonValue, NavigationEventPayload, NavigationRoute } from './protocol-types.js';
+import type {
+  JsonValue,
+  NavigationEventPayload,
+  NavigationRoute,
+  ReduxStateDiff,
+} from './protocol-types.js';
 import { redact } from '@pulse-rn/shared';
 
 export interface NavigationTrackTarget {
-  track(event: { category: 'navigation'; type: string; payload: NavigationEventPayload }): void;
+  track(event: {
+    category: 'navigation';
+    type: string;
+    payload: NavigationEventPayload;
+    correlationId?: string;
+    parentId?: string;
+  }): void;
 }
 
 export interface NavigationStateLike {
@@ -33,6 +44,18 @@ export interface NavigationTrackerOptions {
   source?: 'react-navigation' | 'expo-router' | 'manual';
   redactedFields?: readonly string[];
   maxParamDepth?: number;
+  integrationMetadata?: JsonValue;
+  getCorrelationContext?: () =>
+    | {
+        correlationId?: string;
+        parentId?: string;
+        requestId?: string;
+        reduxEventId?: string;
+        performanceEventId?: string;
+        consoleEventId?: string;
+        errorId?: string;
+      }
+    | undefined;
 }
 
 export interface ManualNavigationInput {
@@ -40,7 +63,11 @@ export interface ManualNavigationInput {
   action?: NavigationAction;
   route?: NavigationRouteLike;
   previousRoute?: NavigationRouteLike;
+  rootState?: NavigationStateLike;
+  integrationMetadata?: JsonValue;
 }
+
+const activeNavigatorIds = new Map<string, number>();
 
 function toJson(
   value: unknown,
@@ -71,6 +98,55 @@ export function getActiveRoute(state?: NavigationStateLike): NavigationRouteLike
   return route?.state ? (getActiveRoute(route.state) ?? route) : route;
 }
 
+export function getActiveRoutePath(state?: NavigationStateLike): NavigationRouteLike[] {
+  const path: NavigationRouteLike[] = [];
+  let current = state;
+  while (current?.routes?.length) {
+    const index = Math.min(
+      Math.max(current.index ?? current.routes.length - 1, 0),
+      current.routes.length - 1,
+    );
+    const route = current.routes[index];
+    if (!route) break;
+    path.push(route);
+    current = route.state;
+  }
+  return path;
+}
+
+function diffParams(
+  previous: JsonValue | undefined,
+  next: JsonValue | undefined,
+  path = '$',
+  output: ReduxStateDiff[] = [],
+): ReduxStateDiff[] {
+  if (JSON.stringify(previous) === JSON.stringify(next) || output.length >= 1_000) return output;
+  const beforeObject =
+    previous !== null && typeof previous === 'object' && !Array.isArray(previous);
+  const afterObject = next !== null && typeof next === 'object' && !Array.isArray(next);
+  if (beforeObject && afterObject) {
+    const before = previous as Record<string, JsonValue>;
+    const after = next as Record<string, JsonValue>;
+    for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
+      if (!(key in before))
+        output.push({ path: `${path}.${key}`, kind: 'added', after: after[key]! });
+      else if (!(key in after))
+        output.push({ path: `${path}.${key}`, kind: 'removed', before: before[key]! });
+      else diffParams(before[key], after[key], `${path}.${key}`, output);
+    }
+    return output;
+  }
+  output.push({ path, kind: 'changed', before: previous, after: next });
+  return output;
+}
+
+function actionGroup(action: NavigationAction): NavigationEventPayload['actionGroup'] {
+  if (action === 'navigate' || action === 'push' || action === 'replace') return 'forward';
+  if (action === 'pop' || action === 'back') return 'backward';
+  if (action === 'reset') return 'reset';
+  return 'unknown';
+}
+
 export function createNavigationTracker(options: NavigationTrackerOptions) {
   const navigatorId = options.navigatorId ?? 'root';
   const source = options.source ?? 'react-navigation';
@@ -78,6 +154,9 @@ export function createNavigationTracker(options: NavigationTrackerOptions) {
   let currentRoute: NavigationRoute | undefined;
   let routeStartedAt: number | undefined;
   let removeListeners: (() => void)[] = [];
+  let lastTree: NavigationEventPayload['routeTree'];
+  const existingCount = activeNavigatorIds.get(navigatorId) ?? 0;
+  activeNavigatorIds.set(navigatorId, existingCount + 1);
 
   const sanitizeRoute = (route?: NavigationRouteLike): NavigationRoute | undefined => {
     if (!route) return undefined;
@@ -95,15 +174,68 @@ export function createNavigationTracker(options: NavigationTrackerOptions) {
     };
   };
 
+  const buildTree = (state?: NavigationStateLike): NavigationEventPayload['routeTree'] => {
+    if (!state?.routes?.length) return undefined;
+    const tree: NonNullable<NavigationEventPayload['routeTree']> = [];
+    const visit = (
+      current: NavigationStateLike,
+      ownerId: string,
+      parentNavigatorId: string | undefined,
+      depth: number,
+    ) => {
+      const routes = current.routes ?? [];
+      const activeIndex = Math.min(
+        Math.max(current.index ?? routes.length - 1, 0),
+        Math.max(routes.length - 1, 0),
+      );
+      routes.forEach((route, index) => {
+        const childNavigatorId = `${ownerId}/${route.key ?? route.name}`;
+        const sanitized = sanitizeRoute(route);
+        if (!sanitized) return;
+        tree.push({
+          navigatorId: ownerId,
+          ...(parentNavigatorId ? { parentNavigatorId } : {}),
+          route: sanitized,
+          active: index === activeIndex,
+          depth,
+        });
+        if (route.state) visit(route.state, childNavigatorId, ownerId, depth + 1);
+      });
+    };
+    visit(state, navigatorId, undefined, 0);
+    return tree;
+  };
+
   const emit = (
     lifecycle: NavigationEventPayload['lifecycle'],
     nextRoute?: NavigationRouteLike,
     action: NavigationAction = 'unknown',
     explicitPrevious?: NavigationRouteLike,
+    state?: NavigationStateLike,
+    inputMetadata?: JsonValue,
   ) => {
     const now = Date.now();
     const next = sanitizeRoute(nextRoute);
     const previous = explicitPrevious ? sanitizeRoute(explicitPrevious) : currentRoute;
+    const routeTree = buildTree(state) ?? lastTree;
+    const routePath = state
+      ? getActiveRoutePath(state).map((route) => route.name)
+      : next
+        ? [next.name]
+        : undefined;
+    const parameterDiff = diffParams(previous?.params, next?.params);
+    const warnings: NonNullable<NavigationEventPayload['warnings']> = [];
+    if (existingCount > 0) warnings.push('duplicate_navigator_id');
+    if (!next || !next.key) warnings.push('incomplete_tracking');
+    if (
+      routeTree?.some(
+        (node) =>
+          node.parentNavigatorId &&
+          !routeTree.some((candidate) => candidate.navigatorId === node.parentNavigatorId),
+      )
+    )
+      warnings.push('inconsistent_ancestry');
+    const correlation = options.getCorrelationContext?.();
     const payload: NavigationEventPayload = {
       navigatorId,
       source,
@@ -114,11 +246,35 @@ export function createNavigationTracker(options: NavigationTrackerOptions) {
       ...(previous && routeStartedAt !== undefined
         ? { previousRouteDuration: Math.max(0, now - routeStartedAt) }
         : {}),
+      ...(routePath?.length ? { routePath } : {}),
+      ...(routeTree?.length ? { routeTree } : {}),
+      ...(parameterDiff.length ? { parameterDiff } : {}),
+      actionGroup:
+        lifecycle === 'focus' || lifecycle === 'blur' ? 'lifecycle' : actionGroup(action),
+      ...(warnings.length ? { warnings: [...new Set(warnings)] } : {}),
+      ...((inputMetadata ?? options.integrationMetadata)
+        ? { integrationMetadata: inputMetadata ?? options.integrationMetadata }
+        : {}),
+      ...(correlation
+        ? {
+            correlations: {
+              ...(correlation.requestId ? { requestId: correlation.requestId } : {}),
+              ...(correlation.reduxEventId ? { reduxEventId: correlation.reduxEventId } : {}),
+              ...(correlation.performanceEventId
+                ? { performanceEventId: correlation.performanceEventId }
+                : {}),
+              ...(correlation.consoleEventId ? { consoleEventId: correlation.consoleEventId } : {}),
+              ...(correlation.errorId ? { errorId: correlation.errorId } : {}),
+            },
+          }
+        : {}),
     };
     options.client.track({
       category: 'navigation',
       type: `navigation.${lifecycle}`,
       payload,
+      ...(correlation?.correlationId ? { correlationId: correlation.correlationId } : {}),
+      ...(correlation?.parentId ? { parentId: correlation.parentId } : {}),
     });
     if (next && (lifecycle === 'ready' || lifecycle === 'state' || lifecycle === 'focus')) {
       if (
@@ -129,6 +285,7 @@ export function createNavigationTracker(options: NavigationTrackerOptions) {
         routeStartedAt = now;
       }
       currentRoute = next;
+      lastTree = routeTree;
     }
   };
 
@@ -137,13 +294,22 @@ export function createNavigationTracker(options: NavigationTrackerOptions) {
 
   return {
     onReady(ref: NavigationRefLike): void {
-      emit('ready', routeFrom(undefined, ref));
+      const state = ref.getRootState?.();
+      emit('ready', routeFrom(state, ref), 'unknown', undefined, state);
     },
     onStateChange(state?: NavigationStateLike, ref?: NavigationRefLike): void {
-      emit('state', routeFrom(state, ref));
+      const rootState = state ?? ref?.getRootState?.();
+      emit('state', routeFrom(rootState, ref), 'unknown', undefined, rootState);
     },
     track(input: ManualNavigationInput): void {
-      emit(input.lifecycle ?? 'state', input.route, input.action, input.previousRoute);
+      emit(
+        input.lifecycle ?? 'state',
+        input.route ?? getActiveRoute(input.rootState),
+        input.action,
+        input.previousRoute,
+        input.rootState,
+        input.integrationMetadata,
+      );
     },
     attach(ref: NavigationRefLike): () => void {
       removeListeners.forEach((remove) => remove());
@@ -161,6 +327,9 @@ export function createNavigationTracker(options: NavigationTrackerOptions) {
     dispose(): void {
       removeListeners.forEach((remove) => remove());
       removeListeners = [];
+      const count = activeNavigatorIds.get(navigatorId) ?? 1;
+      if (count <= 1) activeNavigatorIds.delete(navigatorId);
+      else activeNavigatorIds.set(navigatorId, count - 1);
     },
   };
 }

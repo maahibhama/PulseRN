@@ -10,12 +10,14 @@ function resultMessage(action: 'exported' | 'imported', result: SessionArchiveRe
   return `${result.sessions} session${result.sessions === 1 ? '' : 's'} and ${result.events.toLocaleString()} events ${action}.`;
 }
 
-export function SessionsPanel() {
+export function SessionsPanel({ onOpen }: { onOpen(session: StoredSession): void }) {
   const [sessions, setSessions] = useState<StoredSession[]>([]);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [editingId, setEditingId] = useState('');
+  const [editingName, setEditingName] = useState('');
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -46,6 +48,36 @@ export function SessionsPanel() {
       if (action === 'imported' && !result.canceled) await refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : `Session ${action} failed.`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const rename = async (session: StoredSession) => {
+    setBusy(true);
+    setError('');
+    try {
+      await window.pulseRN.renameSession(session.sessionId, editingName);
+      setEditingId('');
+      await refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to rename the session.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async (session: StoredSession) => {
+    setBusy(true);
+    setError('');
+    try {
+      const result = await window.pulseRN.deleteSession(session.sessionId);
+      setMessage(
+        `${result.sessions} session and ${result.events.toLocaleString()} events deleted.`,
+      );
+      await refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to delete the session.');
     } finally {
       setBusy(false);
     }
@@ -99,7 +131,17 @@ export function SessionsPanel() {
           sessions.map((session) => (
             <div className="session-entry" key={session.sessionId}>
               <span>
-                <strong>{session.appName}</strong>
+                {editingId === session.sessionId ? (
+                  <input
+                    aria-label="Session name"
+                    autoFocus
+                    maxLength={256}
+                    onChange={(event) => setEditingName(event.target.value)}
+                    value={editingName}
+                  />
+                ) : (
+                  <strong>{session.displayName || session.appName}</strong>
+                )}
                 <small>{session.appId}</small>
               </span>
               <span>
@@ -108,14 +150,44 @@ export function SessionsPanel() {
               </span>
               <time>{formatDate(session.lastSeenAt)}</time>
               <span>{session.eventCount.toLocaleString()}</span>
-              <button
-                disabled={busy}
-                onClick={() =>
-                  void run(() => window.pulseRN.exportSessions([session.sessionId]), 'exported')
-                }
-              >
-                Export
-              </button>
+              <div className="session-actions">
+                <button disabled={busy} onClick={() => onOpen(session)}>
+                  Open
+                </button>
+                {editingId === session.sessionId ? (
+                  <button
+                    disabled={busy || !editingName.trim()}
+                    onClick={() => void rename(session)}
+                  >
+                    Save
+                  </button>
+                ) : (
+                  <button
+                    disabled={busy}
+                    onClick={() => {
+                      setEditingId(session.sessionId);
+                      setEditingName(session.displayName || session.appName);
+                    }}
+                  >
+                    Rename
+                  </button>
+                )}
+                <button
+                  disabled={busy}
+                  onClick={() =>
+                    void run(() => window.pulseRN.exportSessions([session.sessionId]), 'exported')
+                  }
+                >
+                  Export
+                </button>
+                <button
+                  className="danger-button"
+                  disabled={busy}
+                  onClick={() => void remove(session)}
+                >
+                  Delete
+                </button>
+              </div>
             </div>
           ))
         )}

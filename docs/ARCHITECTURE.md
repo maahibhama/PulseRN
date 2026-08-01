@@ -60,12 +60,16 @@ while the bounded in-memory projection drives live connection updates.
 The desktop acceptance harness launches the production renderer in the real Electron runtime and
 drives it through Chromium's loopback debugging endpoint. It verifies sandbox isolation, the narrow
 preload API, SDK WebSocket ingestion, persisted pagination, inspector navigation, settings, and
-maintenance. A separate 25,000-event load test traverses every cursor page before enforcing retention.
+maintenance. A separate 100,000-event load test traverses every cursor page and enforces a 250 ms
+p95 database-page budget. The Electron acceptance test migrates a 100,000-event legacy database,
+keeps each renderer view to a 2,000-event sliding window, mounts fewer than 250 virtual rows, and
+checks that renderer heap growth stays below 150 MiB while paging.
 
-Session archives use the versioned `pulse-rn-session` JSON format. Electron main owns native file
-dialogs and filesystem access, caps imports at 100 MiB, validates the complete archive before writing,
-and reconciles retained session counts after duplicate-safe event insertion. The renderer receives
-only archive summaries and never arbitrary filesystem capabilities.
+Session archives use the gzip-compressed, versioned `pulse-rn-archive` format. Electron main owns
+native file dialogs and filesystem access, caps compressed and decompressed sizes, validates the
+manifest, relationships, and per-entry SHA-256 checksums before writing, and imports session/device
+metadata, events, bookmarks, and annotations in one transaction. The renderer receives only archive
+summaries and never arbitrary filesystem capabilities.
 
 ## Package responsibilities
 
