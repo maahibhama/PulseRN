@@ -26,7 +26,10 @@ uses runtime error/rejection events where available. React error boundaries forw
 public capture API. Before batching, the SDK attaches the active navigation screen and a bounded,
 redacted summary of the preceding 20 events.
 
-SQLite writes use WAL mode and batched transactions. A small in-memory projection feeds the Phase 1 UI; later phases will use paginated queries and TanStack Virtual for 100,000-event sessions.
+SQLite writes use WAL mode and batched transactions. Versioned migrations preserve existing event
+databases and maintain session metadata. The Timeline reads deterministic cursor pages through a
+validated preload boundary and renders a bounded virtual window; the existing in-memory projection
+continues feeding inspectors until each receives its dedicated query model.
 
 ## Package responsibilities
 

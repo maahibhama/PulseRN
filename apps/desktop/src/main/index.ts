@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme } from 'electron';
-import { storageOperationSchema } from '@pulse-rn/protocol';
+import { eventCategorySchema, storageOperationSchema } from '@pulse-rn/protocol';
 import { z } from 'zod';
 import { EventDatabase } from './database.js';
 import { SessionManager } from './session-manager.js';
@@ -9,6 +9,7 @@ import { DevToolWebSocketServer } from './websocket-server.js';
 import { DebuggerManager } from './debugger-manager.js';
 
 const SNAPSHOT_CHANNEL = 'pulse-rn:snapshot';
+const EVENTS_CHANNEL = 'pulse-rn:events';
 const STORAGE_CHANNEL = 'pulse-rn:storage';
 const SETTINGS_CHANNEL = 'pulse-rn:settings';
 const DEBUGGER_CHANNEL = 'pulse-rn:debugger';
@@ -21,6 +22,26 @@ const storageRequestSchema = z.object({
   key: z.string().max(10_000).optional(),
   value: z.string().max(1_000_000).optional(),
 });
+const eventCursorSchema = z.object({
+  timestamp: z.number().finite().nonnegative(),
+  sequence: z.number().int().nonnegative(),
+  id: z.string().trim().min(1).max(256),
+});
+const eventQuerySchema = z
+  .object({
+    category: eventCategorySchema.optional(),
+    cursor: eventCursorSchema.optional(),
+    deviceId: z.string().trim().min(1).max(256).optional(),
+    limit: z.number().int().min(1).max(500).optional(),
+    order: z.enum(['newest', 'oldest']).optional(),
+    sessionId: z.string().trim().min(1).max(256).optional(),
+  })
+  .strict();
+const eventRequestSchema = z.discriminatedUnion('operation', [
+  z.object({ operation: z.literal('query'), input: eventQuerySchema }),
+  z.object({ operation: z.literal('find'), id: z.string().trim().min(1).max(256) }),
+  z.object({ operation: z.literal('sessions') }),
+]);
 const sessions = new SessionManager();
 let database: EventDatabase | undefined;
 let server: DevToolWebSocketServer | undefined;
@@ -102,6 +123,18 @@ app.whenReady().then(async () => {
   database = new EventDatabase(join(app.getPath('userData'), 'pulse-rn.sqlite'));
   sessions.hydrate(database.recent());
   ipcMain.handle(SNAPSHOT_CHANNEL, () => sessions.snapshot());
+  ipcMain.handle(EVENTS_CHANNEL, (_event, value: unknown) => {
+    if (!database) throw new Error('PulseRN database is not ready.');
+    const input = eventRequestSchema.parse(value);
+    switch (input.operation) {
+      case 'query':
+        return database.query(input.input);
+      case 'find':
+        return database.findById(input.id);
+      case 'sessions':
+        return database.listSessions();
+    }
+  });
   ipcMain.handle(STORAGE_CHANNEL, async (_event, value: unknown) => {
     const input = storageRequestSchema.parse(value);
     if (!server) throw new Error('PulseRN server is not ready.');
@@ -214,6 +247,7 @@ app.whenReady().then(async () => {
   });
   server = new DevToolWebSocketServer(9090, {
     onConnected(device) {
+      database?.recordSession(device);
       sessions.connect(device);
       publish();
     },
@@ -245,6 +279,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   isQuitting = true;
   ipcMain.removeHandler(SNAPSHOT_CHANNEL);
+  ipcMain.removeHandler(EVENTS_CHANNEL);
   ipcMain.removeHandler(STORAGE_CHANNEL);
   ipcMain.removeHandler(SETTINGS_CHANNEL);
   ipcMain.removeHandler(DEBUGGER_CHANNEL);

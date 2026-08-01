@@ -1,5 +1,44 @@
 import type { DesktopSnapshot } from '../main/session-manager.js';
-import type { StorageOperation, StorageResult } from '@pulse-rn/protocol';
+import type {
+  DevToolEventCategory,
+  DevToolEventEnvelope,
+  StorageOperation,
+  StorageResult,
+} from '@pulse-rn/protocol';
+
+export interface EventCursor {
+  timestamp: number;
+  sequence: number;
+  id: string;
+}
+
+export interface EventQuery {
+  category?: DevToolEventCategory;
+  cursor?: EventCursor;
+  deviceId?: string;
+  limit?: number;
+  order?: 'newest' | 'oldest';
+  sessionId?: string;
+}
+
+export interface EventPage {
+  events: DevToolEventEnvelope[];
+  hasMore: boolean;
+  nextCursor?: EventCursor;
+  total: number;
+}
+
+export interface StoredSession {
+  sessionId: string;
+  appId: string;
+  deviceId: string;
+  appName: string;
+  deviceName: string;
+  platform: string;
+  startedAt: number;
+  lastSeenAt: number;
+  eventCount: number;
+}
 
 export interface StorageRequestInput {
   connectionId: string;
@@ -102,6 +141,9 @@ export interface AddBreakpointInput extends DebuggerLocation {
 export interface PulseRNDesktopApi {
   getSnapshot(): Promise<DesktopSnapshot>;
   onSnapshot(listener: (snapshot: DesktopSnapshot) => void): () => void;
+  queryEvents(input?: EventQuery): Promise<EventPage>;
+  getEvent(id: string): Promise<EventPage['events'][number] | undefined>;
+  listSessions(): Promise<StoredSession[]>;
   requestStorage(input: StorageRequestInput): Promise<StorageResult>;
   getSettings(): Promise<AppSettings>;
   updateSettings(patch: Partial<AppSettings>): Promise<AppSettings>;
