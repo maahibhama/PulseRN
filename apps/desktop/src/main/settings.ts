@@ -33,6 +33,7 @@ export const appSettingsSchema = z.object({
   checkForUpdatesAutomatically: z.boolean(),
   launchAtLogin: z.boolean(),
   keepRunningInBackground: z.boolean(),
+  mcpEnabled: z.boolean(),
 });
 export type AppSettings = z.infer<typeof appSettingsSchema>;
 export const appSettingsPatchSchema = appSettingsSchema.partial().strict();
@@ -64,6 +65,7 @@ const defaults: AppSettings = {
   checkForUpdatesAutomatically: true,
   launchAtLogin: false,
   keepRunningInBackground: true,
+  mcpEnabled: false,
 };
 
 export class SettingsStore {

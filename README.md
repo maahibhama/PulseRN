@@ -51,6 +51,7 @@ PulseRN is an open-source desktop debugging foundation for React Native. Its cen
 - Native Hermes JavaScript debugger with original TypeScript sources, target reload recovery,
   optional-CDP negotiation, hierarchy/quick-open/blackboxing, inline paused values, lazy searchable
   scopes, watches/evaluation, and conditional, hit-count, log, and verified breakpoints
+- Local authenticated [MCP debugger](docs/MCP.md) for Claude, Codex, Cursor, and other AI clients
 - Persistent desktop settings for system/light/dark themes, interface density, timeline ordering, launch at login, and macOS background behavior
 - Compact, rounded light and dark application icons that follow the selected theme, including live macOS system-theme changes
 - Expo development-build and bare React Native Community CLI examples covering Console, Network, Redux, Navigation, Performance, AsyncStorage, MMKV, and Errors

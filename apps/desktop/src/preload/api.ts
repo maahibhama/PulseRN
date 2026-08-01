@@ -211,6 +211,23 @@ export interface AppSettings {
   checkForUpdatesAutomatically: boolean;
   launchAtLogin: boolean;
   keepRunningInBackground: boolean;
+  mcpEnabled: boolean;
+}
+
+export interface McpInfo {
+  enabled: boolean;
+  available: boolean;
+  command: string;
+  args: string[];
+  env: {
+    ELECTRON_RUN_AS_NODE: '1';
+  };
+  clients: {
+    name: string;
+    connectedAt: number;
+    lastSeenAt: number;
+    requestCount: number;
+  }[];
 }
 
 export interface ConnectionInfo {
@@ -455,6 +472,8 @@ export interface PulseRNDesktopApi {
   getSettings(): Promise<AppSettings>;
   updateSettings(patch: Partial<AppSettings>): Promise<AppSettings>;
   onSettings(listener: (settings: AppSettings) => void): () => void;
+  getMcpInfo(): Promise<McpInfo>;
+  onMcpInfo(listener: (info: McpInfo) => void): () => void;
   getConnectionInfo(): Promise<ConnectionInfo>;
   beginPairing(): Promise<ConnectionInfo>;
   revokeTrustedDevice(appId: string, deviceId: string): Promise<ConnectionInfo>;

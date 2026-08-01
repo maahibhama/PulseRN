@@ -6,6 +6,7 @@ import { DebuggerPanel } from './DebuggerPanel.js';
 import { EventDetails } from './EventDetails.js';
 import { ErrorsPanel } from './ErrorsPanel.js';
 import { NetworkPanel } from './NetworkPanel.js';
+import { McpPanel } from './McpPanel.js';
 import { NavigationPanel } from './NavigationPanel.js';
 import { PerformancePanel } from './PerformancePanel.js';
 import { ReduxPanel } from './ReduxPanel.js';
@@ -40,6 +41,7 @@ type ViewName =
   | 'Errors'
   | 'Debugger'
   | 'Sessions'
+  | 'MCP'
   | 'Settings';
 
 const navItems: { name: ViewName; icon: string; available: boolean }[] = [
@@ -54,6 +56,7 @@ const navItems: { name: ViewName; icon: string; available: boolean }[] = [
   { name: 'Errors', icon: '△', available: true },
   { name: 'Debugger', icon: '⏵', available: true },
   { name: 'Sessions', icon: '◫', available: true },
+  { name: 'MCP', icon: 'M', available: true },
   { name: 'Settings', icon: '⚙', available: true },
 ];
 
@@ -871,6 +874,11 @@ export function App() {
           deviceCount={devices.length}
           eventCount={events.length}
           resolvedTheme={resolvedTheme}
+          settings={settings}
+          onChange={async (patch) => setSettings(await desktopApi.updateSettings(patch))}
+        />
+      ) : activeView === 'MCP' ? (
+        <McpPanel
           settings={settings}
           onChange={async (patch) => setSettings(await desktopApi.updateSettings(patch))}
         />

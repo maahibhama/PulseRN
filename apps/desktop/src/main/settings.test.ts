@@ -23,6 +23,7 @@ describe('SettingsStore', () => {
       updateChannel: 'stable',
       motion: 'system',
       checkForUpdatesAutomatically: true,
+      mcpEnabled: false,
     });
     store.update({
       theme: 'light',
@@ -39,6 +40,7 @@ describe('SettingsStore', () => {
       updateChannel: 'beta',
       motion: 'reduced',
       checkForUpdatesAutomatically: false,
+      mcpEnabled: true,
     });
 
     expect(new SettingsStore(filePath).get()).toMatchObject({
@@ -56,6 +58,7 @@ describe('SettingsStore', () => {
       updateChannel: 'beta',
       motion: 'reduced',
       checkForUpdatesAutomatically: false,
+      mcpEnabled: true,
     });
     expect(JSON.parse(readFileSync(filePath, 'utf8'))).not.toHaveProperty('unknown');
   });

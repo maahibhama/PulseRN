@@ -1,5 +1,6 @@
 :root {
   --accent: #a794ff;
+  --background: #0b0d12;
   --border: #292f3b;
   --danger: #ed858d;
   --muted: #697285;
@@ -3225,6 +3226,335 @@ button.redux-tree-row {
   padding: 22px;
   overflow: auto;
 }
+
+.mcp-panel {
+  background:
+    radial-gradient(circle at 72% 0%, rgb(123 92 255 / 9%), transparent 36%), var(--background);
+}
+.mcp-scroll {
+  height: calc(100vh - 111px);
+  padding: 24px;
+  overflow: auto;
+}
+.mcp-scroll > section,
+.mcp-error {
+  max-width: 900px;
+  margin-right: auto;
+  margin-left: auto;
+}
+.mcp-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.mcp-status i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #555f70;
+}
+.mcp-status.enabled {
+  color: var(--warning);
+}
+.mcp-status.enabled i {
+  background: var(--warning);
+  box-shadow: 0 0 0 4px rgb(219 183 96 / 10%);
+}
+.mcp-status.connected {
+  color: var(--success);
+}
+.mcp-status.connected i {
+  background: var(--success);
+  box-shadow: 0 0 0 4px rgb(76 207 140 / 10%);
+}
+.mcp-hero {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  padding: 23px;
+  border: 1px solid #302b52;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #16142a, #11151c 62%);
+}
+.mcp-mark {
+  display: grid;
+  width: 50px;
+  height: 50px;
+  place-items: center;
+  border: 1px solid #6f5fd0;
+  border-radius: 13px;
+  background: linear-gradient(145deg, #7b5cff, #4f3aa8);
+  color: white;
+  font-size: 23px;
+  font-weight: 800;
+  box-shadow: 0 10px 28px rgb(67 48 156 / 35%);
+}
+.mcp-hero h1 {
+  margin: 0 0 6px;
+  color: var(--text);
+  font-size: 19px;
+}
+.mcp-hero p {
+  max-width: 610px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+.mcp-hero button,
+.mcp-config-card button,
+.mcp-test-card button {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--panel-soft);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 650;
+}
+.mcp-hero button.primary {
+  border-color: #735de4;
+  background: #6f56de;
+  color: white;
+}
+.mcp-hero button.danger-button {
+  color: var(--danger);
+}
+.mcp-config-card button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.mcp-warning {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px 13px;
+  border: 1px solid #493b24;
+  border-radius: 8px;
+  background: #1c1811;
+  color: #c6a564;
+  font-size: 10px;
+  line-height: 1.5;
+}
+.mcp-warning span {
+  color: #8f8062;
+}
+.mcp-guide {
+  margin-top: 18px;
+}
+.mcp-connection-card {
+  margin-top: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--panel);
+}
+.mcp-connection-card > header,
+.mcp-client-connection {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+}
+.mcp-connection-card > header {
+  border-bottom: 1px solid var(--border);
+}
+.mcp-connection-card > header div {
+  display: grid;
+  gap: 4px;
+}
+.mcp-connection-card strong {
+  color: var(--text);
+  font-size: 11px;
+}
+.mcp-connection-card small {
+  color: var(--muted);
+  font-size: 9px;
+}
+.mcp-connection-card > header > span {
+  padding: 5px 8px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 700;
+}
+.mcp-connection-card .verified {
+  background: rgb(66 211 146 / 10%);
+  color: var(--success);
+}
+.mcp-connection-card .waiting {
+  background: rgb(219 183 96 / 10%);
+  color: var(--warning);
+}
+.mcp-client-connection + .mcp-client-connection {
+  border-top: 1px solid var(--border);
+}
+.mcp-client-connection > span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mcp-client-connection i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 0 4px rgb(66 211 146 / 10%);
+}
+.mcp-client-tabs {
+  display: flex;
+  gap: 5px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--panel);
+}
+.mcp-client-tabs button {
+  flex: 1;
+  padding: 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 10px;
+}
+.mcp-client-tabs button.active {
+  background: #26213e;
+  color: #c9bdff;
+  box-shadow: inset 0 0 0 1px #413766;
+}
+.mcp-config-card {
+  margin-top: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--panel);
+}
+.mcp-config-card > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.mcp-config-card > header div {
+  display: grid;
+  gap: 3px;
+}
+.mcp-config-card > header strong,
+.mcp-instructions strong,
+.mcp-test-card strong {
+  color: var(--text);
+  font-size: 11px;
+}
+.mcp-config-card > header small,
+.mcp-instructions small {
+  color: var(--muted);
+  font-size: 9px;
+}
+.mcp-config-card pre {
+  min-height: 190px;
+  margin: 0;
+  padding: 18px;
+  overflow: auto;
+  background: #0b0e14;
+  color: #c9d2e3;
+  font-size: 11px;
+  line-height: 1.6;
+  tab-size: 2;
+}
+.mcp-instructions {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 10px;
+  margin-top: 10px;
+}
+.mcp-instructions > div {
+  padding: 15px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--panel);
+}
+.mcp-instructions ol {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+.mcp-instructions p {
+  margin: 12px 0 8px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.mcp-instructions > div > code {
+  display: block;
+  margin-bottom: 9px;
+  padding: 9px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #0b0e14;
+  color: #bfb1ff;
+  font-size: 10px;
+}
+.mcp-instructions small {
+  display: block;
+  line-height: 1.5;
+}
+.mcp-instructions small code {
+  color: #aaa0d2;
+}
+.mcp-test-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-top: 10px;
+  padding: 15px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--panel);
+}
+.mcp-test-card p {
+  margin: 5px 0 8px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.mcp-test-card blockquote {
+  margin: 0;
+  color: #aaa0c6;
+  font-size: 10px;
+  line-height: 1.5;
+}
+.mcp-test-card button {
+  flex: 0 0 auto;
+}
+.mcp-error {
+  margin-top: 10px;
+  color: var(--danger);
+  font-size: 10px;
+}
+
+@media (max-width: 900px) {
+  .mcp-hero {
+    grid-template-columns: auto 1fr;
+  }
+  .mcp-hero button {
+    grid-column: 1 / -1;
+  }
+  .mcp-instructions {
+    grid-template-columns: 1fr;
+  }
+}
+
 .settings-hero {
   display: flex;
   align-items: center;
@@ -3391,6 +3721,7 @@ button.redux-tree-row {
 
 :root[data-theme='light'] {
   --accent: #6548d8;
+  --background: #f4f6fa;
   --border: #dce2ec;
   --danger: #b93644;
   --muted: #68738a;
@@ -3412,6 +3743,31 @@ button.redux-tree-row {
 :root[data-theme='light'] .storage-editor,
 :root[data-theme='light'] .storage-editor textarea {
   background: #f6f8fc;
+}
+:root[data-theme='light'] .mcp-panel {
+  background:
+    radial-gradient(circle at 72% 0%, rgb(101 72 216 / 8%), transparent 36%), var(--background);
+}
+:root[data-theme='light'] .mcp-hero {
+  border-color: #d8d0f5;
+  background: linear-gradient(135deg, #f1edff, #ffffff 62%);
+}
+:root[data-theme='light'] .mcp-warning {
+  border-color: #ead8b6;
+  background: #fff9ed;
+  color: #845c12;
+}
+:root[data-theme='light'] .mcp-warning span {
+  color: #796b54;
+}
+:root[data-theme='light'] .mcp-client-tabs button.active {
+  background: #eee9ff;
+  color: #573fad;
+  box-shadow: inset 0 0 0 1px #d4c9f9;
+}
+:root[data-theme='light'] .mcp-config-card pre,
+:root[data-theme='light'] .mcp-instructions > div > code {
+  background: #151925;
 }
 :root[data-theme='light'] .topbar,
 :root[data-theme='light'] .sidebar,

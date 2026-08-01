@@ -10,7 +10,9 @@
   "type": "module",
   "main": "./out/main/index.js",
   "scripts": {
+    "prebuild": "pnpm --filter @pulse-rn/mcp build",
     "build": "electron-vite build",
+    "predev": "pnpm --filter @pulse-rn/mcp build",
     "dev": "electron-vite dev",
     "dist": "pnpm build && electron-builder",
     "dist:linux": "pnpm build && electron-builder --linux AppImage deb --x64",
@@ -27,6 +29,7 @@
   "dependencies": {
     "@jridgewell/trace-mapping": "^0.3.31",
     "@monaco-editor/react": "^4.7.0",
+    "@pulse-rn/mcp": "workspace:*",
     "@pulse-rn/protocol": "workspace:*",
     "@pulse-rn/shared": "workspace:*",
     "electron-updater": "6.8.9",
@@ -63,6 +66,15 @@
       "resources/pulse-rn-app-icon-dark.png",
       "resources/pulse-rn-app-icon-light.png",
       "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../../packages/mcp/dist",
+        "to": "mcp",
+        "filter": [
+          "**/*"
+        ]
+      }
     ],
     "mac": {
       "category": "public.app-category.developer-tools",
