@@ -32,6 +32,7 @@ describe('single-entry SDK API', () => {
       droppedEvents: 0,
       oversizedEvents: 0,
       queueOverflowEvents: 0,
+      consoleDroppedEvents: 0,
       queuedEvents: 0,
       reconnectAttempts: 0,
       sentBatches: 0,

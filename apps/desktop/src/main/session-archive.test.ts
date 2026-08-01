@@ -6,6 +6,8 @@ import { PROTOCOL_VERSION, type DevToolEventEnvelope } from '@pulse-rn/protocol'
 import { EventDatabase } from './database.js';
 import {
   createSessionArchive,
+  decodeSessionArchive,
+  encodeSessionArchive,
   importSessionArchive,
   parseSessionArchive,
 } from './session-archive.js';
@@ -61,12 +63,16 @@ describe('session archives', () => {
     const archive = createSessionArchive(source, ['session-1'], 2_000);
 
     expect(archive).toMatchObject({
-      format: 'pulse-rn-session',
-      version: 1,
-      exportedAt: 2_000,
-      sessions: [{ sessionId: 'session-1', eventCount: 1 }],
-      events: [event],
+      format: 'pulse-rn-archive',
+      version: 2,
+      manifest: {
+        exportedAt: 2_000,
+        counts: { sessions: 1, events: 1 },
+      },
+      sessions: [{ data: { sessionId: 'session-1', eventCount: 1 } }],
+      events: [{ data: event }],
     });
+    expect(decodeSessionArchive(encodeSessionArchive(archive))).toEqual(archive);
 
     const destination = database();
     expect(importSessionArchive(destination, archive)).toEqual({ sessions: 1, events: 1 });
@@ -81,7 +87,7 @@ describe('session archives', () => {
     expect(() =>
       parseSessionArchive({
         format: 'pulse-rn-session',
-        version: 2,
+        version: 99,
         exportedAt: 1,
         sessions: [],
         events: [],
@@ -96,10 +102,29 @@ describe('session archives', () => {
         ...archive,
         sessions: archive.sessions.map((session) => ({
           ...session,
-          sessionId: 'different-session',
+          data: { ...session.data, sessionId: 'different-session' },
         })),
       }),
     ).toThrow('Event references');
     source.close();
+  });
+
+  it('rejects modified checksummed entries before changing the destination database', () => {
+    const source = database();
+    seed(source);
+    const archive = createSessionArchive(source, undefined, 2_000);
+    const destination = database();
+    const modified = {
+      ...archive,
+      events: archive.events.map((entry) => ({
+        ...entry,
+        data: { ...entry.data, type: 'tampered.event' },
+      })),
+    };
+
+    expect(() => importSessionArchive(destination, modified)).toThrow('checksum');
+    expect(destination.query().total).toBe(0);
+    source.close();
+    destination.close();
   });
 });

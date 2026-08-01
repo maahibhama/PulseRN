@@ -21,6 +21,9 @@ export interface NetworkCaptureOptions {
   captureRequestBodies: boolean;
   captureResponseBodies: boolean;
   maxBodyBytes: number;
+  maxRequestBytes: number;
+  maxSessionBytes: number;
+  reserveCapture?: (bytes: number) => boolean;
   redactedHeaders: readonly string[];
   redactedQueryParameters: readonly string[];
 }
@@ -32,10 +35,36 @@ export function defaultNetworkCaptureOptions(
     captureRequestBodies: true,
     captureResponseBodies: true,
     maxBodyBytes: 100 * 1024,
+    maxRequestBytes: 256 * 1024,
+    maxSessionBytes: 10 * 1024 * 1024,
     redactedHeaders: ['authorization', 'cookie', 'set-cookie'],
     redactedQueryParameters: DEFAULT_SENSITIVE_KEYS,
     ...options,
   };
+}
+
+export interface NetworkRequestBudget {
+  capturedBytes: number;
+  omittedBodies: ('request' | 'response')[];
+}
+
+export function admitNetworkBody<T extends NetworkEventPayload['requestBody']>(
+  body: T,
+  kind: 'request' | 'response',
+  budget: NetworkRequestBudget,
+  options: NetworkCaptureOptions,
+): T | undefined {
+  if (!body) return undefined;
+  const capturedBytes = byteLength(JSON.stringify(body.value));
+  if (
+    budget.capturedBytes + capturedBytes > options.maxRequestBytes ||
+    options.reserveCapture?.(capturedBytes) === false
+  ) {
+    if (!budget.omittedBodies.includes(kind)) budget.omittedBodies.push(kind);
+    return undefined;
+  }
+  budget.capturedBytes += capturedBytes;
+  return body;
 }
 
 export function normalizeHeaders(value: unknown): Record<string, string> {

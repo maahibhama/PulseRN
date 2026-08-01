@@ -9,9 +9,18 @@ export interface ConnectedDevice {
   deviceId: string;
   sessionId: string;
   appId: string;
+  protocolVersion?: string;
+  trustStatus?: 'loopback' | 'paired' | 'trusted' | 'legacy';
+  remoteAddress?: string;
   connectedAt: number;
   device: DeviceInfo;
   health?: ConnectionHealth;
+}
+
+export interface DisconnectInfo {
+  code: number;
+  reason: string;
+  disconnectedAt: number;
 }
 
 export interface DesktopSnapshot {
@@ -27,8 +36,10 @@ export class SessionManager {
     this.devices.set(device.connectionId, device);
   }
 
-  disconnect(connectionId: string): void {
+  disconnect(connectionId: string): ConnectedDevice | undefined {
+    const device = this.devices.get(connectionId);
     this.devices.delete(connectionId);
+    return device;
   }
 
   updateHealth(connectionId: string, health: ClientHealth, receivedAt = Date.now()): void {

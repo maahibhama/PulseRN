@@ -1,5 +1,6 @@
 import { errorEventPayloadSchema, type DevToolEventEnvelope } from '@pulse-rn/protocol';
 import { useEffect, useMemo, useState } from 'react';
+import { VirtualizedList } from './VirtualizedList.js';
 
 interface ErrorsPanelProps {
   events: DevToolEventEnvelope[];
@@ -88,8 +89,9 @@ export function ErrorsPanel({ events, selectedEventId, onSelect }: ErrorsPanelPr
         <span>Error</span>
         <span>Context</span>
       </div>
-      <div className="error-list">
-        {filtered.length === 0 ? (
+      <VirtualizedList
+        className="error-list"
+        empty={
           <div className="empty">
             <div className="empty-icon">△</div>
             <h2>{errorEvents.length ? 'No matching errors' : 'No errors captured'}</h2>
@@ -98,31 +100,33 @@ export function ErrorsPanel({ events, selectedEventId, onSelect }: ErrorsPanelPr
               here.
             </p>
           </div>
-        ) : (
-          [...filtered].reverse().map((event) => {
-            const parsed = errorEventPayloadSchema.safeParse(event.payload);
-            if (!parsed.success) return null;
-            const payload = parsed.data;
-            return (
-              <button
-                className={event.id === selectedEventId ? 'error-entry selected' : 'error-entry'}
-                key={event.id}
-                onClick={() => onSelect(event.id)}
-              >
-                <time>{formatTime(event.timestamp)}</time>
-                <span className={`error-source ${payload.fatal ? 'fatal' : ''}`}>
-                  {payload.source.replaceAll('_', ' ')}
-                </span>
-                <span className="error-message">
-                  <strong>{payload.name}</strong>
-                  <small>{payload.message}</small>
-                </span>
-                <span>{payload.context.length}</span>
-              </button>
-            );
-          })
-        )}
-      </div>
+        }
+        getKey={(event) => event.id}
+        items={[...filtered].reverse()}
+        renderItem={(event) => {
+          const parsed = errorEventPayloadSchema.safeParse(event.payload);
+          if (!parsed.success) return null;
+          const payload = parsed.data;
+          return (
+            <button
+              className={event.id === selectedEventId ? 'error-entry selected' : 'error-entry'}
+              key={event.id}
+              onClick={() => onSelect(event.id)}
+            >
+              <time>{formatTime(event.timestamp)}</time>
+              <span className={`error-source ${payload.fatal ? 'fatal' : ''}`}>
+                {payload.source.replaceAll('_', ' ')}
+              </span>
+              <span className="error-message">
+                <strong>{payload.name}</strong>
+                <small>{payload.message}</small>
+              </span>
+              <span>{payload.context.length}</span>
+            </button>
+          );
+        }}
+        rowHeight={56}
+      />
     </main>
   );
 }

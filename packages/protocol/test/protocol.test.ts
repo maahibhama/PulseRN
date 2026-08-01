@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   PROTOCOL_VERSION,
   clientHealthSchema,
+  clientHelloSchema,
   consoleLogPayloadSchema,
   errorEventPayloadSchema,
   eventEnvelopeSchema,
@@ -11,15 +12,47 @@ import {
   parseClientMessage,
   performanceEventPayloadSchema,
   reduxEventPayloadSchema,
+  networkLifecycleEventPayloadSchema,
   storageCommandSchema,
   storageEventPayloadSchema,
   storageResultSchema,
+  serverHelloSchema,
 } from '../src/index.js';
 
 describe('protocol', () => {
   it('negotiates the current version', () => {
     expect(negotiateProtocolVersion(['0.9.0', PROTOCOL_VERSION])).toBe(PROTOCOL_VERSION);
     expect(negotiateProtocolVersion(['0.9.0'])).toBeUndefined();
+  });
+
+  it('validates additive pairing and reconnect credentials', () => {
+    expect(
+      clientHelloSchema.safeParse({
+        kind: 'client-hello',
+        supportedProtocolVersions: [PROTOCOL_VERSION],
+        sessionId: 'session-1',
+        deviceId: 'device-1',
+        appId: 'app-1',
+        device: {
+          name: 'iPhone',
+          platform: 'ios',
+          appName: 'Example',
+          sdkVersion: '0.2.1',
+        },
+        pairingCode: 'ABCD-EFGH',
+      }).success,
+    ).toBe(true);
+    expect(
+      serverHelloSchema.safeParse({
+        kind: 'server-hello',
+        accepted: true,
+        protocolVersion: PROTOCOL_VERSION,
+        connectionId: 'connection-1',
+        serverTime: 1,
+        trustStatus: 'paired',
+        reconnectToken: 'r'.repeat(43),
+      }).success,
+    ).toBe(true);
   });
 
   it('rejects malformed event envelopes without throwing', () => {
@@ -36,6 +69,7 @@ describe('protocol', () => {
         droppedEvents: 2,
         oversizedEvents: 1,
         queueOverflowEvents: 1,
+        consoleDroppedEvents: 3,
         sentEvents: 20,
         sentBatches: 2,
         reconnectAttempts: 1,
@@ -59,6 +93,8 @@ describe('protocol', () => {
         level: 'warn',
         arguments: ['slow render', { duration: 120 }],
         message: 'slow render {"duration":120}',
+        redacted: true,
+        truncated: true,
       }).success,
     ).toBe(true);
     expect(
@@ -88,6 +124,36 @@ describe('protocol', () => {
     ).toBe(true);
   });
 
+  it('validates additive network lifecycle events without changing completed requests', () => {
+    expect(
+      networkLifecycleEventPayloadSchema.safeParse({
+        phase: 'progress',
+        requestId: 'request-1',
+        transport: 'xhr',
+        method: 'GET',
+        url: 'https://example.com/download',
+        timestamp: 120,
+        startedAt: 100,
+        loadedBytes: 512,
+        totalBytes: 1_024,
+        timingAccuracy: 'approximate',
+      }).success,
+    ).toBe(true);
+    expect(
+      networkLifecycleEventPayloadSchema.safeParse({
+        phase: 'progress',
+        requestId: 'request-1',
+        transport: 'xhr',
+        method: 'GET',
+        url: 'https://example.com/download',
+        timestamp: 120,
+        startedAt: 100,
+        loadedBytes: -1,
+        timingAccuracy: 'approximate',
+      }).success,
+    ).toBe(false);
+  });
+
   it('validates Redux actions and state diffs', () => {
     expect(
       reduxEventPayloadSchema.safeParse({
@@ -97,6 +163,18 @@ describe('protocol', () => {
         previousState: { count: 0 },
         nextState: { count: 1 },
         stateDiff: [{ path: '$.count', kind: 'changed', before: 0, after: 1 }],
+        changedPaths: ['$.count'],
+        actionCategory: 'domain',
+        stateSize: {
+          previousBytes: 11,
+          nextBytes: 11,
+          warningThresholdBytes: 262_144,
+          truncated: false,
+        },
+        correlations: {
+          route: 'Checkout',
+          requestId: 'request-1',
+        },
         reducerDuration: 0.25,
       }).success,
     ).toBe(true);
@@ -116,6 +194,20 @@ describe('protocol', () => {
           params: { itemId: 42, token: '[REDACTED]' },
         },
         previousRouteDuration: 1_250,
+        routePath: ['RootStack', 'Details'],
+        routeTree: [
+          {
+            navigatorId: 'root',
+            route: { key: 'details-1', name: 'Details' },
+            active: true,
+            depth: 0,
+          },
+        ],
+        parameterDiff: [{ path: '$.itemId', kind: 'added', after: 42 }],
+        actionGroup: 'forward',
+        warnings: ['incomplete_tracking'],
+        integrationMetadata: { pathname: '/details' },
+        correlations: { requestId: 'request-1' },
       }).success,
     ).toBe(true);
   });
@@ -128,6 +220,28 @@ describe('protocol', () => {
         value: 138,
         unit: 'ms',
         approximate: true,
+        provenance: 'javascript',
+        sampling: {
+          intervalMs: 1_000,
+          expectedSamples: 10,
+          lostSamples: 1,
+          captureRate: 10 / 11,
+        },
+      }).success,
+    ).toBe(true);
+    expect(
+      performanceEventPayloadSchema.safeParse({
+        metric: 'capability',
+        name: 'native cpu',
+        value: 0,
+        unit: 'count',
+        approximate: false,
+        provenance: 'runtime',
+        capability: {
+          name: 'native_cpu',
+          status: 'unavailable',
+          reason: 'Native CPU profiling is outside SDK capability.',
+        },
       }).success,
     ).toBe(true);
   });

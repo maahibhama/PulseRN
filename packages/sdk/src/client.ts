@@ -9,6 +9,7 @@ import type {
   ErrorEventPayload,
   JsonValue,
   NetworkEventPayload,
+  NetworkLifecycleEventPayload,
   PerformanceEventPayload,
   StorageCommand,
   StorageEventPayload,
@@ -91,10 +92,15 @@ export class DevToolClient {
   private droppedEvents = 0;
   private oversizedEvents = 0;
   private queueOverflowEvents = 0;
+  private consoleDroppedEvents = 0;
+  private consoleCaptureTimes: number[] = [];
+  private networkCapturedBytes = 0;
   private sentEvents = 0;
   private sentBatches = 0;
   private reconnectAttempts = 0;
   private clockOffsetMs = 0;
+  private pairingCode?: string;
+  private reconnectToken?: string;
   private lastEventAt?: number;
   private restoreConsole?: () => void;
   private restoreErrors?: () => void;
@@ -127,8 +133,29 @@ export class DevToolClient {
         16 * 1024,
         64 * 1024 * 1024,
       ),
+      maxConsoleEventsPerMinute: boundedNumber(config.maxConsoleEventsPerMinute, 6_000, 1, 100_000),
+      maxNetworkBodyBytes: boundedNumber(
+        config.maxNetworkBodyBytes,
+        100 * 1024,
+        0,
+        16 * 1024 * 1024,
+      ),
+      maxNetworkRequestBytes: boundedNumber(
+        config.maxNetworkRequestBytes,
+        256 * 1024,
+        1_024,
+        16 * 1024 * 1024,
+      ),
+      maxNetworkSessionBytes: boundedNumber(
+        config.maxNetworkSessionBytes,
+        10 * 1024 * 1024,
+        1_024,
+        512 * 1024 * 1024,
+      ),
     };
     this.factory = factory;
+    this.pairingCode = config.pairingCode;
+    this.reconnectToken = config.reconnectToken;
     this.deviceId = config.deviceId ?? createId('device');
     this.sessionId = config.sessionId ?? createId('session');
     this.appId = config.appId ?? config.appName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
@@ -157,13 +184,27 @@ export class DevToolClient {
       this.restoreConsole = installConsoleInterceptor(
         console,
         (level, payload) => {
+          const now = Date.now();
+          this.consoleCaptureTimes = this.consoleCaptureTimes.filter(
+            (capturedAt) => now - capturedAt < 60_000,
+          );
+          if (this.consoleCaptureTimes.length >= (this.config.maxConsoleEventsPerMinute ?? 6_000)) {
+            this.droppedEvents += 1;
+            this.consoleDroppedEvents += 1;
+            this.reportDiagnostics();
+            return;
+          }
+          this.consoleCaptureTimes.push(now);
           this.track({
             category: 'console',
             type: `console.${level}`,
             payload,
           });
         },
-        { captureStackTrace: this.config.captureConsoleStackTrace ?? true },
+        {
+          captureStackTrace: this.config.captureConsoleStackTrace ?? true,
+          serialization: this.config.consoleSerialization,
+        },
       );
     }
     if (this.config.enableErrors && !this.restoreErrors) {
@@ -174,10 +215,25 @@ export class DevToolClient {
     }
     if (this.config.enableNetwork && this.networkRestores.length === 0) {
       const emit = (payload: NetworkEventPayload) => {
-        this.track({ category: 'network', type: 'network.request', payload });
+        this.track({
+          category: 'network',
+          type: 'network.request',
+          payload,
+          correlationId: payload.requestId,
+        });
+      };
+      const emitLifecycle = (type: string, payload: NetworkLifecycleEventPayload) => {
+        this.track({
+          category: 'network',
+          type,
+          payload,
+          correlationId: payload.requestId,
+        });
       };
       if (typeof globalThis.fetch === 'function') {
-        this.networkRestores.push(installFetchInterceptor(globalThis, emit, this.networkOptions()));
+        this.networkRestores.push(
+          installFetchInterceptor(globalThis, emit, this.networkOptions(), emitLifecycle),
+        );
       }
       const xhr = (globalThis as { XMLHttpRequest?: unknown }).XMLHttpRequest;
       if (typeof xhr === 'function') {
@@ -186,6 +242,7 @@ export class DevToolClient {
             xhr as Parameters<typeof installXhrInterceptor>[0],
             emit,
             this.networkOptions(),
+            emitLifecycle,
           ),
         );
       }
@@ -228,6 +285,8 @@ export class DevToolClient {
   }
 
   track(input: TrackEventInput): void {
+    const originalConsolePayload =
+      input.category === 'console' ? JSON.stringify(input.payload) : undefined;
     let payload = redact(input.payload, { fields: this.config.redaction?.fields }) as JsonValue;
     if (
       input.category === 'console' &&
@@ -239,6 +298,7 @@ export class DevToolClient {
       payload = {
         ...payload,
         message: formatConsoleMessage(payload['arguments']),
+        ...(originalConsolePayload !== JSON.stringify(payload) ? { redacted: true } : {}),
       };
     }
     if (
@@ -345,6 +405,7 @@ export class DevToolClient {
       connected: this.negotiated,
       oversizedEvents: this.oversizedEvents,
       queueOverflowEvents: this.queueOverflowEvents,
+      consoleDroppedEvents: this.consoleDroppedEvents,
       sentEvents: this.sentEvents,
       sentBatches: this.sentBatches,
       reconnectAttempts: this.reconnectAttempts,
@@ -357,8 +418,21 @@ export class DevToolClient {
   attachAxios(instance: AxiosInstanceLike): () => void {
     return installAxiosInterceptor(
       instance,
-      (payload) => this.track({ category: 'network', type: 'network.request', payload }),
+      (payload) =>
+        this.track({
+          category: 'network',
+          type: 'network.request',
+          payload,
+          correlationId: payload.requestId,
+        }),
       this.networkOptions(),
+      (type, payload) =>
+        this.track({
+          category: 'network',
+          type,
+          payload,
+          correlationId: payload.requestId,
+        }),
     );
   }
 
@@ -376,6 +450,14 @@ export class DevToolClient {
       captureRequestBodies: this.config.captureRequestBodies ?? true,
       captureResponseBodies: this.config.captureResponseBodies ?? true,
       maxBodyBytes: this.config.maxNetworkBodyBytes ?? 100 * 1024,
+      maxRequestBytes: this.config.maxNetworkRequestBytes ?? 256 * 1024,
+      maxSessionBytes: this.config.maxNetworkSessionBytes ?? 10 * 1024 * 1024,
+      reserveCapture: (bytes) => {
+        const limit = this.config.maxNetworkSessionBytes ?? 10 * 1024 * 1024;
+        if (this.networkCapturedBytes + bytes > limit) return false;
+        this.networkCapturedBytes += bytes;
+        return true;
+      },
       redactedHeaders: this.config.redaction?.headers ?? [],
       redactedQueryParameters: [
         ...(this.config.redaction?.fields ?? []),
@@ -434,6 +516,8 @@ export class DevToolClient {
         sdkVersion: SDK_VERSION,
       },
       ...(this.config.authToken ? { authToken: this.config.authToken } : {}),
+      ...(this.pairingCode ? { pairingCode: this.pairingCode } : {}),
+      ...(this.reconnectToken ? { reconnectToken: this.reconnectToken } : {}),
     };
     this.socket?.send(JSON.stringify(message));
   }
@@ -452,6 +536,11 @@ export class DevToolClient {
         return;
       }
       this.negotiated = true;
+      if (result.data.reconnectToken) {
+        this.reconnectToken = result.data.reconnectToken;
+        this.pairingCode = undefined;
+        this.config.onReconnectToken?.(result.data.reconnectToken);
+      }
       this.supportsClientHealth = result.data.capabilities?.includes('client-health') ?? false;
       this.clockOffsetMs = result.data.serverTime - Date.now();
       this.reconnectAttempt = 0;
@@ -474,29 +563,55 @@ export class DevToolClient {
           providerId: command.providerId,
           operation: command.operation,
           success: true,
-          providers: [...this.storageProviders.values()].map(({ id, name }) => ({ id, name })),
+          providers: [...this.storageProviders.values()].map(({ id, name, capabilities }) => ({
+            id,
+            name,
+            capabilities,
+          })),
         };
       } else {
         const provider = this.storageProviders.get(command.providerId);
         if (!provider) throw new Error(`Unknown storage provider: ${command.providerId}`);
         if (command.operation === 'list') {
+          const keys = [...(await provider.getAllKeys())].sort();
+          const offset = Math.max(0, Number(command.cursor ?? 0) || 0);
+          const limit = Math.min(command.limit ?? 100, 500);
+          const page = keys.slice(offset, offset + limit);
           response = {
             kind: 'storage-result',
             requestId: command.requestId,
             providerId: command.providerId,
             operation: command.operation,
             success: true,
-            keys: [...(await provider.getAllKeys())].sort(),
+            keys: page,
+            keyEntries: page.map((key) => ({
+              key,
+              valueType: 'unknown',
+              sensitive: false,
+            })),
+            totalKeys: keys.length,
+            ...(offset + page.length < keys.length
+              ? { nextCursor: String(offset + page.length) }
+              : {}),
           };
         } else if (command.operation === 'get') {
           if (command.key === undefined) throw new Error('A key is required.');
+          const rawValue = await provider.getItem(command.key);
+          const value = this.sanitizeStorageValue(rawValue);
+          const description = provider.describeItem?.(command.key, rawValue) ?? {
+            valueType: 'unknown' as const,
+          };
           response = {
             kind: 'storage-result',
             requestId: command.requestId,
             providerId: command.providerId,
             operation: command.operation,
             success: true,
-            value: this.sanitizeStorageValue(await provider.getItem(command.key)),
+            value,
+            valueSize: rawValue === null ? 0 : new TextEncoder().encode(rawValue).byteLength,
+            valueType: description.valueType,
+            sensitive: description.sensitive ?? false,
+            redacted: value?.includes('[REDACTED]') ?? false,
           };
         } else if (command.operation === 'set') {
           if (command.key === undefined || command.value === undefined)
@@ -621,6 +736,7 @@ export class DevToolClient {
       droppedEvents: diagnostics.droppedEvents,
       oversizedEvents: diagnostics.oversizedEvents,
       queueOverflowEvents: diagnostics.queueOverflowEvents,
+      consoleDroppedEvents: diagnostics.consoleDroppedEvents,
       sentEvents: diagnostics.sentEvents,
       sentBatches: diagnostics.sentBatches,
       reconnectAttempts: diagnostics.reconnectAttempts,

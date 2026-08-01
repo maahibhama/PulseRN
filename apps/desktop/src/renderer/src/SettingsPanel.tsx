@@ -74,24 +74,14 @@ export function SettingsPanel({ resolvedTheme, settings, onChange }: SettingsPan
     return window.pulseRN.onUpdateState(setUpdateState);
   }, []);
 
-  const copyAccessToken = async () => {
+  const createPairingCode = async () => {
     setConnectionError('');
     try {
-      const info = await window.pulseRN.revealConnectionToken();
+      const info = await window.pulseRN.beginPairing();
       setConnection(info);
-      if (info.accessToken) await navigator.clipboard.writeText(info.accessToken);
+      if (info.pairing?.code) await navigator.clipboard.writeText(info.pairing.code);
     } catch (error) {
-      setConnectionError(error instanceof Error ? error.message : 'Unable to copy access token.');
-    }
-  };
-
-  const rotateAccessToken = async () => {
-    setConnectionError('');
-    try {
-      const info = await window.pulseRN.rotateConnectionToken();
-      setConnection(info);
-    } catch (error) {
-      setConnectionError(error instanceof Error ? error.message : 'Unable to rotate access token.');
+      setConnectionError(error instanceof Error ? error.message : 'Unable to create pairing code.');
     }
   };
 
@@ -209,7 +199,7 @@ export function SettingsPanel({ resolvedTheme, settings, onChange }: SettingsPan
           </header>
           <Toggle
             checked={settings.allowLanConnections}
-            description="Bind to local network interfaces. Every device must provide the generated access token."
+            description="Bind to local network interfaces. New devices must complete one-time pairing."
             label="Allow authenticated LAN connections"
             onChange={(allowLanConnections) =>
               void updateConnectionSettings({ allowLanConnections })
@@ -243,7 +233,7 @@ export function SettingsPanel({ resolvedTheme, settings, onChange }: SettingsPan
               <code key={address}>{address}</code>
             ))}
             {connection?.requiresAuth && (
-              <small>Set this host, port, and `authToken` in the React Native SDK.</small>
+              <small>Set this host and port, then enter the one-time code in the SDK.</small>
             )}
             <small>
               Transport: {connection?.tls.enabled ? 'Encrypted wss://' : 'Plaintext ws://'}
@@ -256,17 +246,20 @@ export function SettingsPanel({ resolvedTheme, settings, onChange }: SettingsPan
             {connection?.tls.validTo && (
               <small>Certificate valid until {connection.tls.validTo}</small>
             )}
-            {connection?.accessToken && (
-              <code className="access-token">{connection.accessToken}</code>
+            {connection?.pairing && (
+              <>
+                <code className="access-token">{connection.pairing.code}</code>
+                <small>
+                  Pairing code expires at{' '}
+                  {new Date(connection.pairing.expiresAt).toLocaleTimeString()}.
+                </small>
+              </>
             )}
             {connectionError && <small className="settings-error">{connectionError}</small>}
           </div>
           {settings.allowLanConnections && (
             <div className="connection-actions token-actions">
-              <button onClick={() => void copyAccessToken()}>Copy access token</button>
-              <button className="danger-button" onClick={() => void rotateAccessToken()}>
-                Rotate token
-              </button>
+              <button onClick={() => void createPairingCode()}>Create and copy pairing code</button>
             </div>
           )}
           <div className="tls-setting-row">

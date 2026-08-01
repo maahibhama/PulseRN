@@ -11,6 +11,9 @@ export interface DevToolConfig {
   sessionId?: string;
   device?: Partial<Omit<DeviceInfo, 'appName' | 'sdkVersion'>>;
   authToken?: string;
+  pairingCode?: string;
+  reconnectToken?: string;
+  onReconnectToken?: (token: string) => void;
   batchSize?: number;
   batchIntervalMs?: number;
   maxQueueSize?: number;
@@ -25,10 +28,18 @@ export interface DevToolConfig {
   isDevelopment?: boolean;
   enableConsole?: boolean;
   captureConsoleStackTrace?: boolean;
+  maxConsoleEventsPerMinute?: number;
+  consoleSerialization?: {
+    maxDepth?: number;
+    maxProperties?: number;
+    maxStringLength?: number;
+  };
   enableNetwork?: boolean;
   captureRequestBodies?: boolean;
   captureResponseBodies?: boolean;
   maxNetworkBodyBytes?: number;
+  maxNetworkRequestBytes?: number;
+  maxNetworkSessionBytes?: number;
   enablePerformance?: boolean;
   performanceSampleIntervalMs?: number;
   javascriptStallThresholdMs?: number;
@@ -48,6 +59,7 @@ export interface ClientDiagnostics {
   droppedEvents: number;
   oversizedEvents: number;
   queueOverflowEvents: number;
+  consoleDroppedEvents: number;
   sentEvents: number;
   sentBatches: number;
   reconnectAttempts: number;

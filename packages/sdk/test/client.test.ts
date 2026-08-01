@@ -20,6 +20,51 @@ function createSocket(): WebSocketLike & { bufferedAmount: number; sent: string[
 }
 
 describe('DevToolClient', () => {
+  it('exchanges a one-time pairing code for a reconnect token', () => {
+    vi.useFakeTimers();
+    const first = createSocket();
+    const second = createSocket();
+    const sockets = [first, second];
+    const onReconnectToken = vi.fn();
+    const client = new DevToolClient(
+      {
+        appName: 'Example',
+        isDevelopment: true,
+        pairingCode: 'ABCD-EFGH',
+        onReconnectToken,
+      },
+      () => sockets.shift()!,
+    ).connect();
+    first.onopen?.();
+    expect(JSON.parse(first.sent[0] ?? '{}')).toMatchObject({
+      kind: 'client-hello',
+      pairingCode: 'ABCD-EFGH',
+    });
+    first.onmessage?.({
+      data: JSON.stringify({
+        kind: 'server-hello',
+        accepted: true,
+        protocolVersion: PROTOCOL_VERSION,
+        connectionId: 'connection-1',
+        serverTime: Date.now(),
+        trustStatus: 'paired',
+        reconnectToken: 'r'.repeat(43),
+      }),
+    });
+    expect(onReconnectToken).toHaveBeenCalledWith('r'.repeat(43));
+
+    first.onclose?.();
+    vi.advanceTimersByTime(501);
+    second.onopen?.();
+    expect(JSON.parse(second.sent[0] ?? '{}')).toMatchObject({
+      kind: 'client-hello',
+      reconnectToken: 'r'.repeat(43),
+    });
+    expect(JSON.parse(second.sent[0] ?? '{}')).not.toHaveProperty('pairingCode');
+    client.disconnect();
+    vi.useRealTimers();
+  });
+
   it('handshakes, redacts, and batches events', () => {
     vi.useFakeTimers();
     const socket = createSocket();
@@ -51,8 +96,33 @@ describe('DevToolClient', () => {
     const payload = JSON.parse(socket.sent[1] ?? '{}').events[0].payload;
     expect(payload.arguments[0].token).toBe('[REDACTED]');
     expect(payload.message).not.toContain('secret');
+    expect(payload.redacted).toBe(true);
     client.disconnect();
     vi.useRealTimers();
+  });
+
+  it('applies a bounded console capture rate and reports console-specific drops', () => {
+    const socket = createSocket();
+    const original = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const client = new DevToolClient(
+      {
+        appName: 'Example',
+        enableConsole: true,
+        maxConsoleEventsPerMinute: 1,
+        isDevelopment: true,
+      },
+      () => socket,
+    );
+    client.connect();
+    console.log('first');
+    console.log('second');
+    expect(client.getStats()).toMatchObject({
+      queuedEvents: 1,
+      droppedEvents: 1,
+      consoleDroppedEvents: 1,
+    });
+    client.disconnect();
+    original.mockRestore();
   });
 
   it('caps the offline queue and records dropped events', () => {

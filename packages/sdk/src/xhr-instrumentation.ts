@@ -1,6 +1,7 @@
-import type { NetworkEventPayload } from './protocol-types.js';
+import type { NetworkEventPayload, NetworkLifecycleEventPayload } from './protocol-types.js';
 import { createId } from '@pulse-rn/shared';
 import {
+  admitNetworkBody,
   captureTextBody,
   captureUnknownBody,
   defaultNetworkCaptureOptions,
@@ -8,6 +9,7 @@ import {
   redactHeaders,
   sanitizeUrl,
   type NetworkCaptureOptions,
+  type NetworkRequestBudget,
 } from './network-utils';
 
 interface XMLHttpRequestLike {
@@ -19,7 +21,11 @@ interface XMLHttpRequestLike {
   open(method: string, url: string | URL, ...rest: unknown[]): void;
   send(body?: unknown): void;
   setRequestHeader(name: string, value: string): void;
-  addEventListener(name: string, listener: () => void, options?: { once?: boolean }): void;
+  addEventListener(
+    name: string,
+    listener: (event?: { loaded?: number; total?: number; lengthComputable?: boolean }) => void,
+    options?: { once?: boolean },
+  ): void;
   getAllResponseHeaders(): string;
 }
 
@@ -35,12 +41,15 @@ interface RequestState {
   startedAt: number;
   body?: NetworkEventPayload['requestBody'];
   emitted: boolean;
+  initiator?: string;
+  budget: NetworkRequestBudget;
 }
 
 export function installXhrInterceptor(
   constructor: XMLHttpRequestConstructorLike,
   emit: (payload: NetworkEventPayload) => void,
   partialOptions: Partial<NetworkCaptureOptions> = {},
+  emitLifecycle?: (type: string, payload: NetworkLifecycleEventPayload) => void,
 ): () => void {
   const options = defaultNetworkCaptureOptions(partialOptions);
   const prototype = constructor.prototype;
@@ -57,6 +66,7 @@ export function installXhrInterceptor(
       headers: {},
       startedAt: 0,
       emitted: false,
+      budget: { capturedBytes: 0, omittedBodies: [] },
     });
     originalOpen.call(this, method, url, ...rest);
   };
@@ -71,10 +81,45 @@ export function installXhrInterceptor(
     const state = states.get(this);
     if (!state) return originalSend.call(this, body);
     state.startedAt = Date.now();
+    state.initiator = new Error().stack;
+    const sanitized = sanitizeUrl(state.rawUrl, options.redactedQueryParameters);
     const requestHeaders = redactHeaders(state.headers, options.redactedHeaders);
     if (options.captureRequestBodies) {
-      state.body = captureUnknownBody(body, options.maxBodyBytes, requestHeaders['content-type']);
+      state.body = admitNetworkBody(
+        captureUnknownBody(body, options.maxBodyBytes, requestHeaders['content-type']),
+        'request',
+        state.budget,
+        options,
+      );
     }
+    emitLifecycle?.('network.request-start', {
+      phase: 'start',
+      requestId: state.requestId,
+      transport: 'xhr',
+      method: state.method,
+      url: sanitized.url,
+      timestamp: state.startedAt,
+      startedAt: state.startedAt,
+      ...(state.initiator ? { initiator: state.initiator } : {}),
+      timingAccuracy: 'measured',
+    });
+    this.addEventListener('progress', (progress) => {
+      emitLifecycle?.('network.request-progress', {
+        phase: 'progress',
+        requestId: state.requestId,
+        transport: 'xhr',
+        method: state.method,
+        url: sanitized.url,
+        timestamp: Date.now(),
+        startedAt: state.startedAt,
+        loadedBytes: progress?.loaded ?? 0,
+        ...(progress?.lengthComputable && progress.total !== undefined
+          ? { totalBytes: progress.total }
+          : {}),
+        ...(state.initiator ? { initiator: state.initiator } : {}),
+        timingAccuracy: 'approximate',
+      });
+    });
     const finish = () => {
       if (state.emitted) return;
       state.emitted = true;
@@ -92,15 +137,38 @@ export function installXhrInterceptor(
         try {
           const text =
             this.responseType === 'json' ? JSON.stringify(this.response) : this.responseText;
-          responseBody = captureTextBody(
-            text,
-            options.maxBodyBytes,
-            responseHeaders['content-type'],
+          responseBody = admitNetworkBody(
+            captureTextBody(text, options.maxBodyBytes, responseHeaders['content-type']),
+            'response',
+            state.budget,
+            options,
           );
         } catch {
           responseBody = undefined;
         }
       }
+      const failed = this.status === 0;
+      const capturedError = failed
+        ? { name: 'NetworkError', message: 'XMLHttpRequest failed' }
+        : undefined;
+      emitLifecycle?.(failed ? 'network.request-failure' : 'network.request-complete', {
+        phase: failed ? 'failure' : 'complete',
+        requestId: state.requestId,
+        transport: 'xhr',
+        method: state.method,
+        url,
+        timestamp: endedAt,
+        startedAt: state.startedAt,
+        status: this.status,
+        ...(state.initiator ? { initiator: state.initiator } : {}),
+        timingAccuracy: 'measured',
+        ...(capturedError ? { error: capturedError } : {}),
+        capture: {
+          requestBudgetBytes: options.maxRequestBytes,
+          sessionBudgetBytes: options.maxSessionBytes,
+          omittedBodies: state.budget.omittedBodies,
+        },
+      });
       emit({
         requestId: state.requestId,
         transport: 'xhr',
@@ -116,9 +184,14 @@ export function installXhrInterceptor(
         startedAt: state.startedAt,
         endedAt,
         duration: endedAt - state.startedAt,
-        ...(this.status === 0
-          ? { error: { name: 'NetworkError', message: 'XMLHttpRequest failed' } }
-          : {}),
+        timingAccuracy: 'measured',
+        ...(state.initiator ? { initiator: state.initiator } : {}),
+        ...(capturedError ? { error: capturedError } : {}),
+        capture: {
+          requestBudgetBytes: options.maxRequestBytes,
+          sessionBudgetBytes: options.maxSessionBytes,
+          omittedBodies: state.budget.omittedBodies,
+        },
       });
     };
     this.addEventListener('loadend', finish, { once: true });

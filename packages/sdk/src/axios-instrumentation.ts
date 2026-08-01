@@ -1,12 +1,14 @@
-import type { NetworkEventPayload } from './protocol-types.js';
+import type { NetworkEventPayload, NetworkLifecycleEventPayload } from './protocol-types.js';
 import { createId } from '@pulse-rn/shared';
 import {
+  admitNetworkBody,
   captureUnknownBody,
   defaultNetworkCaptureOptions,
   normalizeHeaders,
   redactHeaders,
   sanitizeUrl,
   type NetworkCaptureOptions,
+  type NetworkRequestBudget,
 } from './network-utils';
 
 interface AxiosConfig {
@@ -54,6 +56,8 @@ interface AxiosState {
   query: Record<string, string | string[]>;
   headers: Record<string, string>;
   body?: NetworkEventPayload['requestBody'];
+  initiator?: string;
+  budget: NetworkRequestBudget;
 }
 
 function configUrl(config: AxiosConfig): string {
@@ -74,24 +78,47 @@ export function installAxiosInterceptor(
   instance: AxiosInstanceLike,
   emit: (payload: NetworkEventPayload) => void,
   partialOptions: Partial<NetworkCaptureOptions> = {},
+  emitLifecycle?: (type: string, payload: NetworkLifecycleEventPayload) => void,
 ): () => void {
   const options = defaultNetworkCaptureOptions(partialOptions);
   const states = new WeakMap<object, AxiosState>();
   const requestId = instance.interceptors.request.use((config) => {
     const { url, query } = sanitizeUrl(configUrl(config), options.redactedQueryParameters);
     const headers = redactHeaders(normalizeHeaders(config.headers), options.redactedHeaders);
+    const requestId = createId('request');
+    const startedAt = Date.now();
+    const initiator = new Error().stack;
+    const budget: NetworkRequestBudget = { capturedBytes: 0, omittedBodies: [] };
     states.set(config, {
-      requestId: createId('request'),
-      startedAt: Date.now(),
+      requestId,
+      startedAt,
       method: (config.method ?? 'GET').toUpperCase(),
       url,
       query,
       headers,
+      ...(initiator ? { initiator } : {}),
+      budget,
       ...(options.captureRequestBodies
         ? {
-            body: captureUnknownBody(config.data, options.maxBodyBytes, headers['content-type']),
+            body: admitNetworkBody(
+              captureUnknownBody(config.data, options.maxBodyBytes, headers['content-type']),
+              'request',
+              budget,
+              options,
+            ),
           }
         : {}),
+    });
+    emitLifecycle?.('network.request-start', {
+      phase: 'start',
+      requestId,
+      transport: 'axios',
+      method: (config.method ?? 'GET').toUpperCase(),
+      url,
+      timestamp: startedAt,
+      startedAt,
+      ...(initiator ? { initiator } : {}),
+      timingAccuracy: 'measured',
     });
     return config;
   });
@@ -104,9 +131,33 @@ export function installAxiosInterceptor(
       normalizeHeaders(response.headers),
       options.redactedHeaders,
     );
-    const responseBody = options.captureResponseBodies
-      ? captureUnknownBody(response.data, options.maxBodyBytes, responseHeaders['content-type'])
-      : undefined;
+    const responseBody = admitNetworkBody(
+      options.captureResponseBodies
+        ? captureUnknownBody(response.data, options.maxBodyBytes, responseHeaders['content-type'])
+        : undefined,
+      'response',
+      state.budget,
+      options,
+    );
+    const capturedError = error ? { name: error.name, message: error.message } : undefined;
+    emitLifecycle?.(capturedError ? 'network.request-failure' : 'network.request-complete', {
+      phase: capturedError ? 'failure' : 'complete',
+      requestId: state.requestId,
+      transport: 'axios',
+      method: state.method,
+      url: state.url,
+      timestamp: endedAt,
+      startedAt: state.startedAt,
+      status: response.status,
+      ...(state.initiator ? { initiator: state.initiator } : {}),
+      timingAccuracy: 'measured',
+      ...(capturedError ? { error: capturedError } : {}),
+      capture: {
+        requestBudgetBytes: options.maxRequestBytes,
+        sessionBudgetBytes: options.maxSessionBytes,
+        omittedBodies: state.budget.omittedBodies,
+      },
+    });
     emit({
       requestId: state.requestId,
       transport: 'axios',
@@ -122,7 +173,14 @@ export function installAxiosInterceptor(
       startedAt: state.startedAt,
       endedAt,
       duration: endedAt - state.startedAt,
-      ...(error ? { error: { name: error.name, message: error.message } } : {}),
+      timingAccuracy: 'measured',
+      ...(state.initiator ? { initiator: state.initiator } : {}),
+      ...(capturedError ? { error: capturedError } : {}),
+      capture: {
+        requestBudgetBytes: options.maxRequestBytes,
+        sessionBudgetBytes: options.maxSessionBytes,
+        omittedBodies: state.budget.omittedBodies,
+      },
     });
   };
 
@@ -138,6 +196,24 @@ export function installAxiosInterceptor(
         const state = states.get(error.config);
         if (state) {
           const endedAt = Date.now();
+          const capturedError = { name: error.name, message: error.message };
+          emitLifecycle?.('network.request-failure', {
+            phase: 'failure',
+            requestId: state.requestId,
+            transport: 'axios',
+            method: state.method,
+            url: state.url,
+            timestamp: endedAt,
+            startedAt: state.startedAt,
+            ...(state.initiator ? { initiator: state.initiator } : {}),
+            timingAccuracy: 'measured',
+            error: capturedError,
+            capture: {
+              requestBudgetBytes: options.maxRequestBytes,
+              sessionBudgetBytes: options.maxSessionBytes,
+              omittedBodies: state.budget.omittedBodies,
+            },
+          });
           emit({
             requestId: state.requestId,
             transport: 'axios',
@@ -149,7 +225,14 @@ export function installAxiosInterceptor(
             startedAt: state.startedAt,
             endedAt,
             duration: endedAt - state.startedAt,
-            error: { name: error.name, message: error.message },
+            timingAccuracy: 'measured',
+            ...(state.initiator ? { initiator: state.initiator } : {}),
+            error: capturedError,
+            capture: {
+              requestBudgetBytes: options.maxRequestBytes,
+              sessionBudgetBytes: options.maxSessionBytes,
+              omittedBodies: state.budget.omittedBodies,
+            },
           });
         }
       }

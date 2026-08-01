@@ -5,6 +5,20 @@ export interface StorageProvider {
   getItem(key: string): Promise<string | null>;
   setItem(key: string, value: string): Promise<void>;
   removeItem(key: string): Promise<void>;
+  capabilities: {
+    paginatedKeys: boolean;
+    lazyValues: boolean;
+    mutations: boolean;
+    typedValues: boolean;
+    snapshots: boolean;
+  };
+  describeItem?(
+    key: string,
+    value: string | null,
+  ): {
+    valueType: 'string' | 'number' | 'boolean' | 'json' | 'binary' | 'unknown';
+    sensitive?: boolean;
+  };
 }
 
 export interface AsyncStorageLike {
@@ -32,10 +46,26 @@ export function createAsyncStorageProvider(
   return {
     id: options.id ?? 'async-storage',
     name: options.name ?? 'AsyncStorage',
+    capabilities: {
+      paginatedKeys: true,
+      lazyValues: true,
+      mutations: true,
+      typedValues: false,
+      snapshots: true,
+    },
     getAllKeys: () => storage.getAllKeys(),
     getItem: (key) => storage.getItem(key),
     setItem: (key, value) => storage.setItem(key, value),
     removeItem: (key) => storage.removeItem(key),
+    describeItem: (_key, value) => {
+      if (value === null) return { valueType: 'unknown' };
+      try {
+        JSON.parse(value);
+        return { valueType: 'json' };
+      } catch {
+        return { valueType: 'string' };
+      }
+    },
   };
 }
 
@@ -57,6 +87,13 @@ export function createMMKVStorageProvider(
   return {
     id: options.id ?? 'mmkv',
     name: options.name ?? 'MMKV',
+    capabilities: {
+      paginatedKeys: true,
+      lazyValues: true,
+      mutations: true,
+      typedValues: true,
+      snapshots: true,
+    },
     getAllKeys: async () => storage.getAllKeys(),
     getItem: async (key) => {
       const stringValue = safelyRead(() => storage.getString(key));
@@ -112,5 +149,10 @@ export function createMMKVStorageProvider(
       else throw new Error('The MMKV instance does not expose remove() or delete().');
       types.delete(key);
     },
+    describeItem: (_key, value) => ({
+      valueType:
+        types.get(_key) ??
+        (value !== null && (value.startsWith('{') || value.startsWith('[')) ? 'json' : 'unknown'),
+    }),
   };
 }

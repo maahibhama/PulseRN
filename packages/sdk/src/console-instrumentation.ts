@@ -1,14 +1,34 @@
 import type { ConsoleLogLevel, ConsoleLogPayload, JsonValue } from './protocol-types.js';
-import { formatConsoleMessage, serializeConsoleValue } from './serialization';
+import {
+  formatConsoleMessage,
+  serializeConsoleValue,
+  type SerializationOptions,
+} from './serialization';
 
 type ConsoleMethod = (...arguments_: unknown[]) => void;
 type InstrumentedConsole = Record<ConsoleLogLevel, ConsoleMethod>;
 
 export interface ConsoleInterceptorOptions {
   captureStackTrace?: boolean;
+  serialization?: SerializationOptions;
 }
 
 const LEVELS: readonly ConsoleLogLevel[] = ['log', 'info', 'warn', 'error', 'debug'];
+
+export function parseConsoleStackSource(stack: string): ConsoleLogPayload['source'] | undefined {
+  for (const line of stack.split('\n')) {
+    const match = line.match(
+      /\(?((?:file:\/\/|https?:\/\/|webpack:\/\/|metro:\/\/|\/|[A-Za-z]:[\\/]).*?):(\d+):(\d+)\)?$/,
+    );
+    if (!match?.[1] || !match[2]) continue;
+    return {
+      file: match[1],
+      line: Number(match[2]),
+      ...(match[3] ? { column: Number(match[3]) } : {}),
+    };
+  }
+  return undefined;
+}
 
 function captureStack(): Pick<ConsoleLogPayload, 'stack' | 'source'> {
   const stack = new Error().stack;
@@ -26,19 +46,8 @@ function captureStack(): Pick<ConsoleLogPayload, 'stack' | 'source'> {
   // name it "anonymous", so it cannot reliably be filtered by function name.
   const callerFrames = frames.slice(1);
   const cleanedStack = [heading, ...callerFrames].join('\n');
-  for (const line of callerFrames) {
-    const match = line.match(/\((.*):(\d+):(\d+)\)$/) ?? line.match(/^\s*at\s+(.*):(\d+):(\d+)$/);
-    if (!match?.[1] || !match[2]) continue;
-    return {
-      stack: cleanedStack,
-      source: {
-        file: match[1],
-        line: Number(match[2]),
-        ...(match[3] ? { column: Number(match[3]) } : {}),
-      },
-    };
-  }
-  return { stack: cleanedStack };
+  const source = parseConsoleStackSource(cleanedStack);
+  return { stack: cleanedStack, ...(source ? { source } : {}) };
 }
 
 export function installConsoleInterceptor(
@@ -57,11 +66,19 @@ export function installConsoleInterceptor(
       if (capturing) return;
       capturing = true;
       try {
-        const serialized = arguments_.map((value) => serializeConsoleValue(value)) as JsonValue[];
+        const serialized = arguments_.map((value) =>
+          serializeConsoleValue(value, options.serialization),
+        ) as JsonValue[];
+        const serializedText = JSON.stringify(serialized);
         emit(level, {
           level,
           arguments: serialized,
           message: formatConsoleMessage(serialized),
+          ...(serializedText.includes('[truncated]') ||
+          serializedText.includes('[Truncated]') ||
+          serializedText.includes('[Max depth reached]')
+            ? { truncated: true }
+            : {}),
           ...(options.captureStackTrace ? captureStack() : {}),
         });
       } finally {

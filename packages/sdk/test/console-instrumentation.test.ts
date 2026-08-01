@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ConsoleLogLevel, ConsoleLogPayload } from '@pulse-rn/protocol';
-import { installConsoleInterceptor } from '../src/console-instrumentation.js';
+import {
+  installConsoleInterceptor,
+  parseConsoleStackSource,
+} from '../src/console-instrumentation.js';
 import { formatConsoleMessage, serializeConsoleValue } from '../src/serialization.js';
 
 function createConsole() {
@@ -65,5 +68,36 @@ describe('console instrumentation', () => {
     expect(payloads[0]?.stack).not.toContain('console-instrumentation');
     expect(payloads[0]?.source?.file).not.toMatch(/^\s*at\s/);
     restore();
+  });
+
+  it('marks lazily displayed payloads when serialization limits truncate them', () => {
+    const target = createConsole();
+    const payloads: ConsoleLogPayload[] = [];
+    const restore = installConsoleInterceptor(target, (_level, payload) => payloads.push(payload), {
+      serialization: { maxDepth: 1, maxStringLength: 4 },
+    });
+
+    target.log('long value', { nested: { hidden: true } });
+    expect(payloads[0]).toMatchObject({
+      truncated: true,
+      arguments: ['long… [truncated]', { nested: '[Max depth reached]' }],
+    });
+    restore();
+  });
+
+  it('parses Metro, URL, file, and Windows stack locations', () => {
+    expect(parseConsoleStackSource('at run (http://127.0.0.1:8081/App.tsx:12:7)')).toEqual({
+      file: 'http://127.0.0.1:8081/App.tsx',
+      line: 12,
+      column: 7,
+    });
+    expect(parseConsoleStackSource('at file:///Users/example/App.tsx:8:2')).toMatchObject({
+      file: 'file:///Users/example/App.tsx',
+      line: 8,
+    });
+    expect(parseConsoleStackSource('at run (C:\\work\\App.tsx:9:4)')).toMatchObject({
+      file: 'C:\\work\\App.tsx',
+      line: 9,
+    });
   });
 });

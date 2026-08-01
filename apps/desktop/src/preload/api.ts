@@ -18,16 +18,28 @@ export interface EventQuery {
   category?: DevToolEventCategory;
   categories?: DevToolEventCategory[];
   cursor?: EventCursor;
+  direction?: 'forward' | 'backward';
   deviceId?: string;
+  endTime?: number;
+  errorsOnly?: boolean;
+  correlationId?: string;
   limit?: number;
   order?: 'newest' | 'oldest';
+  parentId?: string;
   sessionId?: string;
+  startTime?: number;
+  text?: string;
+  type?: string;
+  types?: string[];
 }
 
 export interface EventPage {
   events: DevToolEventEnvelope[];
   hasMore: boolean;
+  hasNext: boolean;
+  hasPrevious: boolean;
   nextCursor?: EventCursor;
+  previousCursor?: EventCursor;
   total: number;
 }
 
@@ -41,6 +53,71 @@ export interface StoredSession {
   startedAt: number;
   lastSeenAt: number;
   eventCount: number;
+  appVersion?: string;
+  sdkVersion?: string;
+  protocolVersion?: string;
+  endedAt?: number;
+  connectionCount: number;
+  displayName?: string;
+  trustStatus?: string;
+  disconnectCode?: number;
+  disconnectReason?: string;
+}
+
+export interface StoredDevice {
+  deviceId: string;
+  appId: string;
+  name: string;
+  appName: string;
+  platform: string;
+  platformVersion?: string;
+  model?: string;
+  appVersion?: string;
+  sdkVersion: string;
+  firstSeenAt: number;
+  lastSeenAt: number;
+  sessionCount: number;
+}
+
+export interface StoredRetentionState {
+  maxAgeDays: number;
+  maxEvents: number;
+  lastRunAt: number;
+}
+
+export interface SavedEventFilter {
+  id: string;
+  name: string;
+  query: Omit<EventQuery, 'cursor' | 'direction' | 'limit'>;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface EventBookmark {
+  id: string;
+  eventId: string;
+  sessionId: string;
+  label?: string;
+  createdAt: number;
+}
+
+export interface EventAnnotation {
+  id: string;
+  eventId: string;
+  sessionId: string;
+  body: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface DatabaseRecoveryReport {
+  status: 'not-needed' | 'recovered';
+  backupPath?: string;
+  recoveredEvents: number;
+  recoveredSessions: number;
+  lostEvents: number;
+  lossesUnknown: boolean;
+  reason?: string;
 }
 
 export interface DatabaseMaintenanceReport {
@@ -50,6 +127,7 @@ export interface DatabaseMaintenanceReport {
   removedInvalid: number;
   retainedEvents: number;
   completedAt: number;
+  recovery?: DatabaseRecoveryReport;
 }
 
 export interface SessionArchiveResult {
@@ -59,12 +137,20 @@ export interface SessionArchiveResult {
   events: number;
 }
 
+export interface NetworkExportResult {
+  canceled: boolean;
+  filePath?: string;
+  entries: number;
+}
+
 export interface StorageRequestInput {
   connectionId: string;
   providerId: string;
   operation: StorageOperation;
   key?: string;
   value?: string;
+  cursor?: string;
+  limit?: number;
 }
 
 export interface AppSettings {
@@ -87,7 +173,21 @@ export interface ConnectionInfo {
   port: number;
   requiresAuth: boolean;
   addresses: string[];
-  accessToken?: string;
+  pairing?: {
+    code: string;
+    expiresAt: number;
+    remainingAttempts: number;
+  };
+  trustedDevices: {
+    appId: string;
+    deviceId: string;
+    appName: string;
+    deviceName: string;
+    createdAt: number;
+    lastUsedAt: number;
+    revokedAt?: number;
+    status: 'trusted' | 'revoked';
+  }[];
   tls: {
     enabled: boolean;
     configured: boolean;
@@ -186,7 +286,26 @@ export interface PulseRNDesktopApi {
   onDevices(listener: (devices: ConnectedDevice[]) => void): () => void;
   queryEvents(input?: EventQuery): Promise<EventPage>;
   getEvent(id: string): Promise<EventPage['events'][number] | undefined>;
+  listSavedFilters(): Promise<SavedEventFilter[]>;
+  saveEventFilter(
+    name: string,
+    query: Omit<EventQuery, 'cursor' | 'direction' | 'limit'>,
+    id?: string,
+  ): Promise<SavedEventFilter>;
+  deleteSavedFilter(id: string): Promise<boolean>;
+  listBookmarks(sessionId?: string): Promise<EventBookmark[]>;
+  addBookmark(eventId: string, label?: string): Promise<EventBookmark>;
+  deleteBookmark(id: string): Promise<boolean>;
+  listAnnotations(eventId?: string, sessionId?: string): Promise<EventAnnotation[]>;
+  saveAnnotation(eventId: string, body: string, id?: string): Promise<EventAnnotation>;
+  deleteAnnotation(id: string): Promise<boolean>;
+  getNetworkCurl(eventId: string): Promise<string>;
+  exportNetworkHar(sessionId?: string): Promise<NetworkExportResult>;
   listSessions(): Promise<StoredSession[]>;
+  renameSession(sessionId: string, displayName: string): Promise<StoredSession>;
+  deleteSession(sessionId: string): Promise<{ sessions: number; events: number }>;
+  listStoredDevices(): Promise<StoredDevice[]>;
+  getRetentionState(): Promise<StoredRetentionState | undefined>;
   exportSessions(sessionIds?: string[]): Promise<SessionArchiveResult>;
   importSessions(): Promise<SessionArchiveResult>;
   runDatabaseMaintenance(): Promise<DatabaseMaintenanceReport>;
@@ -196,8 +315,8 @@ export interface PulseRNDesktopApi {
   updateSettings(patch: Partial<AppSettings>): Promise<AppSettings>;
   onSettings(listener: (settings: AppSettings) => void): () => void;
   getConnectionInfo(): Promise<ConnectionInfo>;
-  revealConnectionToken(): Promise<ConnectionInfo>;
-  rotateConnectionToken(): Promise<ConnectionInfo>;
+  beginPairing(): Promise<ConnectionInfo>;
+  revokeTrustedDevice(appId: string, deviceId: string): Promise<ConnectionInfo>;
   installTlsCertificate(): Promise<ConnectionInfo>;
   disableTls(): Promise<ConnectionInfo>;
   onConnectionInfo(listener: (info: ConnectionInfo) => void): () => void;

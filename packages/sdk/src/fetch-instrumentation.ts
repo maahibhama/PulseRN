@@ -1,6 +1,7 @@
-import type { NetworkEventPayload } from './protocol-types.js';
+import type { NetworkEventPayload, NetworkLifecycleEventPayload } from './protocol-types.js';
 import { createId } from '@pulse-rn/shared';
 import {
+  admitNetworkBody,
   captureTextBody,
   captureUnknownBody,
   defaultNetworkCaptureOptions,
@@ -8,6 +9,7 @@ import {
   redactHeaders,
   sanitizeUrl,
   type NetworkCaptureOptions,
+  type NetworkRequestBudget,
 } from './network-utils';
 
 type FetchFunction = (input: RequestInfo, init?: RequestInit) => Promise<Response>;
@@ -24,6 +26,7 @@ export function installFetchInterceptor(
   target: FetchTarget,
   emit: (payload: NetworkEventPayload) => void,
   partialOptions: Partial<NetworkCaptureOptions> = {},
+  emitLifecycle?: (type: string, payload: NetworkLifecycleEventPayload) => void,
 ): () => void {
   const options = defaultNetworkCaptureOptions(partialOptions);
   const original = target.fetch;
@@ -40,9 +43,27 @@ export function installFetchInterceptor(
       options.redactedHeaders,
     );
     const requestContentType = requestHeaders['content-type'];
-    const requestBody = options.captureRequestBodies
-      ? captureUnknownBody(init?.body, options.maxBodyBytes, requestContentType)
-      : undefined;
+    const budget: NetworkRequestBudget = { capturedBytes: 0, omittedBodies: [] };
+    const requestBody = admitNetworkBody(
+      options.captureRequestBodies
+        ? captureUnknownBody(init?.body, options.maxBodyBytes, requestContentType)
+        : undefined,
+      'request',
+      budget,
+      options,
+    );
+    const initiator = new Error().stack;
+    emitLifecycle?.('network.request-start', {
+      phase: 'start',
+      requestId,
+      transport: 'fetch',
+      method,
+      url,
+      timestamp: startedAt,
+      startedAt,
+      ...(initiator ? { initiator } : {}),
+      timingAccuracy: 'measured',
+    });
 
     try {
       const response = await original.call(target, input, init);
@@ -65,7 +86,47 @@ export function installFetchInterceptor(
         startedAt,
         endedAt,
         duration: endedAt - startedAt,
+        timingAccuracy: 'measured',
+        ...(initiator ? { initiator } : {}),
+        ...(response.redirected && response.url && response.url !== rawUrl
+          ? {
+              redirectChain: [
+                {
+                  from: url,
+                  to: sanitizeUrl(response.url, options.redactedQueryParameters).url,
+                  at: endedAt,
+                },
+              ],
+            }
+          : {}),
       };
+      if (completed.redirectChain?.[0]) {
+        emitLifecycle?.('network.request-redirect', {
+          phase: 'redirect',
+          requestId,
+          transport: 'fetch',
+          method,
+          url,
+          timestamp: endedAt,
+          startedAt,
+          redirectFrom: completed.redirectChain[0].from,
+          redirectTo: completed.redirectChain[0].to,
+          ...(initiator ? { initiator } : {}),
+          timingAccuracy: 'approximate',
+        });
+      }
+      emitLifecycle?.('network.request-complete', {
+        phase: 'complete',
+        requestId,
+        transport: 'fetch',
+        method,
+        url,
+        timestamp: endedAt,
+        startedAt,
+        status: response.status,
+        ...(initiator ? { initiator } : {}),
+        timingAccuracy: 'measured',
+      });
       if (options.captureResponseBodies && typeof response.clone === 'function') {
         const contentType = responseHeaders['content-type'];
         void response
@@ -73,15 +134,56 @@ export function installFetchInterceptor(
           .text()
           .then((text) => {
             const responseBody = captureTextBody(text, options.maxBodyBytes, contentType);
-            emit({ ...completed, ...(responseBody ? { responseBody } : {}) });
+            const admitted = admitNetworkBody(responseBody, 'response', budget, options);
+            emit({
+              ...completed,
+              ...(admitted ? { responseBody: admitted } : {}),
+              capture: {
+                requestBudgetBytes: options.maxRequestBytes,
+                sessionBudgetBytes: options.maxSessionBytes,
+                omittedBodies: budget.omittedBodies,
+              },
+            });
           })
-          .catch(() => emit(completed));
+          .catch(() =>
+            emit({
+              ...completed,
+              capture: {
+                requestBudgetBytes: options.maxRequestBytes,
+                sessionBudgetBytes: options.maxSessionBytes,
+                omittedBodies: budget.omittedBodies,
+              },
+            }),
+          );
       } else {
-        emit(completed);
+        emit({
+          ...completed,
+          capture: {
+            requestBudgetBytes: options.maxRequestBytes,
+            sessionBudgetBytes: options.maxSessionBytes,
+            omittedBodies: budget.omittedBodies,
+          },
+        });
       }
       return response;
     } catch (error) {
       const endedAt = Date.now();
+      const capturedError = {
+        name: error instanceof Error ? error.name : 'Error',
+        message: error instanceof Error ? error.message : String(error),
+      };
+      emitLifecycle?.('network.request-failure', {
+        phase: 'failure',
+        requestId,
+        transport: 'fetch',
+        method,
+        url,
+        timestamp: endedAt,
+        startedAt,
+        ...(initiator ? { initiator } : {}),
+        timingAccuracy: 'measured',
+        error: capturedError,
+      });
       emit({
         requestId,
         transport: 'fetch',
@@ -93,9 +195,13 @@ export function installFetchInterceptor(
         startedAt,
         endedAt,
         duration: endedAt - startedAt,
-        error: {
-          name: error instanceof Error ? error.name : 'Error',
-          message: error instanceof Error ? error.message : String(error),
+        timingAccuracy: 'measured',
+        ...(initiator ? { initiator } : {}),
+        error: capturedError,
+        capture: {
+          requestBudgetBytes: options.maxRequestBytes,
+          sessionBudgetBytes: options.maxSessionBytes,
+          omittedBodies: budget.omittedBodies,
         },
       });
       throw error;

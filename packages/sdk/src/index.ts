@@ -58,8 +58,12 @@ export { installErrorInterceptor, toCapturedError } from './error-instrumentatio
 export { createAsyncStorageProvider, createMMKVStorageProvider } from './storage-provider.js';
 export type { AsyncStorageLike, MMKVLike, StorageProvider } from './storage-provider.js';
 export { createDevToolMiddleware, diffStates } from './redux.js';
-export type { DevToolMiddlewareOptions, ReduxTrackTarget } from './redux.js';
-export { createNavigationTracker, getActiveRoute } from './navigation.js';
+export type {
+  DevToolMiddlewareOptions,
+  ReduxCorrelationContext,
+  ReduxTrackTarget,
+} from './redux.js';
+export { createNavigationTracker, getActiveRoute, getActiveRoutePath } from './navigation.js';
 export type {
   ManualNavigationInput,
   NavigationAction,
@@ -69,6 +73,7 @@ export type {
   NavigationTrackerOptions,
   NavigationTrackTarget,
 } from './navigation.js';
+export type { NetworkEventPayload, NetworkLifecycleEventPayload } from './protocol-types.js';
 export type {
   CaptureErrorOptions,
   ClientDiagnostics,

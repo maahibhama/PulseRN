@@ -8,26 +8,39 @@
 
 PulseRN is an open-source desktop debugging foundation for React Native. Its central idea is a unified, chronological timeline that will correlate app interactions, navigation, Redux, network, rendering, performance, and errors.
 
-> Status: Phase 14 complete. The inspectors, scalable persistence, session portability, authenticated LAN/TLS transport, signing-ready releases, guarded desktop updates, sustained-load checks, and Electron acceptance coverage are working.
+> Status: Phase 17 complete. PulseRN now adds bounded time-series performance views, selectable
+> ranges, configurable thresholds, matching-session baselines, sampling interval/loss visibility,
+> explicit JS/runtime provenance, and honest capability gaps. Development proceeds strictly through
+> the production-readiness roadmap.
 
 ## What works today
 
 - Electron desktop app with a sandboxed renderer and narrow preload bridge
-- Loopback-default WebSocket server with opt-in token-authenticated LAN binding and optional TLS
+- Loopback-default WebSocket server with opt-in, one-time LAN pairing, revocable trusted devices, and optional TLS
 - Versioned JSON protocol with Zod validation and negotiation
 - React Native SDK with development-build protection, reconnection, batching, sequencing, bounded offline buffering, socket backpressure protection, transport health diagnostics, payload limits, and field redaction
 - Multiple connected-device tracking
 - SQLite event persistence with configurable age/count retention and recovery cleanup
-- Cursor-paginated unified timeline and category inspectors with bounded timeline virtualization
-- Versioned, validated session archive import/export through native file dialogs
+- Cursor-paginated unified timeline with database filters, saved views, bookmarks, annotations, correlations, Follow Latest, keyboard navigation, and bounded virtualization
+- Compressed, versioned, checksummed `.pulsern` archive import/export through native file dialogs
 - Guarded desktop update checks, explicit download/install controls, and signing-aware release builds
 - Console interception for log, info, warn, error, and debug
-- Console filtering, search, pause, clear, payload expansion, copy, source, and stack inspection
-- Fetch and XMLHttpRequest inspection with optional Axios interceptors
-- Network status/method filters, URL search, failed-request highlighting, body truncation, and detail tabs
-- Redux/Redux Toolkit middleware with action, state, diff, reducer timing, redaction, and multi-store inspection
-- React Navigation and manual route instrumentation with lifecycle events, nested routes, parameter redaction, and route timing
-- Performance monitoring with approximate JS FPS, event-loop lag/stalls, startup/screen/custom timing, optional available heap metrics, and correlated slow-operation views
+- Console repeat collapsing, level/source presets, multiline search, lazy structured values, session boundaries, redaction/truncation indicators, copy/source/stack inspection, and capture/drop limits
+- Fetch and XMLHttpRequest lifecycle inspection with optional Axios interceptors while preserving
+  the completed protocol v1 event
+- Network in-flight progress, redirect chains, initiators, correlations, waterfall timing,
+  URL/header/query search, lazy body views, sanitized cURL/HAR export, and per-body/request/session
+  capture budgets
+- Redux/Redux Toolkit middleware with bounded state capture, lazy action/state trees, searchable
+  diffs and changed paths, size warnings, reducer timing, redaction, per-store policies, action
+  allow/deny filters, correlations, and multi-store inspection
+- React Navigation, Expo Router, and manual route instrumentation normalized into complete route
+  paths and nested ownership trees with history, duration charts, parameter diffs, grouped actions,
+  parameter redaction, correlations, and tracking-quality warnings
+- Performance monitoring with bounded time-series views, selectable ranges, configurable
+  thresholds, matching-session baselines, sampling-loss visibility, approximate JS FPS,
+  event-loop lag/stalls, startup/screen/custom timing, optional available heap metrics, explicit
+  capability gaps, and correlated slow-operation views
 - AsyncStorage and MMKV inspection with provider discovery, key search/read/refresh, JSON redaction, type-preserving MMKV edits, and explicitly confirmed update/delete operations
 - Error inspection for uncaught JavaScript failures, unhandled rejections, React error boundaries, network failures, and SDK errors with stack traces and 20 preceding timeline events
 - Native Hermes JavaScript debugger with original TypeScript sources, breakpoints, line stepping, call stacks, scopes, watches, evaluation, and exception pausing
@@ -139,14 +152,20 @@ If native dependencies change, rebuild the development app with the `ios` or `an
 instead of only restarting Metro.
 
 Use `10.0.2.2` for the Android emulator and `127.0.0.1` for the iOS simulator. For a physical device,
-enable authenticated LAN connections in desktop Settings, copy the displayed address and token, then run:
+enable authenticated LAN connections in desktop Settings, open **Connections**, create a short-lived
+pairing code, then run:
 
 ```bash
 EXPO_PUBLIC_PULSE_RN_HOST=192.168.1.20 \
-EXPO_PUBLIC_PULSE_RN_TOKEN=<copied-token> \
+EXPO_PUBLIC_PULSE_RN_PAIRING_CODE=<pairing-code> \
 EXPO_PUBLIC_PULSE_RN_SECURE=true \
 pnpm --filter @pulse-rn/example-react-native dev
 ```
+
+The pairing code works once. PulseRN returns a reconnect token after successful pairing; applications
+should store it in platform secure storage and provide it as
+`EXPO_PUBLIC_PULSE_RN_RECONNECT_TOKEN` during later development launches. Revoke a trusted device
+from the Connection Center at any time.
 
 Set `EXPO_PUBLIC_PULSE_RN_SECURE=true` only after configuring TLS in desktop Settings. The device
 must trust the certificate authority and the certificate must cover the selected host or IP. Without
@@ -223,8 +242,9 @@ icon. With **System** selected, PulseRN follows macOS automatically.
 ## Session archives
 
 Open **Sessions** to browse retained runs, export one session or all stored sessions, and import a
-`.pulsern-session.json` archive. PulseRN validates the versioned archive in Electron main before
-writing any data. Imports are duplicate-safe and remain subject to the configured retention limits.
+`.pulsern` archive. PulseRN validates its manifest, relationships, decompression bounds, and per-entry
+checksums in Electron main before writing any data transactionally. Imports are duplicate-safe and
+remain subject to the configured retention limits.
 
 ## JavaScript line debugger
 

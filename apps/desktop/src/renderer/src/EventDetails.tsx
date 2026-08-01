@@ -7,6 +7,7 @@ import { ReduxEventDetails } from './ReduxEventDetails.js';
 
 interface EventDetailsProps {
   event?: DevToolEventEnvelope;
+  onSelect?(id: string): void;
 }
 
 function StandardDetails({ event }: { event: DevToolEventEnvelope }) {
@@ -45,7 +46,7 @@ function StandardDetails({ event }: { event: DevToolEventEnvelope }) {
   );
 }
 
-export function EventDetails({ event }: EventDetailsProps) {
+export function EventDetails({ event, onSelect }: EventDetailsProps) {
   return (
     <aside className="details">
       <div className="panel-header">
@@ -78,7 +79,7 @@ export function EventDetails({ event }: EventDetailsProps) {
           ) : event.category === 'redux' ? (
             <ReduxEventDetails event={event} />
           ) : event.category === 'navigation' ? (
-            <NavigationEventDetails event={event} />
+            <NavigationEventDetails event={event} onSelect={onSelect} />
           ) : event.category === 'performance' ? (
             <PerformanceEventDetails event={event} />
           ) : event.category === 'error' ? (

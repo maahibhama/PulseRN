@@ -23,6 +23,9 @@ const connectedDeviceSchema = z.object({
   deviceId: z.string(),
   sessionId: z.string(),
   appId: z.string(),
+  protocolVersion: z.string().optional(),
+  trustStatus: z.enum(['loopback', 'paired', 'trusted', 'legacy']).optional(),
+  remoteAddress: z.string().optional(),
   connectedAt: z.number().finite().nonnegative(),
   device: deviceInfoSchema,
   health: clientHealthSchema
@@ -45,16 +48,55 @@ const eventQuerySchema = z
     category: eventCategorySchema.optional(),
     categories: z.array(eventCategorySchema).min(1).max(8).optional(),
     cursor: eventCursorSchema.optional(),
+    direction: z.enum(['forward', 'backward']).optional(),
     deviceId: z.string().trim().min(1).max(256).optional(),
+    endTime: z.number().finite().nonnegative().optional(),
+    errorsOnly: z.boolean().optional(),
+    correlationId: z.string().trim().min(1).max(256).optional(),
     limit: z.number().int().min(1).max(500).optional(),
     order: z.enum(['newest', 'oldest']).optional(),
+    parentId: z.string().trim().min(1).max(256).optional(),
     sessionId: z.string().trim().min(1).max(256).optional(),
+    startTime: z.number().finite().nonnegative().optional(),
+    text: z.string().trim().min(1).max(1_000).optional(),
+    type: z.string().trim().min(1).max(256).optional(),
+    types: z.array(z.string().trim().min(1).max(256)).min(1).max(100).optional(),
   })
   .strict();
+const savedEventQuerySchema = eventQuerySchema.omit({
+  cursor: true,
+  direction: true,
+  limit: true,
+});
+const savedEventFilterSchema = z.object({
+  id: z.string().trim().min(1).max(256),
+  name: z.string().trim().min(1).max(128),
+  query: savedEventQuerySchema,
+  createdAt: z.number().finite().nonnegative(),
+  updatedAt: z.number().finite().nonnegative(),
+});
+const eventBookmarkSchema = z.object({
+  id: z.string().trim().min(1).max(256),
+  eventId: z.string().trim().min(1).max(256),
+  sessionId: z.string().trim().min(1).max(256),
+  label: z.string().max(256).optional(),
+  createdAt: z.number().finite().nonnegative(),
+});
+const eventAnnotationSchema = z.object({
+  id: z.string().trim().min(1).max(256),
+  eventId: z.string().trim().min(1).max(256),
+  sessionId: z.string().trim().min(1).max(256),
+  body: z.string().trim().min(1).max(10_000),
+  createdAt: z.number().finite().nonnegative(),
+  updatedAt: z.number().finite().nonnegative(),
+});
 const eventPageSchema = z.object({
   events: z.array(eventEnvelopeSchema),
   hasMore: z.boolean(),
+  hasNext: z.boolean(),
+  hasPrevious: z.boolean(),
   nextCursor: eventCursorSchema.optional(),
+  previousCursor: eventCursorSchema.optional(),
   total: z.number().int().nonnegative(),
 });
 const storedSessionSchema = z.object({
@@ -67,6 +109,34 @@ const storedSessionSchema = z.object({
   startedAt: z.number().finite().nonnegative(),
   lastSeenAt: z.number().finite().nonnegative(),
   eventCount: z.number().int().nonnegative(),
+  appVersion: z.string().optional(),
+  sdkVersion: z.string().optional(),
+  protocolVersion: z.string().optional(),
+  endedAt: z.number().finite().nonnegative().optional(),
+  connectionCount: z.number().int().nonnegative(),
+  displayName: z.string().optional(),
+  trustStatus: z.string().optional(),
+  disconnectCode: z.number().int().nonnegative().optional(),
+  disconnectReason: z.string().optional(),
+});
+const storedDeviceSchema = z.object({
+  deviceId: z.string(),
+  appId: z.string(),
+  name: z.string(),
+  appName: z.string(),
+  platform: z.string(),
+  platformVersion: z.string().optional(),
+  model: z.string().optional(),
+  appVersion: z.string().optional(),
+  sdkVersion: z.string(),
+  firstSeenAt: z.number().finite().nonnegative(),
+  lastSeenAt: z.number().finite().nonnegative(),
+  sessionCount: z.number().int().nonnegative(),
+});
+const retentionStateSchema = z.object({
+  maxAgeDays: z.number().int().min(1).max(365),
+  maxEvents: z.number().int().min(1_000).max(1_000_000),
+  lastRunAt: z.number().finite().nonnegative(),
 });
 const storageRequestSchema = z.object({
   connectionId: z.string().trim().min(1).max(256),
@@ -74,6 +144,8 @@ const storageRequestSchema = z.object({
   operation: storageOperationSchema,
   key: z.string().max(10_000).optional(),
   value: z.string().max(1_000_000).optional(),
+  cursor: z.string().max(100).optional(),
+  limit: z.number().int().min(1).max(500).optional(),
 });
 const settingsSchema = z.object({
   theme: z.enum(['system', 'dark', 'light']),
@@ -96,6 +168,17 @@ const databaseMaintenanceSchema = z.object({
   removedInvalid: z.number().int().nonnegative(),
   retainedEvents: z.number().int().nonnegative(),
   completedAt: z.number().finite().nonnegative(),
+  recovery: z
+    .object({
+      status: z.enum(['not-needed', 'recovered']),
+      backupPath: z.string().optional(),
+      recoveredEvents: z.number().int().nonnegative(),
+      recoveredSessions: z.number().int().nonnegative(),
+      lostEvents: z.number().int().nonnegative(),
+      lossesUnknown: z.boolean(),
+      reason: z.string().optional(),
+    })
+    .optional(),
 });
 const sessionArchiveResultSchema = z.object({
   canceled: z.boolean(),
@@ -103,13 +186,36 @@ const sessionArchiveResultSchema = z.object({
   sessions: z.number().int().nonnegative(),
   events: z.number().int().nonnegative(),
 });
+const networkExportResultSchema = z.object({
+  canceled: z.boolean(),
+  filePath: z.string().optional(),
+  entries: z.number().int().nonnegative(),
+});
 const settingsPatchSchema = settingsSchema.partial().strict();
 const connectionInfoSchema = z.object({
   mode: z.enum(['loopback', 'lan']),
   port: z.number().int().min(1_024).max(65_535),
   requiresAuth: z.boolean(),
   addresses: z.array(z.string().max(2_048)).max(100),
-  accessToken: z.string().length(43).optional(),
+  pairing: z
+    .object({
+      code: z.string().max(64),
+      expiresAt: z.number().finite().nonnegative(),
+      remainingAttempts: z.number().int().nonnegative(),
+    })
+    .optional(),
+  trustedDevices: z.array(
+    z.object({
+      appId: z.string(),
+      deviceId: z.string(),
+      appName: z.string(),
+      deviceName: z.string(),
+      createdAt: z.number().finite().nonnegative(),
+      lastUsedAt: z.number().finite().nonnegative(),
+      revokedAt: z.number().finite().nonnegative().optional(),
+      status: z.enum(['trusted', 'revoked']),
+    }),
+  ),
   tls: z.object({
     enabled: z.boolean(),
     configured: z.boolean(),
@@ -254,11 +360,125 @@ const api: PulseRNDesktopApi = {
     });
     return value === undefined ? undefined : eventEnvelopeSchema.parse(value);
   },
+  async listSavedFilters() {
+    const value: unknown = await ipcRenderer.invoke(EVENTS_CHANNEL, {
+      operation: 'listSavedFilters',
+    });
+    return z.array(savedEventFilterSchema).parse(value);
+  },
+  async saveEventFilter(name, query, id) {
+    const value: unknown = await ipcRenderer.invoke(EVENTS_CHANNEL, {
+      operation: 'saveEventFilter',
+      name: z.string().trim().min(1).max(128).parse(name),
+      query: savedEventQuerySchema.parse(query),
+      id: id ? z.string().trim().min(1).max(256).parse(id) : undefined,
+    });
+    return savedEventFilterSchema.parse(value);
+  },
+  async deleteSavedFilter(id) {
+    const value: unknown = await ipcRenderer.invoke(EVENTS_CHANNEL, {
+      operation: 'deleteSavedFilter',
+      id: z.string().trim().min(1).max(256).parse(id),
+    });
+    return z.boolean().parse(value);
+  },
+  async listBookmarks(sessionId) {
+    const value: unknown = await ipcRenderer.invoke(EVENTS_CHANNEL, {
+      operation: 'listBookmarks',
+      sessionId: sessionId ? z.string().trim().min(1).max(256).parse(sessionId) : undefined,
+    });
+    return z.array(eventBookmarkSchema).parse(value);
+  },
+  async addBookmark(eventId, label) {
+    const value: unknown = await ipcRenderer.invoke(EVENTS_CHANNEL, {
+      operation: 'addBookmark',
+      eventId: z.string().trim().min(1).max(256).parse(eventId),
+      label: label ? z.string().trim().max(256).parse(label) : undefined,
+    });
+    return eventBookmarkSchema.parse(value);
+  },
+  async deleteBookmark(id) {
+    const value: unknown = await ipcRenderer.invoke(EVENTS_CHANNEL, {
+      operation: 'deleteBookmark',
+      id: z.string().trim().min(1).max(256).parse(id),
+    });
+    return z.boolean().parse(value);
+  },
+  async listAnnotations(eventId, sessionId) {
+    const value: unknown = await ipcRenderer.invoke(EVENTS_CHANNEL, {
+      operation: 'listAnnotations',
+      eventId: eventId ? z.string().trim().min(1).max(256).parse(eventId) : undefined,
+      sessionId: sessionId ? z.string().trim().min(1).max(256).parse(sessionId) : undefined,
+    });
+    return z.array(eventAnnotationSchema).parse(value);
+  },
+  async saveAnnotation(eventId, body, id) {
+    const value: unknown = await ipcRenderer.invoke(EVENTS_CHANNEL, {
+      operation: 'saveAnnotation',
+      eventId: z.string().trim().min(1).max(256).parse(eventId),
+      body: z.string().trim().min(1).max(10_000).parse(body),
+      id: id ? z.string().trim().min(1).max(256).parse(id) : undefined,
+    });
+    return eventAnnotationSchema.parse(value);
+  },
+  async deleteAnnotation(id) {
+    const value: unknown = await ipcRenderer.invoke(EVENTS_CHANNEL, {
+      operation: 'deleteAnnotation',
+      id: z.string().trim().min(1).max(256).parse(id),
+    });
+    return z.boolean().parse(value);
+  },
+  async getNetworkCurl(eventId) {
+    const value: unknown = await ipcRenderer.invoke(EVENTS_CHANNEL, {
+      operation: 'networkCurl',
+      eventId: z.string().trim().min(1).max(256).parse(eventId),
+    });
+    return z.string().max(2_000_000).parse(value);
+  },
+  async exportNetworkHar(sessionId) {
+    const value: unknown = await ipcRenderer.invoke(EVENTS_CHANNEL, {
+      operation: 'exportNetworkHar',
+      sessionId: sessionId ? z.string().trim().min(1).max(256).parse(sessionId) : undefined,
+    });
+    return networkExportResultSchema.parse(value);
+  },
   async listSessions() {
     const value: unknown = await ipcRenderer.invoke(EVENTS_CHANNEL, {
       operation: 'sessions',
     });
     return z.array(storedSessionSchema).parse(value);
+  },
+  async renameSession(sessionId, displayName) {
+    const value: unknown = await ipcRenderer.invoke(EVENTS_CHANNEL, {
+      operation: 'renameSession',
+      sessionId: z.string().trim().min(1).max(256).parse(sessionId),
+      displayName: z.string().trim().min(1).max(256).parse(displayName),
+    });
+    return storedSessionSchema.parse(value);
+  },
+  async deleteSession(sessionId) {
+    const value: unknown = await ipcRenderer.invoke(EVENTS_CHANNEL, {
+      operation: 'deleteSession',
+      sessionId: z.string().trim().min(1).max(256).parse(sessionId),
+    });
+    return z
+      .object({
+        sessions: z.number().int().nonnegative(),
+        events: z.number().int().nonnegative(),
+      })
+      .parse(value);
+  },
+  async listStoredDevices() {
+    const value: unknown = await ipcRenderer.invoke(EVENTS_CHANNEL, {
+      operation: 'devices',
+    });
+    return z.array(storedDeviceSchema).parse(value);
+  },
+  async getRetentionState() {
+    const value: unknown = await ipcRenderer.invoke(EVENTS_CHANNEL, {
+      operation: 'retentionState',
+    });
+    return value === undefined ? undefined : retentionStateSchema.parse(value);
   },
   async exportSessions(sessionIds) {
     const value: unknown = await ipcRenderer.invoke(EVENTS_CHANNEL, {
@@ -316,14 +536,18 @@ const api: PulseRNDesktopApi = {
       await ipcRenderer.invoke(CONNECTION_CHANNEL, { operation: 'info' }),
     );
   },
-  async revealConnectionToken() {
+  async beginPairing() {
     return connectionInfoSchema.parse(
-      await ipcRenderer.invoke(CONNECTION_CHANNEL, { operation: 'revealToken' }),
+      await ipcRenderer.invoke(CONNECTION_CHANNEL, { operation: 'beginPairing' }),
     );
   },
-  async rotateConnectionToken() {
+  async revokeTrustedDevice(appId, deviceId) {
     return connectionInfoSchema.parse(
-      await ipcRenderer.invoke(CONNECTION_CHANNEL, { operation: 'rotateToken' }),
+      await ipcRenderer.invoke(CONNECTION_CHANNEL, {
+        operation: 'revoke',
+        appId: z.string().trim().min(1).max(256).parse(appId),
+        deviceId: z.string().trim().min(1).max(256).parse(deviceId),
+      }),
     );
   },
   async installTlsCertificate() {

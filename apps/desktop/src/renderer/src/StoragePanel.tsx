@@ -8,6 +8,20 @@ interface StoragePanelProps {
 interface Provider {
   id: string;
   name: string;
+  capabilities: {
+    paginatedKeys: boolean;
+    lazyValues: boolean;
+    mutations: boolean;
+    typedValues: boolean;
+    snapshots: boolean;
+  };
+}
+
+interface KeyEntry {
+  key: string;
+  valueSize?: number;
+  valueType: 'string' | 'number' | 'boolean' | 'json' | 'binary' | 'unknown';
+  sensitive: boolean;
 }
 
 export function StoragePanel({ devices }: StoragePanelProps) {
@@ -15,11 +29,20 @@ export function StoragePanel({ devices }: StoragePanelProps) {
   const [providers, setProviders] = useState<Provider[]>([]);
   const [providerId, setProviderId] = useState('');
   const [keys, setKeys] = useState<string[]>([]);
+  const [keyEntries, setKeyEntries] = useState<KeyEntry[]>([]);
+  const [nextCursor, setNextCursor] = useState<string>();
+  const [totalKeys, setTotalKeys] = useState(0);
   const [selectedKey, setSelectedKey] = useState('');
   const [value, setValue] = useState('');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [valueType, setValueType] = useState<KeyEntry['valueType']>('unknown');
+  const [valueSize, setValueSize] = useState(0);
+  const [sensitive, setSensitive] = useState(false);
+  const [undo, setUndo] = useState<{ operation: 'set' | 'delete'; key: string; value: string }>();
+  const [snapshots, setSnapshots] = useState<{ key: string; value: string; at: number }[]>([]);
+  const [audit, setAudit] = useState<string[]>([]);
   const api = window.pulseRN;
 
   useEffect(() => {
@@ -62,15 +85,26 @@ export function StoragePanel({ devices }: StoragePanelProps) {
     };
   }, [api, connectionId]);
 
-  const refreshKeys = async () => {
+  const refreshKeys = async (cursor?: string) => {
     if (!connectionId || !providerId) return;
     setLoading(true);
     setError('');
     try {
-      const result = await api.requestStorage({ connectionId, providerId, operation: 'list' });
+      const result = await api.requestStorage({
+        connectionId,
+        providerId,
+        operation: 'list',
+        limit: 100,
+        ...(cursor ? { cursor } : {}),
+      });
       if (!result.success) throw new Error(result.error ?? 'Could not list storage keys.');
-      setKeys(result.keys ?? []);
-      if (selectedKey && !result.keys?.includes(selectedKey)) {
+      setKeys((current) => (cursor ? [...current, ...(result.keys ?? [])] : (result.keys ?? [])));
+      setKeyEntries((current) =>
+        cursor ? [...current, ...(result.keyEntries ?? [])] : (result.keyEntries ?? []),
+      );
+      setNextCursor(result.nextCursor);
+      setTotalKeys(result.totalKeys ?? result.keys?.length ?? 0);
+      if (!cursor && selectedKey && !result.keys?.includes(selectedKey)) {
         setSelectedKey('');
         setValue('');
       }
@@ -98,6 +132,9 @@ export function StoragePanel({ devices }: StoragePanelProps) {
       });
       if (!result.success) throw new Error(result.error ?? 'Could not read storage value.');
       setValue(result.value ?? '');
+      setValueType(result.valueType ?? 'unknown');
+      setValueSize(result.valueSize ?? 0);
+      setSensitive(result.sensitive ?? false);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Storage request failed.');
     } finally {
@@ -107,6 +144,8 @@ export function StoragePanel({ devices }: StoragePanelProps) {
 
   const updateValue = async () => {
     if (!selectedKey) return;
+    if (!window.confirm(`Update "${selectedKey}" in ${providerId}?`)) return;
+    const original = value;
     setLoading(true);
     try {
       const result = await api.requestStorage({
@@ -117,6 +156,8 @@ export function StoragePanel({ devices }: StoragePanelProps) {
         value,
       });
       if (!result.success) throw new Error(result.error ?? 'Could not update storage value.');
+      setUndo({ operation: 'set', key: selectedKey, value: original });
+      setAudit((current) => [`Updated ${selectedKey} at ${new Date().toISOString()}`, ...current]);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Storage update failed.');
     } finally {
@@ -126,6 +167,9 @@ export function StoragePanel({ devices }: StoragePanelProps) {
 
   const deleteValue = async () => {
     if (!selectedKey) return;
+    if (!window.confirm(`Delete "${selectedKey}" from ${providerId}?`)) return;
+    const deletedKey = selectedKey;
+    const original = value;
     setLoading(true);
     try {
       const result = await api.requestStorage({
@@ -135,6 +179,8 @@ export function StoragePanel({ devices }: StoragePanelProps) {
         key: selectedKey,
       });
       if (!result.success) throw new Error(result.error ?? 'Could not delete storage value.');
+      setUndo({ operation: 'delete', key: deletedKey, value: original });
+      setAudit((current) => [`Deleted ${deletedKey} at ${new Date().toISOString()}`, ...current]);
       setSelectedKey('');
       setValue('');
       await refreshKeys();
@@ -143,6 +189,23 @@ export function StoragePanel({ devices }: StoragePanelProps) {
     } finally {
       setLoading(false);
     }
+  };
+  const undoMutation = async () => {
+    if (!undo || !window.confirm(`Restore the local backup for "${undo.key}"?`)) return;
+    const result = await api.requestStorage({
+      connectionId,
+      providerId,
+      operation: 'set',
+      key: undo.key,
+      value: undo.value,
+    });
+    if (!result.success) {
+      setError(result.error ?? 'Could not restore the local backup.');
+      return;
+    }
+    setAudit((current) => [`Restored ${undo.key} at ${new Date().toISOString()}`, ...current]);
+    setUndo(undefined);
+    await refreshKeys();
   };
 
   const filteredKeys = useMemo(
@@ -156,11 +219,16 @@ export function StoragePanel({ devices }: StoragePanelProps) {
       <div className="panel-header">
         <div>
           <strong>Storage</strong>
-          <span>{keys.length} keys</span>
+          <span>
+            {keys.length} of {totalKeys} keys
+          </span>
         </div>
         <div className="actions">
           <button disabled={!providerId || loading} onClick={() => void refreshKeys()}>
             Refresh
+          </button>
+          <button disabled={!undo || loading} onClick={() => void undoMutation()}>
+            Undo last mutation
           </button>
         </div>
       </div>
@@ -181,7 +249,7 @@ export function StoragePanel({ devices }: StoragePanelProps) {
           {providers.length === 0 && <option value="">No storage provider</option>}
           {providers.map((provider) => (
             <option key={provider.id} value={provider.id}>
-              {provider.name}
+              {provider.name} {provider.capabilities.typedValues ? '· typed' : '· strings'}
             </option>
           ))}
         </select>
@@ -211,7 +279,13 @@ export function StoragePanel({ devices }: StoragePanelProps) {
                 key={key}
                 onClick={() => void selectKey(key)}
               >
-                {key}
+                <span>{key}</span>
+                <small>
+                  {keyEntries.find((entry) => entry.key === key)?.valueType ?? 'unknown'}
+                  {keyEntries.find((entry) => entry.key === key)?.valueSize !== undefined
+                    ? ` · ${keyEntries.find((entry) => entry.key === key)!.valueSize} bytes`
+                    : ''}
+                </small>
               </button>
             ))
           )}
@@ -220,15 +294,21 @@ export function StoragePanel({ devices }: StoragePanelProps) {
           {selectedKey ? (
             <>
               <div className="storage-editor-header">
-                <strong>{selectedKey}</strong>
+                <strong>
+                  {selectedKey} · {valueType} · {valueSize.toLocaleString()} bytes
+                </strong>
                 <div>
                   <button
-                    disabled={loading || containsRedaction}
+                    disabled={loading || containsRedaction || sensitive}
                     onClick={() => void updateValue()}
                   >
                     Update
                   </button>
-                  <button className="danger" disabled={loading} onClick={() => void deleteValue()}>
+                  <button
+                    className="danger"
+                    disabled={loading || sensitive}
+                    onClick={() => void deleteValue()}
+                  >
                     Delete
                   </button>
                 </div>
@@ -239,6 +319,17 @@ export function StoragePanel({ devices }: StoragePanelProps) {
                   secrets with redaction markers.
                 </p>
               )}
+              <button
+                disabled={sensitive || containsRedaction}
+                onClick={() =>
+                  setSnapshots((current) => [
+                    { key: selectedKey, value, at: Date.now() },
+                    ...current,
+                  ])
+                }
+              >
+                Create read-only snapshot
+              </button>
               <textarea
                 aria-label={`Value for ${selectedKey}`}
                 onChange={(event) => setValue(event.target.value)}
@@ -251,6 +342,27 @@ export function StoragePanel({ devices }: StoragePanelProps) {
           )}
         </div>
       </div>
+      {nextCursor && (
+        <button className="storage-load-more" onClick={() => void refreshKeys(nextCursor)}>
+          Load next 100 keys
+        </button>
+      )}
+      {(snapshots.length > 0 || audit.length > 0) && (
+        <div className="storage-local-records">
+          <strong>Local snapshots and audit</strong>
+          {snapshots.map((snapshot) => (
+            <details key={`${snapshot.key}:${snapshot.at}`}>
+              <summary>
+                Snapshot · {snapshot.key} · {new Date(snapshot.at).toLocaleTimeString()}
+              </summary>
+              <pre>{snapshot.value}</pre>
+            </details>
+          ))}
+          {audit.map((entry) => (
+            <span key={entry}>{entry}</span>
+          ))}
+        </div>
+      )}
     </main>
   );
 }

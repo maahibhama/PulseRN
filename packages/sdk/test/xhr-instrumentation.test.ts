@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { NetworkEventPayload } from '@pulse-rn/protocol';
+import type { NetworkEventPayload, NetworkLifecycleEventPayload } from '@pulse-rn/protocol';
 import { installXhrInterceptor } from '../src/xhr-instrumentation.js';
 
 class FakeXhr {
@@ -8,17 +8,26 @@ class FakeXhr {
   responseType = '';
   response: unknown;
   responseText = '{"ok":true}';
-  private listeners = new Map<string, (() => void)[]>();
+  private listeners = new Map<
+    string,
+    ((event?: { loaded?: number; total?: number; lengthComputable?: boolean }) => void)[]
+  >();
   private requestHeaders: Record<string, string> = {};
 
   open() {}
   send() {
+    for (const listener of this.listeners.get('progress') ?? []) {
+      listener({ loaded: 5, total: 10, lengthComputable: true });
+    }
     for (const listener of this.listeners.get('loadend') ?? []) listener();
   }
   setRequestHeader(name: string, value: string) {
     this.requestHeaders[name] = value;
   }
-  addEventListener(name: string, listener: () => void) {
+  addEventListener(
+    name: string,
+    listener: (event?: { loaded?: number; total?: number; lengthComputable?: boolean }) => void,
+  ) {
     this.listeners.set(name, [...(this.listeners.get(name) ?? []), listener]);
   }
   getAllResponseHeaders() {
@@ -46,6 +55,27 @@ describe('XMLHttpRequest instrumentation', () => {
       responseBody: { value: { ok: true } },
       responseHeaders: { 'set-cookie': '[REDACTED]' },
     });
+    restore();
+  });
+
+  it('reports start, progress, and completion lifecycle events', () => {
+    const lifecycle: { type: string; payload: NetworkLifecycleEventPayload }[] = [];
+    const restore = installXhrInterceptor(
+      FakeXhr,
+      () => undefined,
+      {},
+      (type, payload) => lifecycle.push({ type, payload }),
+    );
+    const request = new FakeXhr();
+    request.open('GET', 'https://example.com/download');
+    request.send();
+
+    expect(lifecycle.map(({ type }) => type)).toEqual([
+      'network.request-start',
+      'network.request-progress',
+      'network.request-complete',
+    ]);
+    expect(lifecycle[1]?.payload).toMatchObject({ loadedBytes: 5, totalBytes: 10 });
     restore();
   });
 });
