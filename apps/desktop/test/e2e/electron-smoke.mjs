@@ -237,6 +237,11 @@ try {
     connectionInfo.requiresAuth === false,
     'Loopback unexpectedly requires LAN authentication.',
   );
+  assert(connectionInfo.tls.enabled === false, 'TLS was unexpectedly enabled by default.');
+  assert(
+    connectionInfo.tls.configured === false,
+    'A fresh profile unexpectedly reported TLS credentials.',
+  );
   assert(connectionInfo.accessToken === undefined, 'Connection info leaked the access token.');
   const maintenance = await cdp.evaluate('window.pulseRN.runDatabaseMaintenance()');
   assert(maintenance.retainedEvents === 600, 'Database maintenance lost retained events.');

@@ -15,6 +15,7 @@ import {
   parseSessionArchive,
 } from './session-archive.js';
 import { AccessTokenStore } from './access-token.js';
+import { TlsCertificateStore } from './tls-certificate.js';
 
 const SNAPSHOT_CHANNEL = 'pulse-rn:snapshot';
 const DEVICES_CHANNEL = 'pulse-rn:devices';
@@ -72,6 +73,7 @@ let window: BrowserWindow | undefined;
 let settingsStore: SettingsStore | undefined;
 let debuggerManager: DebuggerManager | undefined;
 let accessTokenStore: AccessTokenStore | undefined;
+let tlsCertificateStore: TlsCertificateStore | undefined;
 let isQuitting = false;
 let lastDatabaseMaintenanceAt = 0;
 
@@ -100,29 +102,48 @@ function effectiveServerPort(settings: { devToolPort: number }): number {
     : settings.devToolPort;
 }
 
+async function readTlsCredentialFile(path: string): Promise<Buffer> {
+  const file = await stat(path);
+  if (!file.isFile() || file.size > 1024 * 1024) {
+    throw new Error('TLS certificate and key selections must be files no larger than 1 MiB.');
+  }
+  return readFile(path);
+}
+
 function connectionInfo(revealToken = false) {
-  if (!settingsStore || !accessTokenStore) {
+  if (!settingsStore || !accessTokenStore || !tlsCertificateStore) {
     throw new Error('PulseRN connection settings are not ready.');
   }
   const settings = settingsStore.get();
   const port = effectiveServerPort(settings);
+  const scheme = settings.tlsEnabled ? 'wss' : 'ws';
   const addresses = settings.allowLanConnections
     ? Object.values(networkInterfaces())
         .flatMap((entries) => entries ?? [])
         .filter((entry) => entry.family === 'IPv4' && !entry.internal)
-        .map((entry) => `ws://${entry.address}:${port}`)
-    : [`ws://127.0.0.1:${port}`];
+        .map((entry) => `${scheme}://${entry.address}:${port}`)
+    : [`${scheme}://127.0.0.1:${port}`];
   return {
     mode: settings.allowLanConnections ? ('lan' as const) : ('loopback' as const),
     port,
     requiresAuth: settings.allowLanConnections,
     addresses: [...new Set(addresses)],
+    tls: {
+      enabled: settings.tlsEnabled,
+      ...tlsCertificateStore.info(),
+    },
     ...(revealToken ? { accessToken: accessTokenStore.get() } : {}),
   };
 }
 
 async function restartServer(settings = settingsStore?.get()): Promise<void> {
-  if (!settings || !accessTokenStore) throw new Error('PulseRN server settings are not ready.');
+  if (!settings || !accessTokenStore || !tlsCertificateStore) {
+    throw new Error('PulseRN server settings are not ready.');
+  }
+  const tlsCredentials = settings.tlsEnabled ? tlsCertificateStore.credentials() : undefined;
+  if (settings.tlsEnabled && !tlsCredentials) {
+    throw new Error('TLS is enabled but no valid certificate and private key are configured.');
+  }
   await server?.close();
   server = new DevToolWebSocketServer(
     effectiveServerPort(settings),
@@ -154,6 +175,7 @@ async function restartServer(settings = settingsStore?.get()): Promise<void> {
     },
     settings.allowLanConnections ? '0.0.0.0' : '127.0.0.1',
     settings.allowLanConnections ? accessTokenStore.get() : undefined,
+    tlsCredentials,
   );
   await server.start();
   if (window && !window.isDestroyed()) {
@@ -220,6 +242,10 @@ function createWindow(): void {
 app.whenReady().then(async () => {
   settingsStore = new SettingsStore(join(app.getPath('userData'), 'settings.json'));
   accessTokenStore = new AccessTokenStore(join(app.getPath('userData'), 'access-token'));
+  tlsCertificateStore = new TlsCertificateStore(
+    join(app.getPath('userData'), 'tls', 'certificate.pem'),
+    join(app.getPath('userData'), 'tls', 'private-key.pem'),
+  );
   debuggerManager = new DebuggerManager(
     join(app.getPath('userData'), 'debugger.json'),
     () => settingsStore?.get().metroPort ?? 8081,
@@ -227,7 +253,14 @@ app.whenReady().then(async () => {
       if (window && !window.isDestroyed()) window.webContents.send(DEBUGGER_CHANNEL, state);
     },
   );
-  const initialSettings = settingsStore.get();
+  let initialSettings = settingsStore.get();
+  if (initialSettings.tlsEnabled && !tlsCertificateStore.credentials()) {
+    console.warn('[PulseRN] TLS configuration is invalid; falling back to loopback mode.');
+    initialSettings = settingsStore.update({
+      tlsEnabled: false,
+      allowLanConnections: false,
+    });
+  }
   nativeTheme.themeSource = initialSettings.theme;
   if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: initialSettings.launchAtLogin });
   applyAppIcon(initialSettings.theme);
@@ -356,7 +389,8 @@ app.whenReady().then(async () => {
     const settings = settingsStore.update(value);
     const serverChanged =
       settings.allowLanConnections !== previous.allowLanConnections ||
-      settings.devToolPort !== previous.devToolPort;
+      settings.devToolPort !== previous.devToolPort ||
+      settings.tlsEnabled !== previous.tlsEnabled;
     if (serverChanged) {
       try {
         await restartServer(settings);
@@ -364,6 +398,7 @@ app.whenReady().then(async () => {
         settingsStore.update({
           allowLanConnections: previous.allowLanConnections,
           devToolPort: previous.devToolPort,
+          tlsEnabled: previous.tlsEnabled,
         });
         await restartServer(previous);
         throw error;
@@ -383,6 +418,8 @@ app.whenReady().then(async () => {
         z.object({ operation: z.literal('info') }),
         z.object({ operation: z.literal('revealToken') }),
         z.object({ operation: z.literal('rotateToken') }),
+        z.object({ operation: z.literal('installTls') }),
+        z.object({ operation: z.literal('disableTls') }),
       ])
       .parse(value ?? { operation: 'info' });
     if (input.operation === 'rotateToken') {
@@ -403,6 +440,95 @@ app.whenReady().then(async () => {
       accessTokenStore.rotate();
       if (settingsStore?.get().allowLanConnections) await restartServer();
       return connectionInfo(true);
+    }
+    if (input.operation === 'installTls') {
+      if (!settingsStore || !tlsCertificateStore) {
+        throw new Error('PulseRN TLS settings are not ready.');
+      }
+      const certificateSelection = window
+        ? await dialog.showOpenDialog(window, {
+            title: 'Select TLS certificate',
+            properties: ['openFile'],
+            filters: [{ name: 'PEM certificate', extensions: ['pem', 'crt', 'cer'] }],
+          })
+        : await dialog.showOpenDialog({
+            title: 'Select TLS certificate',
+            properties: ['openFile'],
+            filters: [{ name: 'PEM certificate', extensions: ['pem', 'crt', 'cer'] }],
+          });
+      const certificatePath = certificateSelection.filePaths[0];
+      if (certificateSelection.canceled || !certificatePath) return connectionInfo();
+      const keySelection = window
+        ? await dialog.showOpenDialog(window, {
+            title: 'Select TLS private key',
+            properties: ['openFile'],
+            filters: [{ name: 'PEM private key', extensions: ['pem', 'key'] }],
+          })
+        : await dialog.showOpenDialog({
+            title: 'Select TLS private key',
+            properties: ['openFile'],
+            filters: [{ name: 'PEM private key', extensions: ['pem', 'key'] }],
+          });
+      const keyPath = keySelection.filePaths[0];
+      if (keySelection.canceled || !keyPath) return connectionInfo();
+      const previous = settingsStore.get();
+      tlsCertificateStore.install(
+        await readTlsCredentialFile(certificatePath),
+        await readTlsCredentialFile(keyPath),
+      );
+      const next = settingsStore.update({ tlsEnabled: true });
+      try {
+        await restartServer(next);
+      } catch (error) {
+        settingsStore.update({ tlsEnabled: previous.tlsEnabled });
+        await restartServer(previous);
+        throw error;
+      }
+      if (window && !window.isDestroyed()) {
+        window.webContents.send(SETTINGS_CHANNEL, next);
+      }
+      return connectionInfo();
+    }
+    if (input.operation === 'disableTls') {
+      if (!settingsStore || !tlsCertificateStore) {
+        throw new Error('PulseRN TLS settings are not ready.');
+      }
+      const previous = settingsStore.get();
+      if (!previous.tlsEnabled) return connectionInfo();
+      const confirmation = window
+        ? await dialog.showMessageBox(window, {
+            type: 'warning',
+            title: 'Disable TLS',
+            message: 'Switch device transport back to unencrypted WebSockets?',
+            detail:
+              'LAN token authentication remains enabled, but network traffic will be plaintext.',
+            buttons: ['Cancel', 'Disable TLS'],
+            defaultId: 0,
+            cancelId: 0,
+            noLink: true,
+          })
+        : await dialog.showMessageBox({
+            type: 'warning',
+            title: 'Disable TLS',
+            message: 'Switch device transport back to unencrypted WebSockets?',
+            buttons: ['Cancel', 'Disable TLS'],
+            defaultId: 0,
+            cancelId: 0,
+          });
+      if (confirmation.response !== 1) return connectionInfo();
+      const next = settingsStore.update({ tlsEnabled: false });
+      try {
+        await restartServer(next);
+        tlsCertificateStore.remove();
+      } catch (error) {
+        settingsStore.update({ tlsEnabled: true });
+        await restartServer(previous);
+        throw error;
+      }
+      if (window && !window.isDestroyed()) {
+        window.webContents.send(SETTINGS_CHANNEL, next);
+      }
+      return connectionInfo();
     }
     return connectionInfo(input.operation === 'revealToken');
   });

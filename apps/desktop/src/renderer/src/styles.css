@@ -1,4 +1,13 @@
 :root {
+  --accent: #a794ff;
+  --border: #292f3b;
+  --danger: #ed858d;
+  --muted: #697285;
+  --panel: #11151c;
+  --panel-soft: #171b24;
+  --success: #42d392;
+  --text: #cbd1dc;
+  --warning: #dbb760;
   color: #e7ebf3;
   background: #0b0d12;
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
@@ -201,8 +210,10 @@ button {
 .connection-addresses {
   display: grid;
   gap: 7px;
-  padding: 12px 18px;
+  padding: 12px 15px;
   border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 10px;
 }
 
 .connection-addresses code {
@@ -212,6 +223,7 @@ button {
   background: var(--panel-soft);
   color: var(--accent);
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .connection-addresses .access-token {
@@ -223,7 +235,7 @@ button {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  padding: 0 18px 14px;
+  padding: 0;
 }
 
 .connection-actions button {
@@ -232,10 +244,44 @@ button {
   padding: 7px 10px;
   background: var(--panel-soft);
   color: var(--text);
+  font-size: 10px;
+  white-space: nowrap;
 }
 
 .connection-actions .danger-button {
   color: var(--danger);
+}
+
+.token-actions {
+  padding: 0 15px 12px;
+}
+
+.tls-setting-row {
+  display: flex;
+  min-height: 64px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 11px 15px;
+  border-top: 1px solid var(--border);
+}
+
+.tls-setting-row > span {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.tls-setting-row strong {
+  color: #cbd1dc;
+  font-size: 11px;
+}
+
+.tls-setting-row small {
+  max-width: 430px;
+  color: #697285;
+  font-size: 10px;
+  line-height: 1.4;
 }
 .device-pill.degraded small {
   color: #e0a15c;
@@ -1825,7 +1871,8 @@ pre {
   font-size: 10px;
   line-height: 1.4;
 }
-.setting-row select {
+.setting-row select,
+.setting-row input[type='number'] {
   min-width: 145px;
   padding: 7px 9px;
   border: 1px solid #343b4a;
@@ -1835,10 +1882,49 @@ pre {
   color: #b8c0cf;
   font-size: 10px;
 }
+.setting-row input[type='number'] {
+  width: 96px;
+  min-width: 96px;
+  font-family: ui-monospace, monospace;
+}
 .setting-toggle {
+  position: relative;
+  flex: 0 0 auto;
   width: 34px;
   height: 19px;
-  accent-color: #745cff;
+  appearance: none;
+  border: 1px solid #3a4252;
+  border-radius: 999px;
+  background: #232936;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease;
+}
+.setting-toggle::after {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #a7afbf;
+  content: '';
+  transition:
+    transform 140ms ease,
+    background 140ms ease;
+}
+.setting-toggle:checked {
+  border-color: #806cff;
+  background: #6851dc;
+}
+.setting-toggle:checked::after {
+  background: #fff;
+  transform: translateX(15px);
+}
+.setting-toggle:focus-visible {
+  outline: 2px solid #9a88ff;
+  outline-offset: 2px;
 }
 .logo-library > div {
   display: grid;
@@ -1879,6 +1965,15 @@ pre {
 }
 
 :root[data-theme='light'] {
+  --accent: #6548d8;
+  --border: #dce2ec;
+  --danger: #b93644;
+  --muted: #68738a;
+  --panel: #ffffff;
+  --panel-soft: #f5f7fb;
+  --success: #16875c;
+  --text: #28334a;
+  --warning: #976912;
   color: #172038;
   background: #f4f6fa;
 }
@@ -1921,10 +2016,23 @@ pre {
 :root[data-theme='light'] .device-pill,
 :root[data-theme='light'] .phase-pill,
 :root[data-theme='light'] .actions button,
-:root[data-theme='light'] .setting-row select {
+:root[data-theme='light'] .setting-row select,
+:root[data-theme='light'] .setting-row input[type='number'],
+:root[data-theme='light'] .connection-actions button {
   border-color: #d5dce8;
   background: #f5f7fb;
   color: #4e5870;
+}
+:root[data-theme='light'] .tls-setting-row strong {
+  color: #111a31;
+}
+:root[data-theme='light'] .setting-toggle {
+  border-color: #c8d0dd;
+  background: #dde3ec;
+}
+:root[data-theme='light'] .setting-toggle:checked {
+  border-color: #6e58e4;
+  background: #745cff;
 }
 :root[data-theme='light'] .event:hover,
 :root[data-theme='light'] .event.selected,

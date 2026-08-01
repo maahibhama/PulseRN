@@ -22,6 +22,7 @@ export const useDesktopStore = create<DesktopState>((set) => ({
     metroPort: 8081,
     devToolPort: 9090,
     allowLanConnections: false,
+    tlsEnabled: false,
     eventRetentionDays: 30,
     maxStoredEvents: 100_000,
     launchAtLogin: false,

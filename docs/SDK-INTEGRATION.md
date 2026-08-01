@@ -40,12 +40,18 @@ ReactNativeDevTool.configure({
   host: '192.168.1.20',
   port: 9090,
   authToken: 'token-copied-from-pulsern',
+  secure: true,
 }).connect();
 ```
 
-LAN mode uses plain `ws://`, not TLS. Use it only on a trusted development network, rotate the token
-after sharing it, and never commit a token to source control. Loopback remains the default and does
-not require a token.
+`secure: true` selects `wss://` and must match the TLS setting in the desktop app. Configure a PEM
+certificate and matching private key under **Settings → Device connections** first. The mobile
+device must trust the issuing certificate authority, and the certificate must include the configured
+hostname or IP in its subject alternative names. TLS does not replace `authToken` in LAN mode.
+
+Without TLS, LAN mode uses plain `ws://`. Keep it on a trusted development network, rotate the token
+after sharing it, and never commit a token or private key to source control. Loopback remains the
+default and does not require a token.
 
 ## Persistent device identity
 

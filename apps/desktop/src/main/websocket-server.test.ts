@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
 import { PROTOCOL_VERSION } from '@pulse-rn/protocol';
 import { accessTokensMatch, DevToolWebSocketServer } from './websocket-server.js';
@@ -26,8 +29,14 @@ function hello(authToken?: string) {
   };
 }
 
-async function handshake(port: number, authToken?: string): Promise<Record<string, unknown>> {
-  const socket = new WebSocket(`ws://127.0.0.1:${port}`);
+async function handshake(
+  port: number,
+  authToken?: string,
+  secure = false,
+): Promise<Record<string, unknown>> {
+  const socket = new WebSocket(`${secure ? 'wss' : 'ws'}://127.0.0.1:${port}`, {
+    rejectUnauthorized: false,
+  });
   await new Promise<void>((resolve, reject) => {
     socket.once('open', () => resolve());
     socket.once('error', reject);
@@ -81,5 +90,33 @@ describe('WebSocket access token authentication', () => {
       protocolVersion: PROTOCOL_VERSION,
     });
     expect(onConnected).toHaveBeenCalledOnce();
+  });
+
+  it('authenticates device handshakes over TLS', async () => {
+    const fixtureDirectory = join(fileURLToPath(new URL('.', import.meta.url)), 'fixtures');
+    const server = new DevToolWebSocketServer(
+      0,
+      {
+        onConnected: vi.fn(),
+        onDisconnected: vi.fn(),
+        onEvents: vi.fn(),
+        onHealth: vi.fn(),
+        onInvalidMessage: vi.fn(),
+      },
+      '127.0.0.1',
+      'a'.repeat(43),
+      {
+        cert: readFileSync(join(fixtureDirectory, 'test-certificate.pem')),
+        key: readFileSync(join(fixtureDirectory, 'test-private-key.pem')),
+      },
+    );
+    servers.push(server);
+    await server.start();
+
+    await expect(handshake(server.address().port, 'a'.repeat(43), true)).resolves.toMatchObject({
+      kind: 'server-hello',
+      accepted: true,
+      protocolVersion: PROTOCOL_VERSION,
+    });
   });
 });

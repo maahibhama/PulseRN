@@ -81,6 +81,7 @@ const settingsSchema = z.object({
   metroPort: z.number().int().min(1).max(65_535),
   devToolPort: z.number().int().min(1_024).max(65_535),
   allowLanConnections: z.boolean(),
+  tlsEnabled: z.boolean(),
   eventRetentionDays: z.number().int().min(1).max(365),
   maxStoredEvents: z.number().int().min(1_000).max(1_000_000),
   launchAtLogin: z.boolean(),
@@ -107,6 +108,15 @@ const connectionInfoSchema = z.object({
   requiresAuth: z.boolean(),
   addresses: z.array(z.string().max(2_048)).max(100),
   accessToken: z.string().length(43).optional(),
+  tls: z.object({
+    enabled: z.boolean(),
+    configured: z.boolean(),
+    fingerprint256: z.string().optional(),
+    subject: z.string().optional(),
+    issuer: z.string().optional(),
+    validFrom: z.string().optional(),
+    validTo: z.string().optional(),
+  }),
 });
 const debuggerLocationSchema = z.object({
   sourceId: z.string(),
@@ -294,6 +304,16 @@ const api: PulseRNDesktopApi = {
   async rotateConnectionToken() {
     return connectionInfoSchema.parse(
       await ipcRenderer.invoke(CONNECTION_CHANNEL, { operation: 'rotateToken' }),
+    );
+  },
+  async installTlsCertificate() {
+    return connectionInfoSchema.parse(
+      await ipcRenderer.invoke(CONNECTION_CHANNEL, { operation: 'installTls' }),
+    );
+  },
+  async disableTls() {
+    return connectionInfoSchema.parse(
+      await ipcRenderer.invoke(CONNECTION_CHANNEL, { operation: 'disableTls' }),
     );
   },
   onConnectionInfo(listener) {

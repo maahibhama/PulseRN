@@ -18,8 +18,11 @@ dequeueing batches while the native socket buffer exceeds its configured thresho
 The SDK server binds to `127.0.0.1` by default. LAN mode is an explicit preference that restarts the
 server on `0.0.0.0` and requires a generated 256-bit token in every client hello. The token is stored
 separately from renderer-visible settings with user-only permissions, compared in constant time, and
-revealed only through narrow copy/rotation commands. LAN mode authenticates clients but does not add
-TLS encryption.
+revealed only through narrow copy/rotation commands. Optional TLS wraps the same WebSocket server in
+HTTPS using a user-selected PEM certificate and matching private key. Electron main validates and
+stores the credentials with user-only permissions; preload exposes only certificate metadata and
+narrow install/disable commands. A broken persisted TLS configuration falls back to loopback rather
+than exposing an unauthenticated or unexpectedly plaintext LAN listener.
 
 The JavaScript debugger is a separate, Electron-main-owned connection to a single Hermes runtime
 through Metro's loopback Chrome DevTools Protocol proxy. Electron validates target discovery and CDP
@@ -72,7 +75,7 @@ only archive summaries and never arbitrary filesystem capabilities.
 ```text
 React Native SDK
   → batch + redact + sequence
-  → ws://127.0.0.1:9090
+  → ws://127.0.0.1:9090 or authenticated wss://<trusted-host>:9090
   → parse JSON as unknown
   → Zod protocol validation + negotiation
   → SQLite transaction + in-memory session projection

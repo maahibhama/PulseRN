@@ -8,12 +8,12 @@
 
 PulseRN is an open-source desktop debugging foundation for React Native. Its central idea is a unified, chronological timeline that will correlate app interactions, navigation, Redux, network, rendering, performance, and errors.
 
-> Status: Phase 12 complete. The inspectors, scalable persistence, session portability, authenticated LAN access, transport hardening, sustained-load checks, and Electron acceptance coverage are working.
+> Status: Phase 13 complete. The inspectors, scalable persistence, session portability, authenticated LAN access, optional TLS transport, sustained-load checks, and Electron acceptance coverage are working.
 
 ## What works today
 
 - Electron desktop app with a sandboxed renderer and narrow preload bridge
-- Loopback-default WebSocket server with opt-in token-authenticated LAN binding
+- Loopback-default WebSocket server with opt-in token-authenticated LAN binding and optional TLS
 - Versioned JSON protocol with Zod validation and negotiation
 - React Native SDK with development-build protection, reconnection, batching, sequencing, bounded offline buffering, socket backpressure protection, transport health diagnostics, payload limits, and field redaction
 - Multiple connected-device tracking
@@ -143,10 +143,13 @@ enable authenticated LAN connections in desktop Settings, copy the displayed add
 ```bash
 EXPO_PUBLIC_PULSE_RN_HOST=192.168.1.20 \
 EXPO_PUBLIC_PULSE_RN_TOKEN=<copied-token> \
+EXPO_PUBLIC_PULSE_RN_SECURE=true \
 pnpm --filter @pulse-rn/example-react-native dev
 ```
 
-LAN traffic uses plain `ws://`; use this only on a trusted development network. See
+Set `EXPO_PUBLIC_PULSE_RN_SECURE=true` only after configuring TLS in desktop Settings. The device
+must trust the certificate authority and the certificate must cover the selected host or IP. Without
+TLS, LAN traffic uses plain `ws://` and must stay on a trusted development network. See
 [SECURITY.md](docs/SECURITY.md).
 
 ## Verify
@@ -206,7 +209,8 @@ Open **Settings** in the Electron sidebar to configure:
 - Comfortable or compact interface density
 - Newest-first or oldest-first timeline ordering
 - Local Metro discovery port for the Hermes debugger
-- Debugger server port, authenticated LAN access, and access-token rotation
+- Debugger server port, authenticated LAN access, access-token rotation, and TLS certificate
+  configuration
 - Event retention period, maximum stored events, maintenance, and history deletion
 - Launch at login on packaged macOS builds
 - Whether closing the window keeps PulseRN running in the background
@@ -229,10 +233,10 @@ controls, keyboard shortcuts, examples, and current limitations.
 
 ## Known limitations
 
-- LAN access is token-authenticated but not encrypted; it is restricted to trusted development networks.
+- TLS requires a user-supplied certificate and private key; PulseRN does not create or install a
+  trusted certificate authority on mobile devices.
 - Live updates keep a bounded 2,000-event projection in memory; inspectors page older retained history from SQLite.
 - The Expo example uses prebuild; the Community CLI example includes committed native iOS and Android projects.
-- Session export/import is not implemented yet.
 - Console fields, network headers, URL query parameters, and structured request/response fields are redacted before transmission.
 - Performance FPS, event-loop, and SDK app-start metrics are JavaScript-derived approximations, not native CPU or UI-thread profiling.
 

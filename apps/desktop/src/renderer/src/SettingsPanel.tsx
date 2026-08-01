@@ -89,6 +89,26 @@ export function SettingsPanel({ resolvedTheme, settings, onChange }: SettingsPan
     }
   };
 
+  const installTls = async () => {
+    setConnectionError('');
+    try {
+      setConnection(await window.pulseRN.installTlsCertificate());
+    } catch (error) {
+      setConnectionError(
+        error instanceof Error ? error.message : 'Unable to configure TLS certificate.',
+      );
+    }
+  };
+
+  const disableTls = async () => {
+    setConnectionError('');
+    try {
+      setConnection(await window.pulseRN.disableTls());
+    } catch (error) {
+      setConnectionError(error instanceof Error ? error.message : 'Unable to disable TLS.');
+    }
+  };
+
   const runMaintenance = async (clear = false) => {
     setMaintaining(true);
     setMaintenanceError('');
@@ -193,19 +213,48 @@ export function SettingsPanel({ resolvedTheme, settings, onChange }: SettingsPan
             {connection?.requiresAuth && (
               <small>Set this host, port, and `authToken` in the React Native SDK.</small>
             )}
+            <small>
+              Transport: {connection?.tls.enabled ? 'Encrypted wss://' : 'Plaintext ws://'}
+            </small>
+            {connection?.tls.fingerprint256 && (
+              <code title="SHA-256 certificate fingerprint">
+                SHA-256 {connection.tls.fingerprint256}
+              </code>
+            )}
+            {connection?.tls.validTo && (
+              <small>Certificate valid until {connection.tls.validTo}</small>
+            )}
             {connection?.accessToken && (
               <code className="access-token">{connection.accessToken}</code>
             )}
             {connectionError && <small className="settings-error">{connectionError}</small>}
           </div>
           {settings.allowLanConnections && (
-            <div className="connection-actions">
+            <div className="connection-actions token-actions">
               <button onClick={() => void copyAccessToken()}>Copy access token</button>
               <button className="danger-button" onClick={() => void rotateAccessToken()}>
                 Rotate token
               </button>
             </div>
           )}
+          <div className="tls-setting-row">
+            <span>
+              <strong>TLS encryption</strong>
+              <small>
+                Use a trusted certificate that covers the configured hostname or IP address.
+              </small>
+            </span>
+            <div className="connection-actions">
+              <button onClick={() => void installTls()}>
+                {connection?.tls.configured ? 'Replace certificate' : 'Configure TLS'}
+              </button>
+              {connection?.tls.enabled && (
+                <button className="danger-button" onClick={() => void disableTls()}>
+                  Disable TLS
+                </button>
+              )}
+            </div>
+          </div>
         </section>
 
         <section className="settings-card">

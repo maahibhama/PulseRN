@@ -9,8 +9,15 @@ Please report vulnerabilities privately to the repository maintainers. Do not op
 - WebSocket listens only on `127.0.0.1` unless authenticated LAN access is explicitly enabled.
 - LAN mode binds to `0.0.0.0` and requires a generated 256-bit access token in the validated
   handshake. Tokens are stored separately with user-only permissions and compared in constant time.
-- LAN transport is plain `ws://` and must only be used on trusted development networks. It does not
-  protect captured traffic or tokens from network observers.
+- TLS can be enabled with a user-supplied PEM certificate and matching private key. PulseRN validates
+  the pair before use, stores both with user-only permissions, exposes certificate metadata rather
+  than key material to the renderer, and serves the same validated protocol over `wss://`.
+- TLS does not replace LAN token authentication. Without TLS, LAN transport is plain `ws://` and
+  must only be used on trusted development networks because network observers can capture traffic
+  and tokens.
+- PulseRN does not provision trust on mobile devices. The device must trust the issuing certificate
+  authority and the certificate's subject alternative names must cover the configured hostname or
+  IP address.
 - Renderer uses `contextIsolation: true`, `nodeIntegration: false`, and `sandbox: true`.
 - Preload exposes narrow validated operations, not raw Electron IPC or Node APIs.
 - Network and IPC messages are treated as unknown and validated.
@@ -31,6 +38,6 @@ Please report vulnerabilities privately to the repository maintainers. Do not op
   directly in arbitrary error-message or stack strings.
 - No `eval`, remote content, navigation, or arbitrary window opening is allowed.
 
-Do not expose the LAN port to the public internet. Rotate the token after sharing it, when a device is
-lost, or after using an untrusted network. Prefer USB port forwarding or simulator loopback whenever
-possible.
+Do not expose the LAN port to the public internet. Rotate the token after sharing it, when a device
+is lost, or after using an untrusted network. Protect and rotate the TLS private key separately.
+Prefer USB port forwarding or simulator loopback whenever possible.

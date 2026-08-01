@@ -72,6 +72,7 @@ export interface AppSettings {
   metroPort: number;
   devToolPort: number;
   allowLanConnections: boolean;
+  tlsEnabled: boolean;
   eventRetentionDays: number;
   maxStoredEvents: number;
   launchAtLogin: boolean;
@@ -84,6 +85,15 @@ export interface ConnectionInfo {
   requiresAuth: boolean;
   addresses: string[];
   accessToken?: string;
+  tls: {
+    enabled: boolean;
+    configured: boolean;
+    fingerprint256?: string;
+    subject?: string;
+    issuer?: string;
+    validFrom?: string;
+    validTo?: string;
+  };
 }
 
 export interface DebuggerTarget {
@@ -185,6 +195,8 @@ export interface PulseRNDesktopApi {
   getConnectionInfo(): Promise<ConnectionInfo>;
   revealConnectionToken(): Promise<ConnectionInfo>;
   rotateConnectionToken(): Promise<ConnectionInfo>;
+  installTlsCertificate(): Promise<ConnectionInfo>;
+  disableTls(): Promise<ConnectionInfo>;
   onConnectionInfo(listener: (info: ConnectionInfo) => void): () => void;
   getDebuggerState(): Promise<DebuggerState>;
   onDebuggerState(listener: (state: DebuggerState) => void): () => void;

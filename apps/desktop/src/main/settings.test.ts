@@ -16,6 +16,7 @@ describe('SettingsStore', () => {
       metroPort: 8081,
       devToolPort: 9090,
       allowLanConnections: false,
+      tlsEnabled: false,
       eventRetentionDays: 30,
       maxStoredEvents: 100_000,
     });
@@ -26,6 +27,7 @@ describe('SettingsStore', () => {
       metroPort: 8090,
       devToolPort: 9191,
       allowLanConnections: true,
+      tlsEnabled: true,
       eventRetentionDays: 7,
       maxStoredEvents: 50_000,
     });
@@ -37,6 +39,7 @@ describe('SettingsStore', () => {
       metroPort: 8090,
       devToolPort: 9191,
       allowLanConnections: true,
+      tlsEnabled: true,
       eventRetentionDays: 7,
       maxStoredEvents: 50_000,
     });

@@ -57,8 +57,10 @@ PulseRN is intended for development builds. Production connections stay disabled
 enabled with `allowInProduction`.
 
 Physical devices can connect through the desktop's opt-in LAN mode by setting `host`, `port`, and
-`authToken`. LAN transport is plain `ws://`; use it only on a trusted development network and never
-commit the copied token.
+`authToken`. When desktop TLS is configured, also set `secure: true` to use `wss://`. The device must
+trust the certificate authority and the certificate must cover the configured host or IP. Without
+TLS, use LAN transport only on a trusted development network. Never commit the copied token or TLS
+private key.
 
 Use `getOrCreatePulseRNDeviceId(AsyncStorage)` and pass the result as `deviceId` when device history
 should remain stable across development app launches. The storage library remains an application

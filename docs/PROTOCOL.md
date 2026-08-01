@@ -10,6 +10,10 @@ Authenticated LAN mode also requires `client-hello.authToken` to match the deskt
 access token. A missing or invalid token receives a rejected `server-hello` and policy close before
 the device session is created. Loopback mode does not require a token.
 
+The JSON messages and negotiation are identical over `ws://` and `wss://`. TLS is a transport-layer
+desktop preference and adds no protocol field. SDK clients select `wss://` with `secure: true`; LAN
+clients still send the access token.
+
 Desktops advertising the `client-health` capability accept bounded `client-health` reports with
 queue depth, categorized drops, sent counts, reconnect attempts, native WebSocket buffer size, and
 approximate clock offset. New SDKs do not send these reports to older desktops that omit the

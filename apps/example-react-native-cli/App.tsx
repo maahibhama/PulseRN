@@ -25,6 +25,10 @@ import { runLineDebuggerDemo, runUnhandledDebuggerDemo } from './debugger-demo';
 // Use adb reverse tcp:9090 tcp:9090 for an attached Android device, or replace
 // this value with your development machine's LAN address for a physical device.
 const host = Platform.OS === 'android' ? '10.0.2.2' : '127.0.0.1';
+// Paste the desktop access token here only for a temporary physical-device development session.
+const authToken: string | undefined = undefined;
+// Set to true when PulseRN desktop TLS is enabled and this device trusts its certificate.
+const secure = false;
 const mmkv = createMMKV({ id: 'pulse-rn-cli-example' });
 
 const navigationTracker = createNavigationTracker({
@@ -80,6 +84,8 @@ function App() {
     const client = ReactNativeDevTool.configure({
       host,
       port: 9090,
+      secure,
+      ...(authToken ? { authToken } : {}),
       appName: 'PulseRN CLI Example',
       appId: 'dev.pulsern.cli-example',
       appVersion: '0.1.0',
