@@ -1,4 +1,8 @@
-import type { DeviceInfo, DevToolEventEnvelope } from '@pulse-rn/protocol';
+import type { ClientHealth, DeviceInfo, DevToolEventEnvelope } from '@pulse-rn/protocol';
+
+export interface ConnectionHealth extends ClientHealth {
+  receivedAt: number;
+}
 
 export interface ConnectedDevice {
   connectionId: string;
@@ -7,6 +11,7 @@ export interface ConnectedDevice {
   appId: string;
   connectedAt: number;
   device: DeviceInfo;
+  health?: ConnectionHealth;
 }
 
 export interface DesktopSnapshot {
@@ -24,6 +29,18 @@ export class SessionManager {
 
   disconnect(connectionId: string): void {
     this.devices.delete(connectionId);
+  }
+
+  updateHealth(connectionId: string, health: ClientHealth, receivedAt = Date.now()): void {
+    const device = this.devices.get(connectionId);
+    if (!device) return;
+    this.devices.set(connectionId, {
+      ...device,
+      health: {
+        ...health,
+        receivedAt,
+      },
+    });
   }
 
   append(events: readonly DevToolEventEnvelope[]): void {

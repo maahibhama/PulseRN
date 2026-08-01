@@ -15,7 +15,7 @@ PulseRN is an open-source desktop debugging foundation for React Native. Its cen
 - Electron desktop app with a sandboxed renderer and narrow preload bridge
 - Loopback-only WebSocket server on port `9090`
 - Versioned JSON protocol with Zod validation and negotiation
-- React Native SDK with development-build protection, reconnection, batching, sequencing, bounded offline buffering, payload limits, and field redaction
+- React Native SDK with development-build protection, reconnection, batching, sequencing, bounded offline buffering, socket backpressure protection, transport health diagnostics, payload limits, and field redaction
 - Multiple connected-device tracking
 - SQLite event persistence
 - Initial unified timeline and event-detail view

@@ -1,6 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { z } from 'zod';
 import {
+  clientHealthSchema,
+  deviceInfoSchema,
   eventCategorySchema,
   eventEnvelopeSchema,
   storageOperationSchema,
@@ -9,13 +11,27 @@ import {
 import type { AppSettings, DebuggerState, PulseRNDesktopApi } from './api.js';
 
 const SNAPSHOT_CHANNEL = 'pulse-rn:snapshot';
+const DEVICES_CHANNEL = 'pulse-rn:devices';
 const EVENTS_CHANNEL = 'pulse-rn:events';
 const STORAGE_CHANNEL = 'pulse-rn:storage';
 const SETTINGS_CHANNEL = 'pulse-rn:settings';
 const DEBUGGER_CHANNEL = 'pulse-rn:debugger';
+const connectedDeviceSchema = z.object({
+  connectionId: z.string(),
+  deviceId: z.string(),
+  sessionId: z.string(),
+  appId: z.string(),
+  connectedAt: z.number().finite().nonnegative(),
+  device: deviceInfoSchema,
+  health: clientHealthSchema
+    .extend({
+      receivedAt: z.number().finite().nonnegative(),
+    })
+    .optional(),
+});
 const snapshotSchema = z.object({
-  devices: z.array(z.unknown()),
-  events: z.array(z.unknown()),
+  devices: z.array(connectedDeviceSchema),
+  events: z.array(eventEnvelopeSchema),
 });
 const eventCursorSchema = z.object({
   timestamp: z.number().finite().nonnegative(),
@@ -157,6 +173,14 @@ const api: PulseRNDesktopApi = {
     };
     ipcRenderer.on(SNAPSHOT_CHANNEL, handler);
     return () => ipcRenderer.removeListener(SNAPSHOT_CHANNEL, handler);
+  },
+  onDevices(listener) {
+    const handler = (_event: Electron.IpcRendererEvent, value: unknown) => {
+      const result = z.array(connectedDeviceSchema).safeParse(value);
+      if (result.success) listener(result.data);
+    };
+    ipcRenderer.on(DEVICES_CHANNEL, handler);
+    return () => ipcRenderer.removeListener(DEVICES_CHANNEL, handler);
   },
   async queryEvents(input = {}) {
     const request = eventQuerySchema.parse(input);

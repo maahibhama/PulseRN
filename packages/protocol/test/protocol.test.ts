@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   PROTOCOL_VERSION,
+  clientHealthSchema,
   consoleLogPayloadSchema,
   errorEventPayloadSchema,
   eventEnvelopeSchema,
@@ -24,6 +25,32 @@ describe('protocol', () => {
   it('rejects malformed event envelopes without throwing', () => {
     expect(eventEnvelopeSchema.safeParse({ type: 'test' }).success).toBe(false);
     expect(parseClientMessage({ kind: 'event-batch', events: [] }).success).toBe(false);
+  });
+
+  it('validates bounded client health diagnostics', () => {
+    expect(
+      clientHealthSchema.safeParse({
+        kind: 'client-health',
+        sentAt: 100,
+        queuedEvents: 4,
+        droppedEvents: 2,
+        oversizedEvents: 1,
+        queueOverflowEvents: 1,
+        sentEvents: 20,
+        sentBatches: 2,
+        reconnectAttempts: 1,
+        socketBufferedBytes: 512,
+        clockOffsetMs: -4,
+        lastEventAt: 99,
+      }).success,
+    ).toBe(true);
+    expect(
+      clientHealthSchema.safeParse({
+        kind: 'client-health',
+        sentAt: 100,
+        queuedEvents: -1,
+      }).success,
+    ).toBe(false);
   });
 
   it('validates console payloads', () => {

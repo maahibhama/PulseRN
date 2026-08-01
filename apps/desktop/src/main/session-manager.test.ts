@@ -35,6 +35,28 @@ describe('SessionManager', () => {
       devices: [{ connectionId: 'connection-1' }],
       events: [{ id: 'event-1' }],
     });
+    manager.updateHealth(
+      'connection-1',
+      {
+        kind: 'client-health',
+        sentAt: 10,
+        queuedEvents: 2,
+        droppedEvents: 1,
+        oversizedEvents: 1,
+        queueOverflowEvents: 0,
+        sentEvents: 20,
+        sentBatches: 2,
+        reconnectAttempts: 0,
+        socketBufferedBytes: 128,
+        clockOffsetMs: -3,
+      },
+      12,
+    );
+    expect(manager.snapshot().devices[0]?.health).toMatchObject({
+      queuedEvents: 2,
+      droppedEvents: 1,
+      receivedAt: 12,
+    });
     manager.disconnect('connection-1');
     expect(manager.snapshot().devices).toEqual([]);
   });

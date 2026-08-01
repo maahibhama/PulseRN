@@ -9,6 +9,7 @@ import { DevToolWebSocketServer } from './websocket-server.js';
 import { DebuggerManager } from './debugger-manager.js';
 
 const SNAPSHOT_CHANNEL = 'pulse-rn:snapshot';
+const DEVICES_CHANNEL = 'pulse-rn:devices';
 const EVENTS_CHANNEL = 'pulse-rn:events';
 const STORAGE_CHANNEL = 'pulse-rn:storage';
 const SETTINGS_CHANNEL = 'pulse-rn:settings';
@@ -259,6 +260,12 @@ app.whenReady().then(async () => {
       database?.insertMany(events);
       sessions.append(events);
       publish();
+    },
+    onHealth(connectionId, health) {
+      sessions.updateHealth(connectionId, health);
+      if (window && !window.isDestroyed()) {
+        window.webContents.send(DEVICES_CHANNEL, sessions.snapshot().devices);
+      }
     },
     onInvalidMessage(error) {
       console.warn('[PulseRN] Rejected invalid client message:', error);

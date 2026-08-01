@@ -185,6 +185,21 @@ export interface EventBatch {
   events: DevToolEventEnvelope[];
 }
 
+export interface ClientHealth {
+  kind: 'client-health';
+  sentAt: number;
+  queuedEvents: number;
+  droppedEvents: number;
+  oversizedEvents: number;
+  queueOverflowEvents: number;
+  sentEvents: number;
+  sentBatches: number;
+  reconnectAttempts: number;
+  socketBufferedBytes: number;
+  clockOffsetMs: number;
+  lastEventAt?: number;
+}
+
 export interface StorageCommand {
   kind: 'storage-command';
   requestId: string;

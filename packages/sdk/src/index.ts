@@ -69,6 +69,7 @@ export type {
 } from './navigation.js';
 export type {
   CaptureErrorOptions,
+  ClientDiagnostics,
   DevToolConfig,
   TrackEventInput,
   WebSocketFactory,

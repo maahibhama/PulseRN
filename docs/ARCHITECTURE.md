@@ -6,6 +6,11 @@ PulseRN is a pnpm/Turborepo monorepo. The wire contract is independent of Electr
 
 Electron main is the trusted desktop boundary. It owns WebSocket connections, session state, SQLite, and operating-system integration. Preload exposes only typed snapshot reads/subscriptions. The renderer has `contextIsolation`, `sandbox`, and disabled Node integration.
 
+Transport health is an optional protocol capability. Compatible SDKs report bounded queue, drop,
+send, reconnect, clock-offset, and native WebSocket-buffer metrics. Health updates cross a dedicated
+validated IPC subscription so they do not retransmit the in-memory event projection. The SDK stops
+dequeueing batches while the native socket buffer exceeds its configured threshold.
+
 The JavaScript debugger is a separate, Electron-main-owned connection to a single Hermes runtime
 through Metro's loopback Chrome DevTools Protocol proxy. Electron validates target discovery and CDP
 messages, resolves source maps, persists debugger preferences, and exposes only narrow debugger

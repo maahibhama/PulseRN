@@ -256,8 +256,25 @@ export const serverHelloSchema = z.object({
   connectionId: identifier.optional(),
   reason: z.string().max(1024).optional(),
   serverTime: z.number().finite().nonnegative(),
+  capabilities: z.array(identifier).max(100).optional(),
 });
 export type ServerHello = z.infer<typeof serverHelloSchema>;
+
+export const clientHealthSchema = z.object({
+  kind: z.literal('client-health'),
+  sentAt: z.number().finite().nonnegative(),
+  queuedEvents: z.number().int().nonnegative(),
+  droppedEvents: z.number().int().nonnegative(),
+  oversizedEvents: z.number().int().nonnegative(),
+  queueOverflowEvents: z.number().int().nonnegative(),
+  sentEvents: z.number().int().nonnegative(),
+  sentBatches: z.number().int().nonnegative(),
+  reconnectAttempts: z.number().int().nonnegative(),
+  socketBufferedBytes: z.number().finite().nonnegative(),
+  clockOffsetMs: z.number().finite(),
+  lastEventAt: z.number().finite().nonnegative().optional(),
+});
+export type ClientHealth = z.infer<typeof clientHealthSchema>;
 
 export const storageCommandSchema = z.object({
   kind: z.literal('storage-command'),
@@ -299,6 +316,7 @@ export const clientMessageSchema = z.discriminatedUnion('kind', [
   clientHelloSchema,
   eventBatchSchema,
   storageResultSchema,
+  clientHealthSchema,
 ]);
 
 export type ClientMessage = z.infer<typeof clientMessageSchema>;

@@ -1,6 +1,7 @@
 import { PROTOCOL_VERSION, parseServerMessage } from '@pulse-rn/protocol';
 import { createId, redact } from '@pulse-rn/shared';
 import type {
+  ClientHealth,
   ClientHello,
   DevToolEventEnvelope,
   EventBatch,
@@ -28,6 +29,7 @@ import { PerformanceMonitor } from './performance-monitor';
 import type { StorageProvider } from './storage-provider';
 import type {
   CaptureErrorOptions,
+  ClientDiagnostics,
   DevToolConfig,
   TrackEventInput,
   WebSocketFactory,
@@ -37,6 +39,17 @@ import type {
 const SDK_VERSION = '0.2.1';
 const CONNECTING = 0;
 const OPEN = 1;
+
+function boundedNumber(
+  value: number | undefined,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+) {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.min(maximum, Math.max(minimum, value))
+    : fallback;
+}
 
 function defaultWebSocketFactory(url: string): WebSocketLike {
   if (typeof globalThis.WebSocket !== 'function') {
@@ -59,6 +72,8 @@ export class DevToolClient {
       | 'reconnect'
       | 'reconnectBaseDelayMs'
       | 'reconnectMaxDelayMs'
+      | 'diagnosticsIntervalMs'
+      | 'maxSocketBufferBytes'
     >
   > &
     DevToolConfig;
@@ -69,9 +84,18 @@ export class DevToolClient {
   private reconnectAttempt = 0;
   private flushTimer?: ReturnType<typeof setTimeout>;
   private reconnectTimer?: ReturnType<typeof setTimeout>;
+  private diagnosticsTimer?: ReturnType<typeof setInterval>;
   private negotiated = false;
+  private supportsClientHealth = false;
   private manuallyClosed = false;
   private droppedEvents = 0;
+  private oversizedEvents = 0;
+  private queueOverflowEvents = 0;
+  private sentEvents = 0;
+  private sentBatches = 0;
+  private reconnectAttempts = 0;
+  private clockOffsetMs = 0;
+  private lastEventAt?: number;
   private restoreConsole?: () => void;
   private restoreErrors?: () => void;
   private networkRestores: (() => void)[] = [];
@@ -96,6 +120,13 @@ export class DevToolClient {
       reconnectBaseDelayMs: 500,
       reconnectMaxDelayMs: 30_000,
       ...config,
+      diagnosticsIntervalMs: boundedNumber(config.diagnosticsIntervalMs, 2_000, 250, 60_000),
+      maxSocketBufferBytes: boundedNumber(
+        config.maxSocketBufferBytes,
+        1024 * 1024,
+        16 * 1024,
+        64 * 1024 * 1024,
+      ),
     };
     this.factory = factory;
     this.deviceId = config.deviceId ?? createId('device');
@@ -183,6 +214,9 @@ export class DevToolClient {
     this.negotiated = false;
     if (this.flushTimer) clearTimeout(this.flushTimer);
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    if (this.diagnosticsTimer) clearInterval(this.diagnosticsTimer);
+    this.diagnosticsTimer = undefined;
+    this.supportsClientHealth = false;
     this.restoreConsole?.();
     this.restoreConsole = undefined;
     this.restoreErrors?.();
@@ -211,6 +245,8 @@ export class DevToolClient {
       new TextEncoder().encode(JSON.stringify(payload)).byteLength > this.config.maxPayloadBytes
     ) {
       this.droppedEvents += 1;
+      this.oversizedEvents += 1;
+      this.reportDiagnostics();
       return;
     }
     if (
@@ -258,8 +294,10 @@ export class DevToolClient {
     if (this.queue.length >= this.config.maxQueueSize) {
       this.queue.shift();
       this.droppedEvents += 1;
+      this.queueOverflowEvents += 1;
     }
     this.queue.push(event);
+    this.lastEventAt = event.timestamp;
     this.rememberEvent(event);
     if (
       input.category === 'network' &&
@@ -300,11 +338,19 @@ export class DevToolClient {
     );
   }
 
-  getStats(): { queuedEvents: number; droppedEvents: number; connected: boolean } {
+  getStats(): ClientDiagnostics {
     return {
       queuedEvents: this.queue.length,
       droppedEvents: this.droppedEvents,
       connected: this.negotiated,
+      oversizedEvents: this.oversizedEvents,
+      queueOverflowEvents: this.queueOverflowEvents,
+      sentEvents: this.sentEvents,
+      sentBatches: this.sentBatches,
+      reconnectAttempts: this.reconnectAttempts,
+      socketBufferedBytes: this.socket?.bufferedAmount ?? 0,
+      clockOffsetMs: this.clockOffsetMs,
+      ...(this.lastEventAt === undefined ? {} : { lastEventAt: this.lastEventAt }),
     };
   }
 
@@ -406,7 +452,10 @@ export class DevToolClient {
         return;
       }
       this.negotiated = true;
+      this.supportsClientHealth = result.data.capabilities?.includes('client-health') ?? false;
+      this.clockOffsetMs = result.data.serverTime - Date.now();
       this.reconnectAttempt = 0;
+      this.startDiagnostics();
       this.flush();
     } catch {
       // The SDK ignores malformed server input and never forwards it to the app.
@@ -510,11 +559,24 @@ export class DevToolClient {
     if (this.flushTimer) clearTimeout(this.flushTimer);
     this.flushTimer = undefined;
     if (!this.negotiated || this.socket?.readyState !== OPEN || this.queue.length === 0) return;
+    if ((this.socket.bufferedAmount ?? 0) > this.config.maxSocketBufferBytes) {
+      this.reportDiagnostics();
+      this.scheduleFlush();
+      return;
+    }
     const message: EventBatch = {
       kind: 'event-batch',
-      events: this.queue.splice(0, this.config.batchSize),
+      events: this.queue.slice(0, this.config.batchSize),
     };
-    this.socket.send(JSON.stringify(message));
+    try {
+      this.socket.send(JSON.stringify(message));
+      this.queue.splice(0, message.events.length);
+      this.sentEvents += message.events.length;
+      this.sentBatches += 1;
+    } catch {
+      this.handleClose();
+      return;
+    }
     if (this.queue.length > 0) this.scheduleFlush();
   };
 
@@ -526,13 +588,51 @@ export class DevToolClient {
 
   private handleClose(): void {
     this.negotiated = false;
+    this.supportsClientHealth = false;
+    if (this.diagnosticsTimer) clearInterval(this.diagnosticsTimer);
+    this.diagnosticsTimer = undefined;
     this.socket = undefined;
     if (this.manuallyClosed || !this.config.reconnect) return;
+    this.reconnectAttempts += 1;
     const delay = Math.min(
       this.config.reconnectBaseDelayMs * 2 ** this.reconnectAttempt++,
       this.config.reconnectMaxDelayMs,
     );
     this.reconnectTimer = setTimeout(() => this.connect(), delay);
+  }
+
+  private startDiagnostics(): void {
+    if (this.diagnosticsTimer) clearInterval(this.diagnosticsTimer);
+    this.reportDiagnostics();
+    this.diagnosticsTimer = setInterval(
+      () => this.reportDiagnostics(),
+      this.config.diagnosticsIntervalMs,
+    );
+  }
+
+  private reportDiagnostics(): void {
+    const diagnostics = this.getStats();
+    this.config.onDiagnostics?.(diagnostics);
+    if (!this.negotiated || !this.supportsClientHealth || this.socket?.readyState !== OPEN) return;
+    const message: ClientHealth = {
+      kind: 'client-health',
+      sentAt: Date.now(),
+      queuedEvents: diagnostics.queuedEvents,
+      droppedEvents: diagnostics.droppedEvents,
+      oversizedEvents: diagnostics.oversizedEvents,
+      queueOverflowEvents: diagnostics.queueOverflowEvents,
+      sentEvents: diagnostics.sentEvents,
+      sentBatches: diagnostics.sentBatches,
+      reconnectAttempts: diagnostics.reconnectAttempts,
+      socketBufferedBytes: diagnostics.socketBufferedBytes,
+      clockOffsetMs: diagnostics.clockOffsetMs,
+      ...(diagnostics.lastEventAt === undefined ? {} : { lastEventAt: diagnostics.lastEventAt }),
+    };
+    try {
+      this.socket.send(JSON.stringify(message));
+    } catch {
+      this.handleClose();
+    }
   }
 }
 

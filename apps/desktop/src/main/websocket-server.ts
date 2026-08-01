@@ -3,6 +3,7 @@ import {
   decodeJson,
   negotiateProtocolVersion,
   parseClientMessage,
+  type ClientHealth,
   type DevToolEventEnvelope,
   type StorageCommand,
   type StorageOperation,
@@ -15,12 +16,14 @@ interface Callbacks {
   onConnected(device: ConnectedDevice): void;
   onDisconnected(connectionId: string): void;
   onEvents(events: DevToolEventEnvelope[]): void;
+  onHealth(connectionId: string, health: ClientHealth): void;
   onInvalidMessage(error: string): void;
 }
 
 export class DevToolWebSocketServer {
   private server?: WebSocketServer;
   private readonly sockets = new Map<string, WebSocket>();
+  private readonly lastHealthAt = new Map<string, number>();
   private readonly pendingStorage = new Map<
     string,
     {
@@ -138,11 +141,20 @@ export class DevToolWebSocketServer {
               protocolVersion,
               connectionId,
               serverTime: Date.now(),
+              capabilities: ['client-health'],
             }),
           );
           return;
         }
         if (message.kind === 'event-batch') this.callbacks.onEvents(message.events);
+        if (message.kind === 'client-health') {
+          const now = Date.now();
+          const lastHealthAt = this.lastHealthAt.get(connectionId) ?? 0;
+          if (now - lastHealthAt >= 250) {
+            this.lastHealthAt.set(connectionId, now);
+            this.callbacks.onHealth(connectionId, message);
+          }
+        }
         if (message.kind === 'storage-result') {
           const pending = this.pendingStorage.get(message.requestId);
           if (pending?.connectionId === connectionId) {
@@ -158,6 +170,7 @@ export class DevToolWebSocketServer {
     socket.once('close', () => {
       clearTimeout(handshakeTimeout);
       this.sockets.delete(connectionId);
+      this.lastHealthAt.delete(connectionId);
       for (const [requestId, pending] of this.pendingStorage) {
         if (pending.connectionId !== connectionId) continue;
         clearTimeout(pending.timer);

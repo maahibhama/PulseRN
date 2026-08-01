@@ -1,4 +1,4 @@
-import type { DesktopSnapshot } from '../main/session-manager.js';
+import type { ConnectedDevice, DesktopSnapshot } from '../main/session-manager.js';
 import type {
   DevToolEventCategory,
   DevToolEventEnvelope,
@@ -141,6 +141,7 @@ export interface AddBreakpointInput extends DebuggerLocation {
 export interface PulseRNDesktopApi {
   getSnapshot(): Promise<DesktopSnapshot>;
   onSnapshot(listener: (snapshot: DesktopSnapshot) => void): () => void;
+  onDevices(listener: (devices: ConnectedDevice[]) => void): () => void;
   queryEvents(input?: EventQuery): Promise<EventPage>;
   getEvent(id: string): Promise<EventPage['events'][number] | undefined>;
   listSessions(): Promise<StoredSession[]>;

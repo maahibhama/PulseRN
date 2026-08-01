@@ -247,8 +247,16 @@ function UpcomingPanel({ view }: { view: ViewName }) {
 }
 
 export function App() {
-  const { devices, events, selectedEventId, settings, setSnapshot, setSettings, selectEvent } =
-    useDesktopStore();
+  const {
+    devices,
+    events,
+    selectedEventId,
+    settings,
+    setDevices,
+    setSnapshot,
+    setSettings,
+    selectEvent,
+  } = useDesktopStore();
   const [activeView, setActiveView] = useState<ViewName>('Timeline');
   const [selectedPagedEvent, setSelectedPagedEvent] = useState<DevToolEventEnvelope>();
   const [systemTheme, setSystemTheme] = useState<'dark' | 'light'>(() =>
@@ -268,6 +276,11 @@ export function App() {
 
   useEffect(() => {
     if (!desktopApi) return;
+    return desktopApi.onDevices(setDevices);
+  }, [desktopApi, setDevices]);
+
+  useEffect(() => {
+    if (!desktopApi) return;
     void desktopApi.getSettings().then(setSettings);
     return desktopApi.onSettings(setSettings);
   }, [desktopApi, setSettings]);
@@ -280,6 +293,21 @@ export function App() {
   }, []);
 
   const resolvedTheme = settings.theme === 'system' ? systemTheme : settings.theme;
+  const queuedEvents = devices.reduce(
+    (total, device) => total + (device.health?.queuedEvents ?? 0),
+    0,
+  );
+  const droppedEvents = devices.reduce(
+    (total, device) => total + (device.health?.droppedEvents ?? 0),
+    0,
+  );
+  const healthReports = devices.filter((device) => device.health !== undefined).length;
+  const connectionTitle =
+    devices.length === 0
+      ? 'Waiting for a PulseRN SDK connection.'
+      : healthReports === 0
+        ? 'Connected. Upgrade the SDK to receive queue and drop diagnostics.'
+        : `${queuedEvents} queued · ${droppedEvents} dropped across ${healthReports} reporting device${healthReports === 1 ? '' : 's'}.`;
   useEffect(() => {
     document.documentElement.dataset['theme'] = resolvedTheme;
     document.documentElement.dataset['density'] = settings.density;
@@ -304,13 +332,21 @@ export function App() {
           <img alt="" src={resolvedTheme === 'light' ? lightAppIcon : darkAppIcon} />
           <span>PulseRN</span>
         </div>
-        <div className="device-pill">
+        <div
+          className={`device-pill ${droppedEvents > 0 ? 'degraded' : ''}`}
+          title={connectionTitle}
+        >
           <span className={devices.length ? 'status online' : 'status'} />
           {devices.length === 0
             ? 'Waiting for device'
             : devices.length === 1
               ? deviceLabel(devices[0]!)
               : `${devices.length} devices connected`}
+          {healthReports > 0 && (
+            <small>
+              {queuedEvents} queued · {droppedEvents} dropped
+            </small>
+          )}
         </div>
         <div className="phase-pill">Phase 9 · JavaScript Debugger</div>
       </header>

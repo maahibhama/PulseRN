@@ -83,6 +83,18 @@ button {
 .device-pill {
   min-width: 205px;
 }
+.device-pill.degraded {
+  border-color: #7d5630;
+}
+.device-pill small {
+  display: block;
+  margin: 3px 0 0 15px;
+  color: #747d90;
+  font-size: 9px;
+}
+.device-pill.degraded small {
+  color: #e0a15c;
+}
 .phase-pill {
   margin-left: auto;
   color: #9d8bea;
