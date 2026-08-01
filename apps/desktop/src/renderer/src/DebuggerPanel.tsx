@@ -24,6 +24,13 @@ const initialState: DebuggerState = {
   callFrames: [],
   watches: [],
   pauseOnExceptions: 'none',
+  blackboxInternal: true,
+  capabilities: {
+    asyncStacks: false,
+    pauseOnExceptions: false,
+    blackboxing: false,
+    logpoints: false,
+  },
 };
 
 function valueText(value: { description: string; type: string }): string {
@@ -38,15 +45,17 @@ export function DebuggerPanel({ theme }: { theme: 'dark' | 'light' }) {
   const [sourceSearch, setSourceSearch] = useState('');
   const [showInternal, setShowInternal] = useState(false);
   const [scopeProperties, setScopeProperties] = useState<Record<string, DebuggerProperty[]>>({});
+  const [variableSearch, setVariableSearch] = useState('');
   const [watchExpression, setWatchExpression] = useState('');
   const [evaluation, setEvaluation] = useState('');
   const [evaluationResult, setEvaluationResult] = useState('');
   const [busy, setBusy] = useState(false);
   const editorRef = useRef<MonacoTypes.editor.IStandaloneCodeEditor | undefined>(undefined);
   const monacoRef = useRef<Monaco | undefined>(undefined);
-  const toggleBreakpointRef = useRef<(line: number, conditional: boolean) => Promise<void>>(
-    async () => undefined,
-  );
+  const sourceSearchRef = useRef<HTMLInputElement | null>(null);
+  const toggleBreakpointRef = useRef<
+    (line: number, mode: 'plain' | 'condition' | 'hit' | 'log') => Promise<void>
+  >(async () => undefined);
 
   useEffect(() => {
     void api.getDebuggerState().then(setState);
@@ -78,6 +87,14 @@ export function DebuggerPanel({ theme }: { theme: 'dark' | 'light' }) {
     [showInternal, sourceSearch, state.sources],
   );
   const selectedSource = state.sources.find((source) => source.id === sourceId);
+  const sourceGroups = useMemo(() => {
+    const groups = new Map<string, typeof sources>();
+    for (const source of sources) {
+      const group = source.group ?? 'Application';
+      groups.set(group, [...(groups.get(group) ?? []), source]);
+    }
+    return [...groups.entries()];
+  }, [sources]);
 
   useEffect(() => {
     if (!sourceId) {
@@ -126,12 +143,21 @@ export function DebuggerPanel({ theme }: { theme: 'dark' | 'light' }) {
       }),
     );
     if (frame?.location.sourceId === sourceId) {
+      const firstScope = frame.scopes.find((scope) => scope.objectId);
+      const inlineValues = firstScope?.objectId
+        ? (scopeProperties[firstScope.objectId] ?? [])
+            .filter((property) => !variableSearch || property.name.includes(variableSearch))
+            .slice(0, 4)
+            .map((property) => `${property.name} = ${valueText(property.value)}`)
+            .join(' · ')
+        : '';
       decorations.push({
         range: new monaco.Range(frame.location.line, 1, frame.location.line, 1),
         options: {
           isWholeLine: true,
           className: 'debugger-current-line',
           glyphMarginClassName: 'debugger-current-glyph',
+          ...(inlineValues ? { after: { content: `  // ${inlineValues}` } } : {}),
         },
       });
       editor.revealLineInCenter(frame.location.line);
@@ -139,10 +165,17 @@ export function DebuggerPanel({ theme }: { theme: 'dark' | 'light' }) {
     }
     const collection = editor.createDecorationsCollection(decorations);
     return () => collection.clear();
-  }, [sourceId, state.breakpoints, state.callFrames, state.selectedCallFrameId]);
+  }, [
+    scopeProperties,
+    sourceId,
+    state.breakpoints,
+    state.callFrames,
+    state.selectedCallFrameId,
+    variableSearch,
+  ]);
 
   const toggleBreakpoint = useCallback(
-    async (line: number, conditional: boolean) => {
+    async (line: number, mode: 'plain' | 'condition' | 'hit' | 'log') => {
       if (!sourceId) return;
       const existing = state.breakpoints.find(
         (entry) => entry.sourceId === sourceId && entry.line === line,
@@ -151,12 +184,28 @@ export function DebuggerPanel({ theme }: { theme: 'dark' | 'light' }) {
         await run(() => api.removeDebuggerBreakpoint(existing.id));
         return;
       }
-      const condition = conditional
-        ? window.prompt('Pause only when this expression is true:')?.trim()
-        : undefined;
-      if (conditional && !condition) return;
+      const condition =
+        mode === 'condition'
+          ? window.prompt('Pause only when this expression is true:')?.trim()
+          : undefined;
+      const hitCondition =
+        mode === 'hit'
+          ? Number(window.prompt('Pause on which hit count?', '1')?.trim())
+          : undefined;
+      const logMessage =
+        mode === 'log' ? window.prompt('Log this message without pausing:')?.trim() : undefined;
+      if (mode === 'condition' && !condition) return;
+      if (mode === 'hit' && (!Number.isInteger(hitCondition) || (hitCondition ?? 0) < 1)) return;
+      if (mode === 'log' && !logMessage) return;
       await run(() =>
-        api.addDebuggerBreakpoint({ sourceId, line, column: 1, condition: condition || undefined }),
+        api.addDebuggerBreakpoint({
+          sourceId,
+          line,
+          column: 1,
+          condition: condition || undefined,
+          hitCondition,
+          logMessage,
+        }),
       );
     },
     [api, run, sourceId, state.breakpoints],
@@ -171,7 +220,17 @@ export function DebuggerPanel({ theme }: { theme: 'dark' | 'light' }) {
         event.target.type === monaco.editor.MouseTargetType.GUTTER_LINE_NUMBERS
       ) {
         const line = event.target.position?.lineNumber;
-        if (line) void toggleBreakpointRef.current(line, event.event.browserEvent.shiftKey);
+        if (line) {
+          const browserEvent = event.event.browserEvent;
+          const mode = browserEvent.altKey
+            ? 'log'
+            : browserEvent.metaKey || browserEvent.ctrlKey
+              ? 'hit'
+              : browserEvent.shiftKey
+                ? 'condition'
+                : 'plain';
+          void toggleBreakpointRef.current(line, mode);
+        }
       }
     });
   }, []);
@@ -191,6 +250,9 @@ export function DebuggerPanel({ theme }: { theme: 'dark' | 'light' }) {
       } else if (event.key === 'F11') {
         event.preventDefault();
         void run(() => api.debuggerCommand('stepInto'));
+      } else if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'p') {
+        event.preventDefault();
+        sourceSearchRef.current?.focus();
       }
     };
     window.addEventListener('keydown', keydown);
@@ -206,6 +268,13 @@ export function DebuggerPanel({ theme }: { theme: 'dark' | 'light' }) {
       setScopeProperties((current) => ({ ...current, [objectId]: [] }));
     }
   }
+
+  useEffect(() => {
+    const frame = state.callFrames.find((entry) => entry.id === state.selectedCallFrameId);
+    for (const scope of frame?.scopes.slice(0, 2) ?? []) {
+      if (scope.objectId) void loadScope(scope.objectId);
+    }
+  }, [state.callFrames, state.selectedCallFrameId]);
 
   const connected = state.status === 'connected' || state.status === 'paused';
   const paused = state.status === 'paused';
@@ -268,9 +337,20 @@ export function DebuggerPanel({ theme }: { theme: 'dark' | 'light' }) {
           </div>
         </header>
         {state.error && <div className="debugger-banner">{state.error}</div>}
+        {connected && (
+          <div className="debugger-capabilities">
+            <span>{state.capabilities.asyncStacks ? 'Async stacks' : 'No async stacks'}</span>
+            <span>
+              {state.capabilities.pauseOnExceptions ? 'Exception pause' : 'No exception pause'}
+            </span>
+            <span>{state.capabilities.blackboxing ? 'Blackboxing' : 'No blackboxing'}</span>
+            <span>{state.capabilities.logpoints ? 'Logpoints' : 'No logpoints'}</span>
+          </div>
+        )}
         <div className="debugger-workspace">
           <aside className="source-browser">
             <input
+              ref={sourceSearchRef}
               aria-label="Search sources"
               placeholder="Search files…"
               value={sourceSearch}
@@ -284,17 +364,33 @@ export function DebuggerPanel({ theme }: { theme: 'dark' | 'light' }) {
               />
               Show internal sources
             </label>
+            <label>
+              <input
+                checked={state.blackboxInternal}
+                disabled={connected && !state.capabilities.blackboxing}
+                type="checkbox"
+                onChange={(event) =>
+                  void run(() => api.setDebuggerBlackboxInternal(event.target.checked))
+                }
+              />
+              Blackbox dependencies
+            </label>
             <div>
-              {sources.map((source) => (
-                <button
-                  className={source.id === sourceId ? 'active' : ''}
-                  key={source.id}
-                  title={source.url}
-                  onClick={() => setSourceId(source.id)}
-                >
-                  <span>{source.name}</span>
-                  <small>{source.original ? 'TS' : 'JS'}</small>
-                </button>
+              {sourceGroups.map(([group, groupedSources]) => (
+                <details key={group} open>
+                  <summary>{group}</summary>
+                  {groupedSources.map((source) => (
+                    <button
+                      className={source.id === sourceId ? 'active' : ''}
+                      key={source.id}
+                      title={source.url}
+                      onClick={() => setSourceId(source.id)}
+                    >
+                      <span>{source.name}</span>
+                      <small>{source.original ? 'TS' : 'JS'}</small>
+                    </button>
+                  ))}
+                </details>
               ))}
             </div>
           </aside>
@@ -357,6 +453,14 @@ export function DebuggerPanel({ theme }: { theme: 'dark' | 'light' }) {
           <header>
             <strong>Scopes</strong>
           </header>
+          <input
+            aria-label="Search variables"
+            className="debugger-variable-search"
+            onChange={(event) => setVariableSearch(event.target.value)}
+            placeholder="Search variables…"
+            type="search"
+            value={variableSearch}
+          />
           <div className="scope-list">
             {state.callFrames
               .find((frame) => frame.id === state.selectedCallFrameId)
@@ -369,12 +473,21 @@ export function DebuggerPanel({ theme }: { theme: 'dark' | 'light' }) {
                 >
                   <summary>{scope.name || scope.type}</summary>
                   {scope.objectId &&
-                    (scopeProperties[scope.objectId] ?? []).map((property) => (
-                      <div className="debugger-property" key={property.name}>
-                        <span>{property.name}</span>
-                        <code title={valueText(property.value)}>{valueText(property.value)}</code>
-                      </div>
-                    ))}
+                    (scopeProperties[scope.objectId] ?? [])
+                      .filter(
+                        (property) =>
+                          !variableSearch ||
+                          property.name.toLowerCase().includes(variableSearch.toLowerCase()) ||
+                          valueText(property.value)
+                            .toLowerCase()
+                            .includes(variableSearch.toLowerCase()),
+                      )
+                      .map((property) => (
+                        <div className="debugger-property" key={property.name}>
+                          <span>{property.name}</span>
+                          <code title={valueText(property.value)}>{valueText(property.value)}</code>
+                        </div>
+                      ))}
                 </details>
               ))}
           </div>
@@ -440,6 +553,7 @@ export function DebuggerPanel({ theme }: { theme: 'dark' | 'light' }) {
           <label>
             Pause on exceptions
             <select
+              disabled={connected && !state.capabilities.pauseOnExceptions}
               value={state.pauseOnExceptions}
               onChange={(event) =>
                 void run(() =>
@@ -475,12 +589,19 @@ export function DebuggerPanel({ theme }: { theme: 'dark' | 'light' }) {
                   {state.sources.find((source) => source.id === breakpoint.sourceId)?.name ??
                     breakpoint.sourceId}
                   :{breakpoint.line}
+                  {breakpoint.condition ? ' · condition' : ''}
+                  {breakpoint.hitCondition ? ` · hit ${breakpoint.hitCondition}` : ''}
+                  {breakpoint.logMessage ? ' · logpoint' : ''}
                 </button>
-                <span title={breakpoint.error}>{breakpoint.verified ? '●' : '○'}</span>
+                <span title={breakpoint.error}>
+                  {breakpoint.verified ? '●' : '○'} {breakpoint.hitCount ?? 0}
+                </span>
               </div>
             ))}
           </div>
-          <small className="debugger-hint">Shift-click a line number for a condition.</small>
+          <small className="debugger-hint">
+            Shift-click: condition · Cmd/Ctrl-click: hit count · Option/Alt-click: logpoint
+          </small>
         </section>
       </aside>
     </>

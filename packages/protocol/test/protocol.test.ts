@@ -267,6 +267,26 @@ describe('protocol', () => {
       }).success,
     ).toBe(true);
     expect(
+      storageCommandSchema.safeParse({
+        kind: 'storage-command',
+        requestId: 'storage-restore',
+        providerId: 'async-storage',
+        operation: 'restore',
+        key: 'session',
+        backupId: 'storage-backup-1',
+      }).success,
+    ).toBe(true);
+    expect(
+      storageResultSchema.safeParse({
+        kind: 'storage-result',
+        requestId: 'storage-providers',
+        providerId: 'all',
+        operation: 'providers',
+        success: true,
+        providers: [{ id: 'legacy', name: 'Legacy provider' }],
+      }).success,
+    ).toBe(true);
+    expect(
       storageEventPayloadSchema.safeParse({
         requestId: 'storage-1',
         providerId: 'async-storage',
@@ -283,11 +303,28 @@ describe('protocol', () => {
     expect(
       errorEventPayloadSchema.safeParse({
         source: 'react_boundary',
+        classification: 'application',
         name: 'TypeError',
         message: 'Cannot read property',
+        fingerprint: '0123456789abcdef',
         stack: 'TypeError: Cannot read property\n    at Checkout',
         componentStack: '\n    at CheckoutScreen',
         screen: 'Checkout',
+        appVersion: '2.0.0',
+        frames: [
+          {
+            functionName: 'Checkout',
+            file: 'Checkout.tsx',
+            line: 42,
+            column: 7,
+            application: true,
+            symbolicated: true,
+          },
+        ],
+        correlations: {
+          route: 'Checkout',
+          reduxEventId: 'event-1',
+        },
         fatal: false,
         context: [
           {

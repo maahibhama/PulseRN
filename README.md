@@ -8,10 +8,11 @@
 
 PulseRN is an open-source desktop debugging foundation for React Native. Its central idea is a unified, chronological timeline that will correlate app interactions, navigation, Redux, network, rendering, performance, and errors.
 
-> Status: Phase 17 complete. PulseRN now adds bounded time-series performance views, selectable
-> ranges, configurable thresholds, matching-session baselines, sampling interval/loss visibility,
-> explicit JS/runtime provenance, and honest capability gaps. Development proceeds strictly through
-> the production-readiness roadmap.
+> Status: Phases 1–22 are accepted and Phase 23 implementation is complete. PulseRN includes the
+> scalable local debugger, hardened SDK and inspectors, secure pairing, native Hermes debugging,
+> validated preferences, cross-platform packaging, credential-gated signing and updates, checksums,
+> SPDX SBOMs, GitHub provenance, and the public project support/release surface. Phase 23 acceptance
+> requires one tag-driven native release-candidate workflow to pass.
 
 ## What works today
 
@@ -41,9 +42,15 @@ PulseRN is an open-source desktop debugging foundation for React Native. Its cen
   thresholds, matching-session baselines, sampling-loss visibility, approximate JS FPS,
   event-loop lag/stalls, startup/screen/custom timing, optional available heap metrics, explicit
   capability gaps, and correlated slow-operation views
-- AsyncStorage and MMKV inspection with provider discovery, key search/read/refresh, JSON redaction, type-preserving MMKV edits, and explicitly confirmed update/delete operations
-- Error inspection for uncaught JavaScript failures, unhandled rejections, React error boundaries, network failures, and SDK errors with stack traces and 20 preceding timeline events
-- Native Hermes JavaScript debugger with original TypeScript sources, breakpoints, line stepping, call stacks, scopes, watches, evaluation, and exception pausing
+- AsyncStorage and MMKV inspection with provider capabilities, paginated keys, lazy values, typed
+  validation, JSON redaction, read-only snapshots, confirmed mutations, opaque single-session undo,
+  local audits, and explicitly selected safe export
+- Grouped error inspection with stable fingerprints, occurrence/version/regression state,
+  parsed application and React component frames, route/request/Redux/console/performance context,
+  ownership classification, and re-redacted GitHub Markdown/JSON issue reports
+- Native Hermes JavaScript debugger with original TypeScript sources, target reload recovery,
+  optional-CDP negotiation, hierarchy/quick-open/blackboxing, inline paused values, lazy searchable
+  scopes, watches/evaluation, and conditional, hit-count, log, and verified breakpoints
 - Persistent desktop settings for system/light/dark themes, interface density, timeline ordering, launch at login, and macOS background behavior
 - Compact, rounded light and dark application icons that follow the selected theme, including live macOS system-theme changes
 - Expo development-build and bare React Native Community CLI examples covering Console, Network, Redux, Navigation, Performance, AsyncStorage, MMKV, and Errors
@@ -64,6 +71,10 @@ PulseRN is an open-source desktop debugging foundation for React Native. Its cen
     width="420"
   />
 </p>
+
+### Settings and first-run diagnostics
+
+![PulseRN settings center with validated preferences and onboarding checks](docs/assets/pulsern-settings.png)
 
 ## Requirements
 
@@ -225,12 +236,15 @@ published through [GitHub Releases](https://github.com/maahibhama/PulseRN/releas
 
 Open **Settings** in the Electron sidebar to configure:
 
-- System, dark, or light appearance
+- System, dark, or light appearance and system/reduced/full motion
 - Comfortable or compact interface density
 - Newest-first or oldest-first timeline ordering
 - Local Metro discovery port for the Hermes debugger
-- Debugger server port, authenticated LAN access, access-token rotation, and TLS certificate
-  configuration
+- Debugger server port, authenticated LAN access, bounded pairing lifetime/retries, and TLS
+  certificate configuration
+- Console/network capture budgets, diagnostic intervals, and sensitive-field redaction
+- Persisted performance alert thresholds
+- Stable or beta update channel
 - Signed-build update checks, download progress, and confirmed restart/install
 - Event retention period, maximum stored events, maintenance, and history deletion
 - Launch at login on packaged macOS builds
@@ -266,4 +280,7 @@ controls, keyboard shortcuts, examples, and current limitations.
 
 ## Contributing
 
-Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md), [DEVELOPMENT.md](docs/DEVELOPMENT.md), and [SECURITY.md](docs/SECURITY.md) before opening a change. PulseRN is licensed under the [MIT License](LICENSE).
+Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md),
+[DEVELOPMENT.md](docs/DEVELOPMENT.md), [COMPATIBILITY.md](docs/COMPATIBILITY.md),
+[SUPPORT.md](SUPPORT.md), and [SECURITY.md](docs/SECURITY.md) before opening a change. PulseRN is
+licensed under the [MIT License](LICENSE).

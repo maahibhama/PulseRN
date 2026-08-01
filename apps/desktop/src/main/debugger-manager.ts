@@ -48,6 +48,7 @@ const scriptParsedSchema = z.object({
 });
 const pausedSchema = z.object({
   reason: z.string(),
+  hitBreakpoints: z.array(z.string()).optional().default([]),
   callFrames: z.array(
     z.object({
       callFrameId: z.string(),
@@ -83,6 +84,9 @@ const storedBreakpointSchema = z.object({
   column: z.number().int().min(1).max(10_000_000),
   enabled: z.boolean(),
   condition: z.string().max(10_000).optional(),
+  hitCondition: z.number().int().positive().max(1_000_000).optional(),
+  logMessage: z.string().max(10_000).optional(),
+  hitCount: z.number().int().nonnegative().default(0),
   verified: z.boolean().default(false),
   error: z.string().optional(),
 });
@@ -114,12 +118,14 @@ interface StoredDebuggerData {
   breakpoints: DebuggerBreakpoint[];
   watches: DebuggerWatch[];
   pauseOnExceptions: DebuggerState['pauseOnExceptions'];
+  blackboxInternal: boolean;
 }
 
 const emptyData: StoredDebuggerData = {
   breakpoints: [],
   watches: [],
   pauseOnExceptions: 'none',
+  blackboxInternal: true,
 };
 const MAX_DEBUGGER_PAYLOAD_BYTES = 50 * 1024 * 1024;
 
@@ -130,6 +136,17 @@ function isLoopback(hostname: string): boolean {
 function sourceName(url: string): string {
   const withoutQuery = url.split('?')[0] ?? url;
   return basename(withoutQuery) || url || 'anonymous';
+}
+
+function sourceGroup(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const parts = parsed.pathname.split('/').filter(Boolean);
+    return parts.slice(0, -1).join('/') || parsed.host || 'Application';
+  } catch {
+    const parts = url.split(/[\\/]/).filter(Boolean);
+    return parts.slice(0, -1).join('/') || 'Application';
+  }
 }
 
 function isInternalSource(url: string): boolean {
@@ -175,6 +192,9 @@ export class DebuggerManager {
   private readonly sourceToMap = new Map<string, SourceMapRecord>();
   private readonly generatedSources = new Map<string, DebuggerSource>();
   private readonly cdpBreakpointIds = new Map<string, string>();
+  private reconnectTimer?: NodeJS.Timeout;
+  private reconnectAttempt = 0;
+  private manuallyDisconnected = true;
   private data: StoredDebuggerData;
   private state: DebuggerState;
 
@@ -192,6 +212,13 @@ export class DebuggerManager {
       callFrames: [],
       watches: this.data.watches,
       pauseOnExceptions: this.data.pauseOnExceptions,
+      blackboxInternal: this.data.blackboxInternal,
+      capabilities: {
+        asyncStacks: false,
+        pauseOnExceptions: false,
+        blackboxing: false,
+        logpoints: false,
+      },
     };
   }
 
@@ -243,6 +270,8 @@ export class DebuggerManager {
     const socketUrl = this.targetUrls.get(targetId);
     if (!socketUrl) throw new Error('Refresh Metro targets and select a valid Hermes runtime.');
     await this.disconnect();
+    this.manuallyDisconnected = false;
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.patch({
       status: 'connecting',
       activeTargetId: targetId,
@@ -270,24 +299,34 @@ export class DebuggerManager {
         if (this.socket === socket) {
           this.socket = undefined;
           this.rejectPending(new Error('Hermes debugger connection closed.'));
-          this.patch({
-            status: 'disconnected',
-            callFrames: [],
-            selectedCallFrameId: undefined,
-            pauseReason: undefined,
-            error: 'Debugger disconnected. Refresh targets to reconnect.',
-          });
+          if (this.manuallyDisconnected) {
+            this.patch({
+              status: 'disconnected',
+              callFrames: [],
+              selectedCallFrameId: undefined,
+              pauseReason: undefined,
+              error: undefined,
+            });
+          } else {
+            this.scheduleReconnect(targetId);
+          }
         }
       });
     });
     try {
       await this.send('Runtime.enable');
       await this.send('Debugger.enable');
-      await this.send('Debugger.setAsyncCallStackDepth', { maxDepth: 32 }).catch(() => undefined);
-      await this.applyPauseMode();
+      const capabilities = {
+        asyncStacks: await this.supports('Debugger.setAsyncCallStackDepth', { maxDepth: 32 }),
+        pauseOnExceptions: await this.applyPauseMode(),
+        blackboxing: await this.applyBlackboxing(),
+        logpoints: true,
+      };
+      this.reconnectAttempt = 0;
       this.patch({
         status: this.state.status === 'paused' ? 'paused' : 'connected',
         error: undefined,
+        capabilities,
       });
     } catch (error) {
       this.failConnection(error instanceof Error ? error : new Error(String(error)));
@@ -296,6 +335,9 @@ export class DebuggerManager {
   }
 
   async disconnect(): Promise<DebuggerState> {
+    this.manuallyDisconnected = true;
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = undefined;
     const socket = this.socket;
     this.socket = undefined;
     if (socket) {
@@ -320,6 +362,12 @@ export class DebuggerManager {
       selectedCallFrameId: undefined,
       pauseReason: undefined,
       error: undefined,
+      capabilities: {
+        asyncStacks: false,
+        pauseOnExceptions: false,
+        blackboxing: false,
+        logpoints: false,
+      },
     });
     return this.snapshot();
   }
@@ -351,6 +399,9 @@ export class DebuggerManager {
       line: input.line,
       column: input.column,
       condition: input.condition?.trim() || undefined,
+      hitCondition: input.hitCondition,
+      logMessage: input.logMessage?.trim() || undefined,
+      hitCount: 0,
       enabled: true,
       verified: false,
     };
@@ -477,8 +528,22 @@ export class DebuggerManager {
   async setPauseOnExceptions(mode: DebuggerState['pauseOnExceptions']): Promise<DebuggerState> {
     this.data.pauseOnExceptions = mode;
     this.persist();
-    await this.applyPauseMode();
+    const supported = await this.applyPauseMode();
+    this.patch({
+      capabilities: { ...this.state.capabilities, pauseOnExceptions: supported },
+    });
     this.publishData();
+    return this.snapshot();
+  }
+
+  async setBlackboxInternal(enabled: boolean): Promise<DebuggerState> {
+    this.data.blackboxInternal = enabled;
+    this.persist();
+    const supported = await this.applyBlackboxing();
+    this.patch({
+      blackboxInternal: enabled,
+      capabilities: { ...this.state.capabilities, blackboxing: supported },
+    });
     return this.snapshot();
   }
 
@@ -551,6 +616,7 @@ export class DebuggerManager {
       name: sourceName(script.url),
       internal: isInternalSource(script.url),
       original: false,
+      group: sourceGroup(script.url),
     };
     this.generatedSources.set(script.scriptId, generated);
     if (script.sourceMapURL) await this.loadSourceMap(script).catch(() => undefined);
@@ -626,6 +692,7 @@ export class DebuggerManager {
           name: sourceName(source),
           internal: isInternalSource(source),
           original: true,
+          group: sourceGroup(source),
         });
       }
     }
@@ -680,6 +747,20 @@ export class DebuggerManager {
   }
 
   private handlePaused(pause: z.infer<typeof pausedSchema>): void {
+    let breakpointChanged = false;
+    for (const cdpId of pause.hitBreakpoints) {
+      const localId = [...this.cdpBreakpointIds.entries()].find(
+        ([, installedId]) => installedId === cdpId,
+      )?.[0];
+      const breakpoint = this.data.breakpoints.find((entry) => entry.id === localId);
+      if (!breakpoint) continue;
+      breakpoint.hitCount = (breakpoint.hitCount ?? 0) + 1;
+      breakpointChanged = true;
+    }
+    if (breakpointChanged) {
+      this.persist();
+      this.publishData();
+    }
     const callFrames: DebuggerCallFrame[] = pause.callFrames.map((frame) => ({
       id: frame.callFrameId,
       functionName: frame.functionName || '(anonymous)',
@@ -730,7 +811,7 @@ export class DebuggerManager {
             url: script.url,
             lineNumber: location.lineNumber,
             columnNumber: location.columnNumber,
-            condition: breakpoint.condition ?? '',
+            condition: this.breakpointCondition(breakpoint),
           }),
         );
       breakpoint.verified = result.locations.length > 0;
@@ -740,6 +821,24 @@ export class DebuggerManager {
       breakpoint.verified = false;
       breakpoint.error = error instanceof Error ? error.message : String(error);
     }
+  }
+
+  private breakpointCondition(breakpoint: DebuggerBreakpoint): string {
+    const guards: string[] = [];
+    if (breakpoint.condition) guards.push(`(${breakpoint.condition})`);
+    if (breakpoint.hitCondition) {
+      const key = JSON.stringify(breakpoint.id);
+      guards.push(
+        `((globalThis.__pulseRNDebuggerHits ??= {}), (globalThis.__pulseRNDebuggerHits[${key}] = (globalThis.__pulseRNDebuggerHits[${key}] ?? 0) + 1) === ${breakpoint.hitCondition})`,
+      );
+    }
+    const guard = guards.length > 0 ? guards.join(' && ') : 'true';
+    if (breakpoint.logMessage) {
+      return `(() => { if (!(${guard})) return false; console.log(${JSON.stringify(
+        `[PulseRN logpoint] ${breakpoint.logMessage}`,
+      )}); return false; })()`;
+    }
+    return guards.join(' && ');
   }
 
   private async restoreBreakpoints(): Promise<void> {
@@ -782,15 +881,34 @@ export class DebuggerManager {
     this.publishData();
   }
 
-  private async applyPauseMode(): Promise<void> {
-    if (!this.socket) return;
+  private async supports(method: string, params?: Record<string, unknown>): Promise<boolean> {
+    if (!this.socket) return false;
+    try {
+      await this.send(method, params);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private async applyPauseMode(): Promise<boolean> {
+    if (!this.socket) return false;
     const state =
       this.data.pauseOnExceptions === 'none'
         ? 'none'
         : this.data.pauseOnExceptions === 'all'
           ? 'all'
           : 'uncaught';
-    await this.send('Debugger.setPauseOnExceptions', { state });
+    return this.supports('Debugger.setPauseOnExceptions', { state });
+  }
+
+  private async applyBlackboxing(): Promise<boolean> {
+    if (!this.socket) return false;
+    return this.supports('Debugger.setBlackboxPatterns', {
+      patterns: this.data.blackboxInternal
+        ? ['(?:^|/)node_modules/', '(?:^|/)react-native/', '^hermes', '__prelude__']
+        : [],
+    });
   }
 
   private patch(patch: Partial<DebuggerState>): void {
@@ -811,10 +929,53 @@ export class DebuggerManager {
     this.socket?.close();
     this.socket = undefined;
     this.rejectPending(error);
+    const message = error.message;
+    const diagnostic = /401|unauthor/i.test(message)
+      ? 'Metro rejected the debugger connection with HTTP 401. Close React Native DevTools, reload the app, refresh targets, and reconnect.'
+      : /409|already|another debugger|connected/i.test(message)
+        ? 'Another debugger owns this Hermes runtime. Close React Native DevTools or other CDP clients, then reconnect.'
+        : `${message} Close React Native DevTools if it is already attached.`;
     this.patch({
       status: 'error',
-      error: `${error.message} Close React Native DevTools if it is already attached.`,
+      error: diagnostic,
     });
+  }
+
+  private scheduleReconnect(targetId: string): void {
+    if (this.manuallyDisconnected || this.reconnectAttempt >= 5) {
+      this.patch({
+        status: 'error',
+        callFrames: [],
+        selectedCallFrameId: undefined,
+        pauseReason: undefined,
+        error:
+          this.reconnectAttempt >= 5
+            ? 'Hermes target did not return after five reconnect attempts. Reload the app and refresh targets.'
+            : undefined,
+      });
+      return;
+    }
+    this.reconnectAttempt += 1;
+    this.patch({
+      status: 'reconnecting',
+      callFrames: [],
+      selectedCallFrameId: undefined,
+      pauseReason: undefined,
+      error: `Hermes target reloaded. Reconnecting (${this.reconnectAttempt}/5)…`,
+    });
+    const delay = Math.min(4_000, 400 * 2 ** (this.reconnectAttempt - 1));
+    this.reconnectTimer = setTimeout(() => {
+      void this.discover().then(async () => {
+        if (this.manuallyDisconnected) return;
+        if (!this.targetUrls.has(targetId)) {
+          this.scheduleReconnect(targetId);
+          return;
+        }
+        await this.connect(targetId).catch(() => {
+          if (!this.manuallyDisconnected) this.scheduleReconnect(targetId);
+        });
+      });
+    }, delay);
   }
 
   private rejectPending(error: Error): void {
@@ -832,6 +993,7 @@ export class DebuggerManager {
           breakpoints: z.array(storedBreakpointSchema).default([]),
           watches: z.array(storedWatchSchema).default([]),
           pauseOnExceptions: z.enum(['none', 'uncaught', 'all']).default('none'),
+          blackboxInternal: z.boolean().default(true),
         })
         .parse(JSON.parse(readFileSync(this.filePath, 'utf8')));
       return {
@@ -842,6 +1004,7 @@ export class DebuggerManager {
         })),
         watches: parsed.watches,
         pauseOnExceptions: parsed.pauseOnExceptions,
+        blackboxInternal: parsed.blackboxInternal,
       };
     } catch {
       return structuredClone(emptyData);

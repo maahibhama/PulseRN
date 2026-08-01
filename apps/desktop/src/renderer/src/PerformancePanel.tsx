@@ -7,12 +7,22 @@ import {
   type PerformanceEventPayload,
 } from '@pulse-rn/protocol';
 import { useEffect, useMemo, useState } from 'react';
+import type { AppSettings } from '../../preload/api.js';
 import { VirtualizedList } from './VirtualizedList.js';
 
 interface PerformancePanelProps {
   events: DevToolEventEnvelope[];
   selectedEventId?: string;
   onSelect(id: string): void;
+  thresholds: Pick<
+    AppSettings,
+    | 'performanceFpsThreshold'
+    | 'performanceStallThresholdMs'
+    | 'performanceScreenThresholdMs'
+    | 'performanceNetworkThresholdMs'
+    | 'performanceMemoryGrowthMb'
+  >;
+  onThresholdChange(patch: Partial<AppSettings>): Promise<void>;
 }
 
 type MetricFilter = 'all' | 'fps' | 'stalls' | 'timing' | 'related';
@@ -53,7 +63,13 @@ function relatedMetric(event: DevToolEventEnvelope): { label: string; value: num
   return undefined;
 }
 
-export function PerformancePanel({ events, selectedEventId, onSelect }: PerformancePanelProps) {
+export function PerformancePanel({
+  events,
+  selectedEventId,
+  onSelect,
+  thresholds,
+  onThresholdChange,
+}: PerformancePanelProps) {
   const performanceEvents = useMemo(
     () => events.filter((event) => event.category === 'performance'),
     [events],
@@ -68,11 +84,11 @@ export function PerformancePanel({ events, selectedEventId, onSelect }: Performa
   const [filter, setFilter] = useState<MetricFilter>('all');
   const [search, setSearch] = useState('');
   const [timeRange, setTimeRange] = useState<TimeRange>('five-minutes');
-  const [fpsThreshold, setFpsThreshold] = useState(50);
-  const [stallThreshold, setStallThreshold] = useState(100);
-  const [screenThreshold, setScreenThreshold] = useState(1_000);
-  const [networkThreshold, setNetworkThreshold] = useState(500);
-  const [memoryGrowthThreshold, setMemoryGrowthThreshold] = useState(10);
+  const fpsThreshold = thresholds.performanceFpsThreshold;
+  const stallThreshold = thresholds.performanceStallThresholdMs;
+  const screenThreshold = thresholds.performanceScreenThresholdMs;
+  const networkThreshold = thresholds.performanceNetworkThresholdMs;
+  const memoryGrowthThreshold = thresholds.performanceMemoryGrowthMb;
   const cutoff =
     timeRange === 'all' ? 0 : Date.now() - (timeRange === 'minute' ? 60_000 : 5 * 60_000);
 
@@ -256,7 +272,9 @@ export function PerformancePanel({ events, selectedEventId, onSelect }: Performa
           JS FPS below
           <input
             min="1"
-            onChange={(event) => setFpsThreshold(Number(event.target.value))}
+            onChange={(event) =>
+              void onThresholdChange({ performanceFpsThreshold: Number(event.target.value) })
+            }
             type="number"
             value={fpsThreshold}
           />
@@ -265,7 +283,9 @@ export function PerformancePanel({ events, selectedEventId, onSelect }: Performa
           Stall ms
           <input
             min="1"
-            onChange={(event) => setStallThreshold(Number(event.target.value))}
+            onChange={(event) =>
+              void onThresholdChange({ performanceStallThresholdMs: Number(event.target.value) })
+            }
             type="number"
             value={stallThreshold}
           />
@@ -274,7 +294,9 @@ export function PerformancePanel({ events, selectedEventId, onSelect }: Performa
           Slow screen ms
           <input
             min="1"
-            onChange={(event) => setScreenThreshold(Number(event.target.value))}
+            onChange={(event) =>
+              void onThresholdChange({ performanceScreenThresholdMs: Number(event.target.value) })
+            }
             type="number"
             value={screenThreshold}
           />
@@ -283,7 +305,9 @@ export function PerformancePanel({ events, selectedEventId, onSelect }: Performa
           Network ms
           <input
             min="1"
-            onChange={(event) => setNetworkThreshold(Number(event.target.value))}
+            onChange={(event) =>
+              void onThresholdChange({ performanceNetworkThresholdMs: Number(event.target.value) })
+            }
             type="number"
             value={networkThreshold}
           />
@@ -292,7 +316,9 @@ export function PerformancePanel({ events, selectedEventId, onSelect }: Performa
           Memory growth MiB
           <input
             min="1"
-            onChange={(event) => setMemoryGrowthThreshold(Number(event.target.value))}
+            onChange={(event) =>
+              void onThresholdChange({ performanceMemoryGrowthMb: Number(event.target.value) })
+            }
             type="number"
             value={memoryGrowthThreshold}
           />

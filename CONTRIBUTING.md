@@ -6,7 +6,8 @@ Thank you for helping build PulseRN. Start with an issue for substantial feature
 
 1. Fork the repository and create a focused branch.
 2. Install with `pnpm install`.
-3. Run `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm lint`, and `pnpm test:e2e`.
+3. Run `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm lint`, `pnpm test:e2e`, and
+   `pnpm release:verify:sdk`.
 4. Add tests for behavioral changes.
 5. Keep pull requests limited to one phase or concern.
 
@@ -17,3 +18,6 @@ Do not add instrumentation from a future roadmap phase to a current-phase change
 Use strict TypeScript, validated boundaries, small modules, and explicit types. Preserve renderer sandboxing. Avoid `any`, `eval`, and APIs that expose Node primitives to renderer code.
 
 By contributing, you agree that your contribution is licensed under the MIT License.
+
+See [compatibility](docs/COMPATIBILITY.md), [support](SUPPORT.md), and the
+[security policy](docs/SECURITY.md) before changing a public interface or release boundary.

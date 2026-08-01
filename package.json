@@ -28,7 +28,8 @@
     "release:desktop": "node scripts/release.mjs",
     "release:sdk": "node scripts/release-sdk.mjs",
     "release:verify": "node scripts/verify-release-version.mjs",
-    "release:verify:sdk": "node scripts/verify-sdk-package.mjs"
+    "release:verify:sdk": "node scripts/verify-sdk-package.mjs",
+    "release:metadata": "node scripts/generate-release-metadata.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",

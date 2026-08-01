@@ -186,7 +186,7 @@ export interface PerformanceEventPayload extends JsonObject {
   };
 }
 
-export type StorageOperation = 'providers' | 'list' | 'get' | 'set' | 'delete';
+export type StorageOperation = 'providers' | 'list' | 'get' | 'set' | 'delete' | 'restore';
 
 export interface StorageEventPayload extends JsonObject {
   requestId: string;
@@ -214,13 +214,31 @@ export interface ErrorContextEvent extends JsonObject {
 
 export interface ErrorEventPayload extends JsonObject {
   source: ErrorSource;
+  classification?: 'application' | 'sdk' | 'debugger' | 'connection' | 'desktop_internal';
   name: string;
   message: string;
+  fingerprint?: string;
   stack?: string;
   componentStack?: string;
+  frames?: {
+    functionName?: string;
+    file: string;
+    line?: number;
+    column?: number;
+    application: boolean;
+    symbolicated: boolean;
+  }[];
   screen?: string;
+  appVersion?: string;
   fatal: boolean;
   context: ErrorContextEvent[];
+  correlations?: {
+    route?: string;
+    requestId?: string;
+    reduxEventId?: string;
+    consoleEventId?: string;
+    performanceEventId?: string;
+  };
   metadata?: JsonValue;
 }
 
@@ -291,6 +309,7 @@ export interface StorageCommand {
   value?: string;
   cursor?: string;
   limit?: number;
+  backupId?: string;
 }
 
 export interface StorageResult {
@@ -302,7 +321,7 @@ export interface StorageResult {
   providers?: {
     id: string;
     name: string;
-    capabilities: StorageProviderCapabilities;
+    capabilities?: StorageProviderCapabilities;
   }[];
   keys?: string[];
   keyEntries?: {
@@ -318,6 +337,7 @@ export interface StorageResult {
   valueType?: StorageValueType;
   sensitive?: boolean;
   redacted?: boolean;
+  backupId?: string;
   error?: string;
 }
 

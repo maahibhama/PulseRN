@@ -665,6 +665,7 @@ export function App() {
   const [activeView, setActiveView] = useState<ViewName>('Timeline');
   const [reopenedSession, setReopenedSession] = useState<StoredSession>();
   const [selectedPagedEvent, setSelectedPagedEvent] = useState<DevToolEventEnvelope>();
+  const [appVersion, setAppVersion] = useState('—');
   const [systemTheme, setSystemTheme] = useState<'dark' | 'light'>(() =>
     window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
   );
@@ -705,6 +706,11 @@ export function App() {
   }, [desktopApi, setSettings]);
 
   useEffect(() => {
+    if (!desktopApi) return;
+    void desktopApi.getUpdateState().then((state) => setAppVersion(state.currentVersion));
+  }, [desktopApi]);
+
+  useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)');
     const update = () => setSystemTheme(media.matches ? 'dark' : 'light');
     media.addEventListener('change', update);
@@ -730,7 +736,8 @@ export function App() {
   useEffect(() => {
     document.documentElement.dataset['theme'] = resolvedTheme;
     document.documentElement.dataset['density'] = settings.density;
-  }, [resolvedTheme, settings.density]);
+    document.documentElement.dataset['motion'] = settings.motion;
+  }, [resolvedTheme, settings.density, settings.motion]);
 
   if (!desktopApi) {
     return (
@@ -768,7 +775,7 @@ export function App() {
             </small>
           )}
         </button>
-        <div className="phase-pill">Phase 18 · Storage</div>
+        <div className="phase-pill">v{appVersion}</div>
       </header>
       <aside className="sidebar">
         <div className="section-label">Inspect</div>
@@ -777,6 +784,7 @@ export function App() {
             className={`${activeView === item.name ? 'nav active' : 'nav'} ${item.available ? '' : 'upcoming'}`}
             key={item.name}
             onClick={() => setActiveView(item.name)}
+            aria-current={activeView === item.name ? 'page' : undefined}
           >
             <span>{item.icon}</span>
             {item.name}
@@ -845,6 +853,8 @@ export function App() {
           events={inspectorPage.events}
           selectedEventId={selectedEventId}
           onSelect={selectInspectorEvent}
+          thresholds={settings}
+          onThresholdChange={async (patch) => setSettings(await desktopApi.updateSettings(patch))}
         />
       ) : activeView === 'Storage' ? (
         <StoragePanel devices={devices} />
@@ -856,6 +866,8 @@ export function App() {
         />
       ) : activeView === 'Settings' ? (
         <SettingsPanel
+          deviceCount={devices.length}
+          eventCount={events.length}
           resolvedTheme={resolvedTheme}
           settings={settings}
           onChange={async (patch) => setSettings(await desktopApi.updateSettings(patch))}

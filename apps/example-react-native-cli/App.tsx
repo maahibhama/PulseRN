@@ -107,6 +107,7 @@ function App() {
       ...(pairingCode ? { pairingCode } : {}),
       ...(reconnectToken ? { reconnectToken } : {}),
       appName: 'PulseRN CLI Example',
+      environment: 'development',
       appId: 'dev.pulsern.cli-example',
       appVersion: '0.1.0',
       device: {
@@ -141,6 +142,16 @@ function App() {
       captureMemory: true,
       enableStorage: true,
       enableErrors: true,
+      categories: {
+        console: true,
+        network: true,
+        redux: true,
+        navigation: true,
+        performance: true,
+        storage: true,
+        error: true,
+      },
+      sampling: { performance: 1, console: 1, network: 1 },
     });
     const unregisterAsyncStorage = client.registerStorageProvider(
       createAsyncStorageProvider(AsyncStorage),

@@ -144,6 +144,7 @@ export class DevToolWebSocketServer {
       value?: string;
       cursor?: string;
       limit?: number;
+      backupId?: string;
     },
   ): Promise<StorageResult> {
     const socket = this.sockets.get(connectionId);
@@ -160,6 +161,7 @@ export class DevToolWebSocketServer {
       ...(input.value === undefined ? {} : { value: input.value }),
       ...(input.cursor === undefined ? {} : { cursor: input.cursor }),
       ...(input.limit === undefined ? {} : { limit: input.limit }),
+      ...(input.backupId === undefined ? {} : { backupId: input.backupId }),
     };
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {

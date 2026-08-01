@@ -26,6 +26,7 @@ const SNAPSHOT_CHANNEL = 'pulse-rn:snapshot';
 const DEVICES_CHANNEL = 'pulse-rn:devices';
 const EVENTS_CHANNEL = 'pulse-rn:events';
 const STORAGE_CHANNEL = 'pulse-rn:storage';
+const STORAGE_LOCAL_CHANNEL = 'pulse-rn:storage-local';
 const SETTINGS_CHANNEL = 'pulse-rn:settings';
 const DEBUGGER_CHANNEL = 'pulse-rn:debugger';
 const CONNECTION_CHANNEL = 'pulse-rn:connection';
@@ -45,7 +46,30 @@ const storageRequestSchema = z.object({
   value: z.string().max(1_000_000).optional(),
   cursor: z.string().max(100).optional(),
   limit: z.number().int().min(1).max(500).optional(),
+  backupId: z.string().trim().min(1).max(256).optional(),
 });
+const storageIdentitySchema = z.object({
+  connectionId: z.string().trim().min(1).max(256),
+  providerId: z.string().trim().min(1).max(256),
+  key: z.string().max(10_000),
+});
+const storageLocalRequestSchema = z.discriminatedUnion('operation', [
+  z.object({ operation: z.literal('audit') }),
+  storageIdentitySchema.extend({ operation: z.literal('snapshot-create') }),
+  z.object({
+    operation: z.literal('snapshot-list'),
+    providerId: z.string().trim().min(1).max(256).optional(),
+    key: z.string().max(10_000).optional(),
+  }),
+  z.object({
+    operation: z.literal('snapshot-delete'),
+    id: z.string().trim().min(1).max(256),
+  }),
+  z.object({
+    operation: z.literal('export'),
+    items: z.array(storageIdentitySchema).min(1).max(100),
+  }),
+]);
 const eventCursorSchema = z.object({
   timestamp: z.number().finite().nonnegative(),
   sequence: z.number().int().nonnegative(),
@@ -370,6 +394,7 @@ app.whenReady().then(async () => {
     {
       enabled: autoUpdateBuild,
       currentVersion: app.getVersion(),
+      channel: settingsStore.get().updateChannel,
       disabledReason: app.isPackaged
         ? 'This unsigned preview cannot install updates automatically. Download the latest release from GitHub.'
         : 'Automatic updates are available only in signed packaged builds.',
@@ -577,16 +602,25 @@ app.whenReady().then(async () => {
   ipcMain.handle(STORAGE_CHANNEL, async (_event, value: unknown) => {
     const input = storageRequestSchema.parse(value);
     if (!server) throw new Error('PulseRN server is not ready.');
-    if (input.operation === 'set' || input.operation === 'delete') {
+    if (!database) throw new Error('PulseRN database is not ready.');
+    const activeDatabase = database;
+    const isMutation = ['set', 'delete', 'restore'].includes(input.operation);
+    if (isMutation) {
+      const verb =
+        input.operation === 'delete'
+          ? 'Delete'
+          : input.operation === 'restore'
+            ? 'Restore'
+            : 'Update';
       const options: Electron.MessageBoxOptions = {
         type: 'warning',
         title: 'Confirm storage mutation',
-        message:
-          input.operation === 'delete'
-            ? `Delete "${input.key ?? ''}" from the connected app?`
-            : `Update "${input.key ?? ''}" in the connected app?`,
-        detail: 'This changes application data immediately and cannot be undone by PulseRN.',
-        buttons: ['Cancel', input.operation === 'delete' ? 'Delete' : 'Update'],
+        message: `${verb} "${input.key ?? ''}" in the connected app?`,
+        detail:
+          input.operation === 'restore'
+            ? 'This restores the one-session backup and consumes it.'
+            : 'This changes application data immediately. PulseRN keeps one opaque, session-only undo backup.',
+        buttons: ['Cancel', verb],
         defaultId: 0,
         cancelId: 0,
         noLink: true,
@@ -596,7 +630,134 @@ app.whenReady().then(async () => {
         : await dialog.showMessageBox(options);
       if (confirmation.response !== 1) throw new Error('Storage mutation cancelled.');
     }
-    return server.requestStorage(input.connectionId, input);
+    try {
+      const result = await server.requestStorage(input.connectionId, input);
+      if (isMutation) {
+        activeDatabase.recordStorageAudit({
+          connectionId: input.connectionId,
+          providerId: input.providerId,
+          key: input.key ?? '',
+          operation: input.operation as 'set' | 'delete' | 'restore',
+          success: result.success,
+          ...(result.backupId ? { backupId: result.backupId } : {}),
+          ...(result.error ? { error: result.error } : {}),
+        });
+      }
+      return result;
+    } catch (error) {
+      if (isMutation) {
+        activeDatabase.recordStorageAudit({
+          connectionId: input.connectionId,
+          providerId: input.providerId,
+          key: input.key ?? '',
+          operation: input.operation as 'set' | 'delete' | 'restore',
+          success: false,
+          error: error instanceof Error ? error.message : 'Storage mutation failed.',
+        });
+      }
+      throw error;
+    }
+  });
+  ipcMain.handle(STORAGE_LOCAL_CHANNEL, async (_event, value: unknown) => {
+    const input = storageLocalRequestSchema.parse(value);
+    if (!database) throw new Error('PulseRN database is not ready.');
+    const activeDatabase = database;
+    if (input.operation === 'audit') return activeDatabase.listStorageAudit();
+    if (input.operation === 'snapshot-list') {
+      return activeDatabase.listStorageSnapshots(input.providerId, input.key);
+    }
+    if (input.operation === 'snapshot-delete') {
+      return activeDatabase.deleteStorageSnapshot(input.id);
+    }
+    if (!server) throw new Error('PulseRN server is not ready.');
+    if (input.operation === 'snapshot-create') {
+      const result = await server.requestStorage(input.connectionId, {
+        providerId: input.providerId,
+        operation: 'get',
+        key: input.key,
+      });
+      if (!result.success) throw new Error(result.error ?? 'Could not read the storage value.');
+      if (
+        result.value === null ||
+        result.value === undefined ||
+        result.sensitive ||
+        result.redacted ||
+        result.valueType === 'binary' ||
+        result.value.includes('[REDACTED]')
+      ) {
+        throw new Error('Sensitive, redacted, binary, or missing values cannot be snapshotted.');
+      }
+      return activeDatabase.saveStorageSnapshot({
+        connectionId: input.connectionId,
+        providerId: input.providerId,
+        key: input.key,
+        value: result.value,
+        valueType: result.valueType ?? 'unknown',
+        valueSize: result.valueSize ?? Buffer.byteLength(result.value),
+      });
+    }
+    const values: {
+      providerId: string;
+      key: string;
+      value: string;
+      valueType: string;
+      valueSize: number;
+    }[] = [];
+    let excluded = 0;
+    for (const item of input.items) {
+      const result = await server.requestStorage(item.connectionId, {
+        providerId: item.providerId,
+        operation: 'get',
+        key: item.key,
+      });
+      if (
+        !result.success ||
+        result.value === null ||
+        result.value === undefined ||
+        result.sensitive ||
+        result.redacted ||
+        result.valueType === 'binary' ||
+        result.value.includes('[REDACTED]')
+      ) {
+        excluded += 1;
+        continue;
+      }
+      values.push({
+        providerId: item.providerId,
+        key: item.key,
+        value: result.value,
+        valueType: result.valueType ?? 'unknown',
+        valueSize: result.valueSize ?? Buffer.byteLength(result.value),
+      });
+    }
+    const result = await dialog.showSaveDialog({
+      title: 'Export selected storage values',
+      defaultPath: `PulseRN-storage-${new Date().toISOString().slice(0, 10)}.json`,
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+    });
+    if (result.canceled || !result.filePath) {
+      return { canceled: true, exported: 0, excluded };
+    }
+    await writeFile(
+      result.filePath,
+      `${JSON.stringify(
+        {
+          format: 'pulsern-storage-export',
+          version: 1,
+          exportedAt: Date.now(),
+          values,
+        },
+        null,
+        2,
+      )}\n`,
+      { encoding: 'utf8', mode: 0o600 },
+    );
+    return {
+      canceled: false,
+      filePath: result.filePath,
+      exported: values.length,
+      excluded,
+    };
   });
   ipcMain.handle(SETTINGS_CHANNEL, async (_event, value?: unknown) => {
     if (!settingsStore) throw new Error('PulseRN settings are not ready.');
@@ -621,6 +782,7 @@ app.whenReady().then(async () => {
       }
     }
     nativeTheme.themeSource = settings.theme;
+    updateManager?.setChannel(settings.updateChannel);
     applyAppIcon(settings.theme);
     if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: settings.launchAtLogin });
     if (
@@ -650,7 +812,12 @@ app.whenReady().then(async () => {
       ])
       .parse(value ?? { operation: 'info' });
     if (input.operation === 'beginPairing') {
-      pairingStore.begin();
+      const settings = settingsStore?.get();
+      pairingStore.begin(
+        Date.now(),
+        settings?.pairingCodeLifetimeMinutes ?? 5,
+        settings?.pairingRetryLimit ?? 5,
+      );
       const info = connectionInfo();
       if (window && !window.isDestroyed()) window.webContents.send(CONNECTION_CHANNEL, info);
       return info;
@@ -817,6 +984,8 @@ app.whenReady().then(async () => {
           line: z.number().int().min(1).max(10_000_000),
           column: z.number().int().min(1).max(10_000_000),
           condition: z.string().max(10_000).optional(),
+          hitCondition: z.number().int().positive().max(1_000_000).optional(),
+          logMessage: z.string().max(10_000).optional(),
         }),
         z.object({ operation: z.literal('removeBreakpoint'), id: z.string().uuid() }),
         z.object({
@@ -843,6 +1012,7 @@ app.whenReady().then(async () => {
           operation: z.literal('pauseOnExceptions'),
           mode: z.enum(['none', 'uncaught', 'all']),
         }),
+        z.object({ operation: z.literal('blackboxInternal'), enabled: z.boolean() }),
       ])
       .parse(value ?? { operation: 'state' });
     switch (input.operation) {
@@ -876,6 +1046,8 @@ app.whenReady().then(async () => {
         return debuggerManager.evaluate(input.expression);
       case 'pauseOnExceptions':
         return debuggerManager.setPauseOnExceptions(input.mode);
+      case 'blackboxInternal':
+        return debuggerManager.setBlackboxInternal(input.enabled);
     }
   });
   await restartServer();

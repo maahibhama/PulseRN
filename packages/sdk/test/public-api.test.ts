@@ -29,6 +29,7 @@ describe('single-entry SDK API', () => {
     expect(client.getStats()).toEqual({
       clockOffsetMs: 0,
       connected: false,
+      connectionState: 'idle',
       droppedEvents: 0,
       oversizedEvents: 0,
       queueOverflowEvents: 0,

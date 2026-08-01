@@ -1,6 +1,9 @@
-import type { ErrorSource, JsonValue } from './protocol-types.js';
+import type { ErrorEventPayload, ErrorSource, JsonValue } from './protocol-types.js';
 
-export interface CapturedError {
+export interface CapturedError extends Pick<
+  ErrorEventPayload,
+  'classification' | 'fingerprint' | 'frames'
+> {
   source: ErrorSource;
   name: string;
   message: string;
@@ -36,6 +39,82 @@ function describeError(value: unknown): Pick<CapturedError, 'name' | 'message' |
   }
 }
 
+function isApplicationFile(file: string): boolean {
+  const normalized = file.toLowerCase();
+  return !(
+    normalized.includes('node_modules') ||
+    normalized.includes('/react-native/') ||
+    normalized.includes('[native code]') ||
+    normalized.startsWith('native') ||
+    normalized.includes('internal/')
+  );
+}
+
+export function parseErrorFrames(
+  stack: string | undefined,
+  componentStack?: string,
+): NonNullable<ErrorEventPayload['frames']> {
+  const frames: NonNullable<ErrorEventPayload['frames']> = [];
+  for (const line of stack?.split('\n') ?? []) {
+    const match =
+      /^\s*at\s+(?:(.*?)\s+\()?(.+?):(\d+):(\d+)\)?\s*$/.exec(line) ??
+      /^\s*(.*?)@(.+?):(\d+):(\d+)\s*$/.exec(line);
+    if (!match?.[2]) continue;
+    const file = match[2];
+    frames.push({
+      ...(match[1] ? { functionName: match[1] } : {}),
+      file,
+      line: Number(match[3]),
+      column: Number(match[4]),
+      application: isApplicationFile(file),
+      symbolicated: /\.(?:[cm]?[jt]sx?|vue)(?:[?#]|$)/i.test(file),
+    });
+  }
+  for (const line of componentStack?.split('\n') ?? []) {
+    const match = /^\s*(?:in|at)\s+(.+?)(?:\s+\(at\s+(.+?):(\d+)(?::(\d+))?\))?\s*$/.exec(line);
+    if (!match?.[2]) continue;
+    const file = match[2];
+    frames.push({
+      ...(match[1] ? { functionName: match[1] } : {}),
+      file,
+      line: Number(match[3]),
+      ...(match[4] ? { column: Number(match[4]) } : {}),
+      application: isApplicationFile(file),
+      symbolicated: true,
+    });
+  }
+  return frames.slice(0, 500);
+}
+
+function stableHash(value: string, seed: number): string {
+  let hash = seed >>> 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16_777_619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+export function fingerprintCapturedError(
+  error: Pick<CapturedError, 'name' | 'message'>,
+  frames: NonNullable<ErrorEventPayload['frames']>,
+): string {
+  const normalizedMessage = error.message
+    .toLowerCase()
+    .replaceAll(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, '<uuid>')
+    .replaceAll(/0x[0-9a-f]+/gi, '<hex>')
+    .replaceAll(/\b\d+(?:\.\d+)?\b/g, '<number>')
+    .replaceAll(/\s+/g, ' ')
+    .trim();
+  const frameKey = frames
+    .filter((frame) => frame.application)
+    .slice(0, 5)
+    .map((frame) => `${frame.functionName ?? '<anonymous>'}@${frame.file.split(/[\\/]/).pop()}`)
+    .join('|');
+  const input = `${error.name.toLowerCase()}|${normalizedMessage}|${frameKey}`;
+  return `${stableHash(input, 2_166_136_261)}${stableHash(input, 3_332_664_777)}`;
+}
+
 export function toCapturedError(
   error: unknown,
   source: ErrorSource,
@@ -43,15 +122,22 @@ export function toCapturedError(
     fatal?: boolean;
     componentStack?: string;
     metadata?: JsonValue;
+    classification?: NonNullable<ErrorEventPayload['classification']>;
   } = {},
 ): CapturedError {
-  return {
+  const described = describeError(error);
+  const frames = parseErrorFrames(described.stack, options.componentStack);
+  const captured: CapturedError = {
     source,
-    ...describeError(error),
+    classification: options.classification ?? (source === 'sdk_internal' ? 'sdk' : 'application'),
+    ...described,
+    frames,
+    fingerprint: fingerprintCapturedError(described, frames),
     fatal: options.fatal ?? false,
     ...(options.componentStack ? { componentStack: options.componentStack } : {}),
     ...(options.metadata === undefined ? {} : { metadata: options.metadata }),
   };
+  return captured;
 }
 
 export function installErrorInterceptor(

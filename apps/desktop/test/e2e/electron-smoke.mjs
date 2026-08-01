@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -196,6 +196,81 @@ async function connectExampleClient() {
     });
     socket.once('error', reject);
   });
+  const storageValues = new Map(
+    Array.from({ length: 130 }, (_, index) => [
+      `key-${index.toString().padStart(3, '0')}`,
+      JSON.stringify({ index }),
+    ]),
+  );
+  storageValues.set('settings', JSON.stringify({ theme: 'dark' }));
+  storageValues.set('secret', 'do-not-export');
+  const storageBackups = new Map();
+  socket.on('message', (raw) => {
+    const command = JSON.parse(raw.toString());
+    if (command.kind !== 'storage-command') return;
+    const response = {
+      kind: 'storage-result',
+      requestId: command.requestId,
+      providerId: command.providerId,
+      operation: command.operation,
+      success: true,
+    };
+    if (command.operation === 'providers') {
+      response.providers = [
+        {
+          id: 'e2e-storage',
+          name: 'E2E Storage',
+          capabilities: {
+            paginatedKeys: true,
+            lazyValues: true,
+            mutations: true,
+            typedValues: true,
+            snapshots: true,
+          },
+        },
+      ];
+    } else if (command.operation === 'list') {
+      const keys = [...storageValues.keys()].sort();
+      const offset = Number(command.cursor ?? 0);
+      const limit = command.limit ?? 100;
+      response.keys = keys.slice(offset, offset + limit);
+      response.keyEntries = response.keys.map((key) => ({
+        key,
+        valueType: key === 'secret' ? 'string' : 'json',
+        sensitive: key === 'secret',
+      }));
+      response.totalKeys = keys.length;
+      if (offset + response.keys.length < keys.length) {
+        response.nextCursor = String(offset + response.keys.length);
+      }
+    } else if (command.operation === 'get') {
+      response.value = storageValues.get(command.key) ?? null;
+      response.valueType = command.key === 'secret' ? 'string' : 'json';
+      response.valueSize = Buffer.byteLength(response.value ?? '');
+      response.sensitive = command.key === 'secret';
+      response.redacted = false;
+    } else if (command.operation === 'set' || command.operation === 'delete') {
+      const backupId = `e2e-backup-${storageBackups.size + 1}`;
+      storageBackups.set(backupId, {
+        key: command.key,
+        value: storageValues.get(command.key) ?? null,
+      });
+      response.backupId = backupId;
+      if (command.operation === 'set') storageValues.set(command.key, command.value);
+      else storageValues.delete(command.key);
+    } else if (command.operation === 'restore') {
+      const backup = storageBackups.get(command.backupId);
+      if (!backup) {
+        response.success = false;
+        response.error = 'Backup unavailable';
+      } else {
+        if (backup.value === null) storageValues.delete(backup.key);
+        else storageValues.set(backup.key, backup.value);
+        storageBackups.delete(command.backupId);
+      }
+    }
+    socket.send(JSON.stringify(response));
+  });
   return socket;
 }
 
@@ -327,10 +402,29 @@ function inspectorEvents() {
     }),
     envelope('error', 'error.captured', 5, {
       source: 'manual',
+      classification: 'application',
       name: 'AcceptanceError',
       message: 'E2E inspector validation',
+      fingerprint: '0123456789abcdef',
+      appVersion: '1.0.0',
       fatal: false,
       context: [],
+      frames: [
+        {
+          functionName: 'runAcceptance',
+          file: 'src/Acceptance.tsx',
+          line: 42,
+          column: 7,
+          application: true,
+          symbolicated: true,
+        },
+      ],
+      correlations: {
+        route: 'Acceptance',
+        requestId: 'request-1',
+        reduxEventId: 'e2e-redux',
+        performanceEventId: 'e2e-performance',
+      },
     }),
     {
       ...envelope('network', 'network.request-start', 6, {
@@ -378,6 +472,31 @@ function inspectorEvents() {
       }),
       id: 'e2e-network-progress',
       correlationId: 'network-live',
+    },
+    {
+      ...envelope('error', 'error.captured', 9, {
+        source: 'manual',
+        classification: 'application',
+        name: 'AcceptanceError',
+        message: 'E2E inspector validation',
+        fingerprint: '0123456789abcdef',
+        appVersion: '2.0.0',
+        fatal: false,
+        context: [],
+        frames: [
+          {
+            functionName: 'runAcceptance',
+            file: 'src/Acceptance.tsx',
+            line: 42,
+            column: 7,
+            application: true,
+            symbolicated: true,
+          },
+        ],
+        correlations: { route: 'Acceptance' },
+      }),
+      id: 'e2e-error-regression',
+      correlationId: 'error-regression',
     },
   ];
 }
@@ -470,7 +589,7 @@ try {
   const textFilter = await cdp.evaluate(
     "window.pulseRN.queryEvents({ text: 'E2E inspector validation', limit: 20 })",
   );
-  assert(textFilter.total === 1, 'Database-backed text filtering failed.');
+  assert(textFilter.total === 2, 'Database-backed text filtering failed.');
   const metadataRoundTrip = await cdp.evaluate(`(async () => {
     const saved = await window.pulseRN.saveEventFilter('Acceptance flow', {
       correlationId: 'acceptance-flow'
@@ -547,6 +666,18 @@ try {
       '2 console events',
     ),
     'Console transport drop diagnostics were missing.',
+  );
+  const consoleSearchLayout = await cdp.evaluate(`(() => {
+    const controls = document.querySelector('.console-filter-controls')?.getBoundingClientRect();
+    const search = document.querySelector('[aria-label="Search console logs"]')?.getBoundingClientRect();
+    return controls && search
+      ? { controlsBottom: controls.bottom, searchTop: search.top, searchWidth: search.width }
+      : undefined;
+  })()`);
+  assert(
+    consoleSearchLayout.searchTop >= consoleSearchLayout.controlsBottom &&
+      consoleSearchLayout.searchWidth > 500,
+    'Console search was not rendered as a full-width row below the filters.',
   );
   await cdp.evaluate(`(() => {
     const input = document.querySelector('[aria-label="Search console logs"]');
@@ -639,6 +770,31 @@ try {
         (await cdp.evaluate("document.querySelector('.waterfall-track i') !== null")) === true,
         'Network waterfall timing was not rendered.',
       );
+      await cdp.evaluate(
+        "[...document.querySelectorAll('.network-entry')].find((entry) => entry.textContent.includes('200'))?.click()",
+      );
+      await retry(
+        async () =>
+          (await cdp.evaluate(
+            "document.querySelector('.request-line button')?.textContent === 'Copy as cURL'",
+          )) === true,
+        'Network request details',
+      );
+      const networkButtonStyles = await cdp.evaluate(`[
+        document.querySelector('.request-line button'),
+        document.querySelector('.lazy-network-data button')
+      ].filter(Boolean).map((button) => {
+        const style = getComputedStyle(button);
+        return { background: style.backgroundColor, color: style.color };
+      })`);
+      assert(networkButtonStyles.length === 2, 'Network detail actions were not rendered.');
+      assert(
+        networkButtonStyles.every(
+          (style) =>
+            style.background !== 'rgb(255, 255, 255)' && style.background !== 'rgba(0, 0, 0, 0)',
+        ),
+        'Network detail actions fell back to white or transparent native button styling.',
+      );
     }
     if (view === 'Redux') {
       assert(
@@ -706,7 +862,100 @@ try {
         `Performance sampling loss was not rendered: ${performanceSummary}`,
       );
     }
+    if (view === 'Errors') {
+      assert(
+        (await cdp.evaluate("document.querySelector('.error-regression')?.textContent")) ===
+          'regression',
+        'Error regression state was not rendered.',
+      );
+      await cdp.evaluate("document.querySelector('.error-entry')?.click()");
+      await retry(
+        async () =>
+          (
+            await cdp.evaluate("document.querySelector('.error-frames code')?.textContent")
+          ).includes('Acceptance.tsx'),
+        'Error symbolicated application frame',
+      );
+      assert(
+        (
+          await cdp.evaluate("document.querySelector('.error-report-actions')?.textContent")
+        ).includes('GitHub Markdown'),
+        'Sanitized error report controls were not rendered.',
+      );
+    }
   }
+
+  const storageAcceptance = await cdp.evaluate(`(async () => {
+    const appSnapshot = await window.pulseRN.getSnapshot();
+    const connectionId = appSnapshot.devices[0].connectionId;
+    const providers = await window.pulseRN.requestStorage({
+      connectionId,
+      providerId: 'all',
+      operation: 'providers'
+    });
+    const first = await window.pulseRN.requestStorage({
+      connectionId,
+      providerId: 'e2e-storage',
+      operation: 'list',
+      limit: 100
+    });
+    const second = await window.pulseRN.requestStorage({
+      connectionId,
+      providerId: 'e2e-storage',
+      operation: 'list',
+      cursor: first.nextCursor,
+      limit: 100
+    });
+    const value = await window.pulseRN.requestStorage({
+      connectionId,
+      providerId: 'e2e-storage',
+      operation: 'get',
+      key: 'settings'
+    });
+    const snapshot = await window.pulseRN.createStorageSnapshot({
+      connectionId,
+      providerId: 'e2e-storage',
+      key: 'settings'
+    });
+    const snapshots = await window.pulseRN.listStorageSnapshots('e2e-storage', 'settings');
+    const secretRejected = await window.pulseRN.createStorageSnapshot({
+      connectionId,
+      providerId: 'e2e-storage',
+      key: 'secret'
+    }).then(() => false, () => true);
+    return { providers, first, second, value, snapshot, snapshots, secretRejected };
+  })()`);
+  assert(
+    storageAcceptance.providers.providers[0].capabilities.typedValues,
+    'Storage provider capabilities did not cross the preload boundary.',
+  );
+  assert(
+    storageAcceptance.first.keys.length === 100 && storageAcceptance.second.keys.length === 32,
+    'Storage key pagination was not bounded correctly.',
+  );
+  assert(
+    storageAcceptance.value.value === '{"theme":"dark"}',
+    'Lazy storage value retrieval failed.',
+  );
+  assert(
+    storageAcceptance.snapshots[0].id === storageAcceptance.snapshot.id,
+    'Read-only storage snapshot was not persisted.',
+  );
+  assert(storageAcceptance.secretRejected, 'Sensitive storage snapshot was not rejected.');
+  await cdp.evaluate(
+    "[...document.querySelectorAll('.nav')].find((button) => button.textContent.includes('Storage'))?.click()",
+  );
+  await retry(
+    async () =>
+      (await cdp.evaluate("document.querySelector('.storage-capabilities')?.textContent")).includes(
+        'Typed editor',
+      ),
+    'Storage provider capabilities',
+  );
+  assert(
+    (await cdp.evaluate("document.querySelectorAll('.storage-key-row').length")) === 100,
+    'Storage view did not keep the initial key page bounded.',
+  );
 
   client.close();
   client = await connectExampleClient();
@@ -737,7 +986,7 @@ try {
   await retry(
     async () =>
       (await cdp.evaluate("document.querySelector('.panel-header span')?.textContent"))?.includes(
-        '609 total · reopened session',
+        '610 total · reopened session',
       ),
     'Stored session reopen',
   );
@@ -751,11 +1000,46 @@ try {
       undefined,
     'Settings navigation',
   );
+  const settingsSections = await cdp.evaluate(
+    "[...document.querySelectorAll('.settings-card > header > strong')].map((node) => node.textContent)",
+  );
+  for (const section of [
+    'Appearance',
+    'Connections',
+    'Capture',
+    'Privacy',
+    'Storage',
+    'Debugger',
+    'Updates',
+  ]) {
+    assert(
+      settingsSections.some((label) => label === section),
+      `Missing ${section} settings section.`,
+    );
+  }
+  const versionBrand = await cdp.evaluate("document.querySelector('.phase-pill')?.textContent");
+  assert(/^v\d+\.\d+\.\d+/.test(versionBrand ?? ''), 'Desktop version branding is missing.');
   const settings = await cdp.evaluate(
-    'window.pulseRN.updateSettings({ eventRetentionDays: 7, maxStoredEvents: 200000 })',
+    "window.pulseRN.updateSettings({ eventRetentionDays: 7, maxStoredEvents: 200000, motion: 'reduced', updateChannel: 'beta', performanceFpsThreshold: 48, redactionFields: ['token', 'secret'] })",
   );
   assert(settings.eventRetentionDays === 7, 'Retention settings did not cross preload.');
   assert(settings.maxStoredEvents === 200_000, 'Event limit did not cross preload.');
+  assert(settings.motion === 'reduced', 'Reduced-motion preference did not cross preload.');
+  assert(settings.updateChannel === 'beta', 'Update channel did not cross preload.');
+  assert(settings.performanceFpsThreshold === 48, 'Performance threshold was not persisted.');
+  assert(settings.redactionFields.length === 2, 'Privacy redaction fields were not persisted.');
+  const screenshotDirectory = process.env['PULSE_RN_E2E_SCREENSHOT_DIR'];
+  if (screenshotDirectory) {
+    mkdirSync(screenshotDirectory, { recursive: true });
+    const screenshot = await cdp.send('Page.captureScreenshot', {
+      format: 'png',
+      fromSurface: true,
+    });
+    writeFileSync(
+      join(screenshotDirectory, 'pulsern-settings.png'),
+      Buffer.from(screenshot.data, 'base64'),
+    );
+  }
   const connectionInfo = await cdp.evaluate('window.pulseRN.getConnectionInfo()');
   assert(connectionInfo.mode === 'loopback', 'Loopback is not the default connection mode.');
   assert(connectionInfo.port === serverPort, 'Effective debugger server port was not reported.');
@@ -782,7 +1066,7 @@ try {
   );
   const maintenance = await cdp.evaluate('window.pulseRN.runDatabaseMaintenance()');
   assert(
-    maintenance.retainedEvents === seededEventCount + 609,
+    maintenance.retainedEvents === seededEventCount + 610,
     'Database maintenance lost retained events.',
   );
 

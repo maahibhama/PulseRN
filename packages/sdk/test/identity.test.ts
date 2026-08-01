@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { getOrCreatePulseRNDeviceId } from '../src/index.js';
+import { getOrCreatePulseRNDeviceId, getOrCreatePulseRNIdentity } from '../src/index.js';
 
 describe('persistent device identity', () => {
   it('creates and then reuses a stored device ID', async () => {
@@ -28,5 +28,31 @@ describe('persistent device identity', () => {
     expect(await getOrCreatePulseRNDeviceId(storage)).toMatch(/^device_/);
     expect(storage.setItem).toHaveBeenCalledOnce();
     await expect(getOrCreatePulseRNDeviceId(storage, ' ')).rejects.toThrow('identity key');
+  });
+
+  it('keeps a session within one lifecycle and rotates it at defined boundaries', async () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        values.set(key, value);
+      },
+    };
+
+    const first = await getOrCreatePulseRNIdentity(storage, { lifecycleId: 'foreground-1' });
+    const reload = await getOrCreatePulseRNIdentity(storage, { lifecycleId: 'foreground-1' });
+    const nextLifecycle = await getOrCreatePulseRNIdentity(storage, {
+      lifecycleId: 'foreground-2',
+    });
+    const forced = await getOrCreatePulseRNIdentity(storage, {
+      lifecycleId: 'foreground-2',
+      newSession: true,
+    });
+
+    expect(reload).toEqual(first);
+    expect(nextLifecycle.deviceId).toBe(first.deviceId);
+    expect(nextLifecycle.sessionId).not.toBe(first.sessionId);
+    expect(forced.deviceId).toBe(first.deviceId);
+    expect(forced.sessionId).not.toBe(nextLifecycle.sessionId);
   });
 });

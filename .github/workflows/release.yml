@@ -189,7 +189,7 @@ jobs:
       - name: Build desktop and workspace dependencies
         run: pnpm exec turbo run build --filter=@pulse-rn/desktop...
       - name: Package AppImage and Debian installer
-        run: pnpm --filter @pulse-rn/desktop exec electron-builder --linux AppImage deb --x64 --publish never -c.extraMetadata.pulseRNAutoUpdate=true
+        run: pnpm --filter @pulse-rn/desktop exec electron-builder --linux AppImage deb --x64 --publish never
       - name: Verify Linux artifacts
         run: |
           version="${RELEASE_TAG#v}"
@@ -214,8 +214,11 @@ jobs:
     needs: [macos, windows, linux]
     runs-on: ubuntu-latest
     permissions:
+      attestations: write
       contents: write
+      id-token: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           pattern: desktop-*
@@ -248,6 +251,17 @@ jobs:
           done
           cd release
           sha256sum "${expected[@]}" > SHA256SUMS.txt
+      - name: Generate SBOM and architecture report
+        run: node scripts/generate-release-metadata.mjs release "${RELEASE_TAG#v}"
+      - name: Attest release artifact provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            release/PulseRN-*
+            release/latest*.yml
+            release/SHA256SUMS.txt
+            release/SBOM.spdx.json
+            release/ARCHITECTURES.json
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}

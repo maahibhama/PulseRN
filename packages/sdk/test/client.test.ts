@@ -143,6 +143,62 @@ describe('DevToolClient', () => {
     client.disconnect();
   });
 
+  it('validates configuration, samples categories, and reports connection and drop state', () => {
+    expect(
+      () => new DevToolClient({ appName: '', isDevelopment: true }, () => createSocket()),
+    ).toThrow('appName');
+    expect(
+      () =>
+        new DevToolClient(
+          { appName: 'Example', sampling: { console: 2 }, isDevelopment: true },
+          () => createSocket(),
+        ),
+    ).toThrow('sampling.console');
+
+    const socket = createSocket();
+    const states: string[] = [];
+    const drops: string[] = [];
+    const client = new DevToolClient(
+      {
+        appName: 'Example',
+        environment: 'test',
+        sampling: { console: 0.5 },
+        categories: { redux: false },
+        onConnectionStateChange: (state) => states.push(state),
+        onDroppedEvent: (notice) => drops.push(notice.reason),
+      },
+      () => socket,
+    );
+    const subscribed: string[] = [];
+    const unsubscribe = client.subscribeConnectionState((state) => subscribed.push(state));
+    client.connect();
+    socket.onopen?.();
+    socket.onmessage?.({
+      data: JSON.stringify({
+        kind: 'server-hello',
+        accepted: true,
+        protocolVersion: PROTOCOL_VERSION,
+        connectionId: 'connection-1',
+        serverTime: Date.now(),
+      }),
+    });
+    client.track({ category: 'console', type: 'console.log', payload: { value: 1 } });
+    client.track({ category: 'console', type: 'console.log', payload: { value: 2 } });
+    client.track({ category: 'redux', type: 'redux.action', payload: { value: 3 } });
+
+    expect(states).toEqual(['connecting', 'connected']);
+    expect(subscribed).toEqual(['idle', 'connecting', 'connected']);
+    expect(drops).toEqual(['sampled', 'category-disabled']);
+    expect(client.getDiagnosticSummary()).toMatchObject({
+      connectionState: 'connected',
+      environment: 'test',
+      droppedEvents: 2,
+    });
+    expect(client.getDiagnosticSummary().enabledCategories).not.toContain('redux');
+    unsubscribe();
+    client.disconnect();
+  });
+
   it('negotiates health reports and preserves queued events during socket backpressure', () => {
     vi.useFakeTimers();
     const socket = createSocket();
@@ -238,12 +294,101 @@ describe('DevToolClient', () => {
     client.disconnect();
   });
 
+  it('keeps mutation backups in the SDK session and consumes them on restore', async () => {
+    const socket = createSocket();
+    const values = new Map([['theme', 'dark']]);
+    const client = new DevToolClient(
+      { appName: 'Example', isDevelopment: true, enableStorage: true },
+      () => socket,
+    );
+    client.registerStorageProvider({
+      id: 'custom',
+      name: 'Compatible custom provider',
+      getAllKeys: async () => [...values.keys()],
+      getItem: async (key) => values.get(key) ?? null,
+      setItem: async (key, value) => {
+        values.set(key, value);
+      },
+      removeItem: async (key) => {
+        values.delete(key);
+      },
+    });
+    client.connect();
+    socket.onopen?.();
+    socket.onmessage?.({
+      data: JSON.stringify({
+        kind: 'server-hello',
+        accepted: true,
+        protocolVersion: PROTOCOL_VERSION,
+        connectionId: 'connection-1',
+        serverTime: Date.now(),
+      }),
+    });
+    socket.onmessage?.({
+      data: JSON.stringify({
+        kind: 'storage-command',
+        requestId: 'storage-set',
+        providerId: 'custom',
+        operation: 'set',
+        key: 'theme',
+        value: 'light',
+      }),
+    });
+    await vi.waitFor(() =>
+      expect(socket.sent.some((message) => JSON.parse(message).requestId === 'storage-set')).toBe(
+        true,
+      ),
+    );
+    const setResult = socket.sent
+      .map((message) => JSON.parse(message))
+      .find((message) => message.requestId === 'storage-set');
+    expect(setResult.backupId).toMatch(/^storage-backup_/);
+    expect(values.get('theme')).toBe('light');
+
+    socket.onmessage?.({
+      data: JSON.stringify({
+        kind: 'storage-command',
+        requestId: 'storage-restore',
+        providerId: 'custom',
+        operation: 'restore',
+        key: 'theme',
+        backupId: setResult.backupId,
+      }),
+    });
+    await vi.waitFor(() => expect(values.get('theme')).toBe('dark'));
+    expect(
+      socket.sent
+        .map((message) => JSON.parse(message))
+        .find((message) => message.requestId === 'storage-restore'),
+    ).toMatchObject({ success: true, operation: 'restore' });
+
+    socket.onmessage?.({
+      data: JSON.stringify({
+        kind: 'storage-command',
+        requestId: 'storage-replay',
+        providerId: 'custom',
+        operation: 'restore',
+        key: 'theme',
+        backupId: setResult.backupId,
+      }),
+    });
+    await vi.waitFor(() =>
+      expect(
+        socket.sent
+          .map((message) => JSON.parse(message))
+          .find((message) => message.requestId === 'storage-replay'),
+      ).toMatchObject({ success: false }),
+    );
+    client.disconnect();
+  });
+
   it('attaches the previous 20 events and current screen to captured errors', () => {
     vi.useFakeTimers();
     const socket = createSocket();
     const client = new DevToolClient(
       {
         appName: 'Example',
+        appVersion: '2.0.0',
         isDevelopment: true,
         enableErrors: true,
         batchIntervalMs: 10,
@@ -291,8 +436,12 @@ describe('DevToolClient', () => {
       .find((event) => event.category === 'error');
     expect(error?.payload).toMatchObject({
       source: 'react_boundary',
+      classification: 'application',
+      appVersion: '2.0.0',
       screen: 'Checkout',
+      correlations: { route: 'Checkout' },
     });
+    expect(error?.payload['fingerprint']).toMatch(/^[0-9a-f]{16}$/);
     expect(error?.payload['context']).toHaveLength(20);
     client.disconnect();
     vi.useRealTimers();

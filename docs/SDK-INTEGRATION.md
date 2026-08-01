@@ -15,6 +15,7 @@ if (__DEV__) {
     host: Platform.OS === 'android' ? '10.0.2.2' : '127.0.0.1',
     port: 9090,
     appName: 'MyApp',
+    environment: 'development',
     enableConsole: true,
     captureConsoleStackTrace: true,
     maxConsoleEventsPerMinute: 6_000,
@@ -33,6 +34,21 @@ if (__DEV__) {
       fields: ['password', 'otp', 'token'],
       headers: ['authorization', 'cookie'],
       queryParameters: ['api_key'],
+    },
+    categories: {
+      console: true,
+      network: true,
+      redux: true,
+      navigation: true,
+      performance: true,
+      storage: true,
+      error: true,
+    },
+    sampling: {
+      performance: 0.5,
+    },
+    onDroppedEvent(notice) {
+      updateDeveloperDropIndicator(notice);
     },
   }).connect();
 }
@@ -66,26 +82,32 @@ hostname or IP in its subject alternative names. TLS does not replace pairing in
 Without TLS, LAN mode uses plain `ws://`. Keep it on a trusted development network and never commit
 a pairing code, reconnect token, or private key. Loopback remains the default and needs no pairing.
 
-## Persistent device identity
+## Persistent device and session identity
 
 By default, every configured client creates a fresh device ID. To group launches under one stable
 development device, persist an ID through an already-installed storage library:
 
 ```ts
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getOrCreatePulseRNDeviceId, ReactNativeDevTool } from '@pulse-rn/sdk';
+import { getOrCreatePulseRNIdentity, ReactNativeDevTool } from '@pulse-rn/sdk';
 
-const deviceId = await getOrCreatePulseRNDeviceId(AsyncStorage);
+const identity = await getOrCreatePulseRNIdentity(AsyncStorage, {
+  // Keep this stable through Fast Refresh. Change it on a cold launch, logout,
+  // or another application-defined session boundary.
+  lifecycleId: developmentLifecycleId,
+});
 
 ReactNativeDevTool.configure({
   appName: 'MyApp',
-  deviceId,
+  ...identity,
 }).connect();
 ```
 
 The helper has no native dependency of its own. It accepts any object with `getItem` and `setItem`,
-validates an existing ID, and creates one only when missing or malformed. A custom key can be supplied
-as the second argument.
+validates existing values, preserves a device identity, and rotates the session only when the
+lifecycle changes or `newSession: true` is requested. `ReactNativeDevTool.configureWithIdentity`
+combines this step with client configuration. `getOrCreatePulseRNDeviceId` remains available when
+only a stable device ID is required.
 
 `allowInProduction` defaults to false. Leave it disabled. Events created offline remain in a
 bounded queue; the oldest event is dropped when the queue is full. PulseRN also pauses dequeueing
@@ -103,11 +125,20 @@ const client = ReactNativeDevTool.configure({
 });
 
 client.getStats();
+client.getDiagnosticSummary();
+const unsubscribe = client.subscribeConnectionState((state) => {
+  updateConnectionBadge(state);
+});
 ```
 
 Diagnostics distinguish oversized-payload drops from queue-overflow drops and include queue depth,
 sent events/batches, reconnect attempts, socket-buffer bytes, and approximate desktop clock offset.
 `diagnosticsIntervalMs` defaults to 2 seconds. `maxSocketBufferBytes` defaults to 1 MiB.
+
+`validatePulseRNConfig` can validate configuration before creating a client. `environment` supplies
+development-safe defaults, `categories` disables unneeded inspectors, `sampling` accepts per-category
+rates from `0` to `1`, and `onDroppedEvent` reports category-disabled, sampled, payload-budget,
+queue-overflow, and console-rate-limit drops without throwing into application code.
 
 ## Console capture
 
@@ -288,10 +319,17 @@ const unregister = client.registerStorageProvider(createAsyncStorageProvider(Asy
 client.connect();
 ```
 
-The desktop app discovers registered providers and can list, search, read, refresh, update, and delete
-keys. Every update and delete requires an explicit desktop confirmation. JSON values pass through
-configured field redaction before being returned to Electron; editing is disabled when a displayed
-value contains redaction markers so secrets cannot accidentally be overwritten.
+The desktop app discovers registered providers, pages keys in bounded 100-key windows, and retrieves
+values only when selected. It reports provider capabilities and validates JSON, number, boolean, and
+binary values before enabling edits. Every update, delete, and restore requires an explicit desktop
+confirmation. Before a mutation, the SDK keeps the original value in an opaque, single-session
+backup; Electron receives only a single-use backup identifier for undo. Raw backup values never
+enter the desktop database.
+
+Read-only snapshots and audit metadata are stored locally by Electron. JSON values pass through
+configured field redaction before being returned to Electron; editing and snapshots are disabled
+for sensitive, redacted, or binary values. Export includes only values explicitly selected by the
+user and excludes sensitive, redacted, binary, unavailable, or missing values.
 
 MMKV v3/v4 can use the first-class adapter:
 

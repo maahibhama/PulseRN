@@ -38,13 +38,16 @@ import {
   diffStates,
   getActiveRoute,
   getOrCreatePulseRNDeviceId,
+  getOrCreatePulseRNIdentity,
   ReactNativeDevTool,
+  validatePulseRNConfig,
 } from '@pulse-rn/sdk';
 
 const client = ReactNativeDevTool.configure({
   host: '127.0.0.1',
   port: 9090,
   appName: 'MyApp',
+  environment: 'development',
   enableConsole: true,
   maxConsoleEventsPerMinute: 6_000,
   consoleSerialization: {
@@ -54,6 +57,11 @@ const client = ReactNativeDevTool.configure({
   },
   enableNetwork: true,
   enableErrors: true,
+  categories: { console: true, network: true, performance: true },
+  sampling: { performance: 0.5 },
+  onDroppedEvent(notice) {
+    updateDeveloperDropIndicator(notice);
+  },
 });
 
 client.connect();
@@ -67,9 +75,17 @@ Physical devices connect through opt-in LAN mode with a one-time `pairingCode`. 
 storage provider and supply it on later launches. When desktop TLS is configured, set `secure: true`
 to use `wss://`. Never commit pairing credentials or a TLS private key.
 
-Use `getOrCreatePulseRNDeviceId(AsyncStorage)` and pass the result as `deviceId` when device history
-should remain stable across development app launches. The storage library remains an application
-dependency and is not imported eagerly by PulseRN.
+Use `getOrCreatePulseRNIdentity(AsyncStorage, { lifecycleId })` when both device and session identity
+must survive Fast Refresh. Reuse a lifecycle ID while the same development run is active; change it
+on a cold launch, logout, or another application-defined session boundary. Pass `newSession: true`
+to rotate explicitly. `getOrCreatePulseRNDeviceId` remains available when only stable device history
+is needed. The storage library remains an application dependency and is not imported eagerly by
+PulseRN.
+
+`validatePulseRNConfig` validates configuration before use. A client exposes
+`subscribeConnectionState`, `getStats`, and `getDiagnosticSummary` for developer-only status UI.
+Category enablement, deterministic sampling, payload/queue/network budgets, redaction, diagnostic
+callbacks, and dropped-event callbacks are all typed root APIs.
 
 See the repository's [SDK integration guide](https://github.com/maahibhama/PulseRN/blob/main/docs/SDK-INTEGRATION.md)
 for Redux, navigation, AsyncStorage, MMKV, performance, and error-capture examples.

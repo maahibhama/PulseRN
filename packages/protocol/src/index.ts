@@ -245,7 +245,14 @@ export const performanceEventPayloadSchema = z.object({
 });
 export type PerformanceEventPayload = z.infer<typeof performanceEventPayloadSchema>;
 
-export const storageOperationSchema = z.enum(['providers', 'list', 'get', 'set', 'delete']);
+export const storageOperationSchema = z.enum([
+  'providers',
+  'list',
+  'get',
+  'set',
+  'delete',
+  'restore',
+]);
 export type StorageOperation = z.infer<typeof storageOperationSchema>;
 export const storageEventPayloadSchema = z.object({
   requestId: identifier,
@@ -279,13 +286,40 @@ export const errorContextEventSchema = z.object({
 });
 export const errorEventPayloadSchema = z.object({
   source: errorSourceSchema,
+  classification: z
+    .enum(['application', 'sdk', 'debugger', 'connection', 'desktop_internal'])
+    .optional(),
   name: z.string().min(1).max(1_024),
   message: z.string().max(100_000),
+  fingerprint: z.string().min(8).max(128).optional(),
   stack: z.string().max(200_000).optional(),
   componentStack: z.string().max(200_000).optional(),
+  frames: z
+    .array(
+      z.object({
+        functionName: z.string().max(4_096).optional(),
+        file: z.string().max(20_000),
+        line: z.number().int().positive().optional(),
+        column: z.number().int().positive().optional(),
+        application: z.boolean(),
+        symbolicated: z.boolean(),
+      }),
+    )
+    .max(500)
+    .optional(),
   screen: z.string().max(4_096).optional(),
+  appVersion: z.string().max(256).optional(),
   fatal: z.boolean(),
   context: z.array(errorContextEventSchema).max(20),
+  correlations: z
+    .object({
+      route: z.string().max(4_096).optional(),
+      requestId: identifier.optional(),
+      reduxEventId: identifier.optional(),
+      consoleEventId: identifier.optional(),
+      performanceEventId: identifier.optional(),
+    })
+    .optional(),
   metadata: jsonValue.optional(),
 });
 export type ErrorContextEvent = z.infer<typeof errorContextEventSchema>;
@@ -400,6 +434,7 @@ export const storageCommandSchema = z.object({
   value: z.string().max(1_000_000).optional(),
   cursor: z.string().max(100).optional(),
   limit: z.number().int().min(1).max(500).optional(),
+  backupId: identifier.optional(),
 });
 export type StorageCommand = z.infer<typeof storageCommandSchema>;
 
@@ -414,13 +449,15 @@ export const storageResultSchema = z.object({
       z.object({
         id: identifier,
         name: z.string().min(1).max(1_024),
-        capabilities: z.object({
-          paginatedKeys: z.boolean(),
-          lazyValues: z.boolean(),
-          mutations: z.boolean(),
-          typedValues: z.boolean(),
-          snapshots: z.boolean(),
-        }),
+        capabilities: z
+          .object({
+            paginatedKeys: z.boolean(),
+            lazyValues: z.boolean(),
+            mutations: z.boolean(),
+            typedValues: z.boolean(),
+            snapshots: z.boolean(),
+          })
+          .optional(),
       }),
     )
     .max(100)
@@ -444,6 +481,7 @@ export const storageResultSchema = z.object({
   valueType: z.enum(['string', 'number', 'boolean', 'json', 'binary', 'unknown']).optional(),
   sensitive: z.boolean().optional(),
   redacted: z.boolean().optional(),
+  backupId: identifier.optional(),
   error: z.string().max(10_000).optional(),
 });
 export type StorageResult = z.infer<typeof storageResultSchema>;

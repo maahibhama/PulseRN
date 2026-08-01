@@ -2,15 +2,15 @@
 
 PulseRN publishes desktop applications through
 [GitHub Releases](https://github.com/maahibhama/PulseRN/releases). Every release includes a
-`SHA256SUMS.txt` file for artifact verification.
+`SHA256SUMS.txt`, `SBOM.spdx.json`, `ARCHITECTURES.json`, and GitHub artifact provenance for
+verification.
 
 > Preview releases are unsigned. macOS Gatekeeper and Windows SmartScreen warnings are expected.
 > Signed and notarized packages are planned before the stable release.
 
 Unsigned preview builds deliberately disable automatic installation. Use GitHub Releases or
 Homebrew to upgrade them. Once maintainers activate the documented signing secrets, eligible
-packaged builds expose update checks and confirmed installation under **Settings → Software
-updates**.
+packaged builds expose update checks and confirmed installation under **Settings → Updates**.
 
 ## Homebrew
 
@@ -89,8 +89,14 @@ On macOS:
 shasum --algorithm 256 --check SHA256SUMS.txt
 ```
 
-The checksum file covers all five desktop artifacts, so tools report missing files when only one
+The checksum file covers all eight desktop artifacts, so tools report missing files when only one
 installer was downloaded. The checksum for the downloaded installer must report `OK`.
+
+With GitHub CLI installed, verify build provenance:
+
+```bash
+gh attestation verify PulseRN-<version>-mac-arm64.dmg --repo maahibhama/PulseRN
+```
 
 ## Connecting an application
 

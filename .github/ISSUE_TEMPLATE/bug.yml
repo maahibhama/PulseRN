@@ -1,0 +1,33 @@
+name: Bug report
+description: Report a reproducible PulseRN problem without private captured data.
+title: '[Bug]: '
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Never attach secrets, pairing credentials, private archives, or unredacted app data.
+  - type: input
+    id: version
+    attributes:
+      label: PulseRN desktop and SDK versions
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options: [macOS Apple Silicon, macOS Intel, Windows x64, Windows ARM64, Linux x64]
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Provide minimal, sanitized steps and expected/actual behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Sanitized diagnostics
+      description: Include React Native, Expo/CLI, Hermes, architecture, and connection details.

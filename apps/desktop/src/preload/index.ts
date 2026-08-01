@@ -14,6 +14,7 @@ const SNAPSHOT_CHANNEL = 'pulse-rn:snapshot';
 const DEVICES_CHANNEL = 'pulse-rn:devices';
 const EVENTS_CHANNEL = 'pulse-rn:events';
 const STORAGE_CHANNEL = 'pulse-rn:storage';
+const STORAGE_LOCAL_CHANNEL = 'pulse-rn:storage-local';
 const SETTINGS_CHANNEL = 'pulse-rn:settings';
 const DEBUGGER_CHANNEL = 'pulse-rn:debugger';
 const CONNECTION_CHANNEL = 'pulse-rn:connection';
@@ -146,6 +147,39 @@ const storageRequestSchema = z.object({
   value: z.string().max(1_000_000).optional(),
   cursor: z.string().max(100).optional(),
   limit: z.number().int().min(1).max(500).optional(),
+  backupId: z.string().trim().min(1).max(256).optional(),
+});
+const storageIdentitySchema = z.object({
+  connectionId: z.string().trim().min(1).max(256),
+  providerId: z.string().trim().min(1).max(256),
+  key: z.string().max(10_000),
+});
+const storageAuditSchema = z.object({
+  id: z.string(),
+  connectionId: z.string(),
+  providerId: z.string(),
+  key: z.string(),
+  operation: z.enum(['set', 'delete', 'restore']),
+  success: z.boolean(),
+  createdAt: z.number().finite().nonnegative(),
+  backupId: z.string().optional(),
+  error: z.string().optional(),
+});
+const storageSnapshotSchema = z.object({
+  id: z.string(),
+  connectionId: z.string(),
+  providerId: z.string(),
+  key: z.string(),
+  value: z.string(),
+  valueType: z.enum(['string', 'number', 'boolean', 'json', 'binary', 'unknown']),
+  valueSize: z.number().int().nonnegative(),
+  createdAt: z.number().finite().nonnegative(),
+});
+const storageExportResultSchema = z.object({
+  canceled: z.boolean(),
+  filePath: z.string().optional(),
+  exported: z.number().int().nonnegative(),
+  excluded: z.number().int().nonnegative(),
 });
 const settingsSchema = z.object({
   theme: z.enum(['system', 'dark', 'light']),
@@ -157,6 +191,24 @@ const settingsSchema = z.object({
   tlsEnabled: z.boolean(),
   eventRetentionDays: z.number().int().min(1).max(365),
   maxStoredEvents: z.number().int().min(1_000).max(1_000_000),
+  consoleCaptureLimit: z.number().int().min(1).max(100_000),
+  networkBodyCaptureBytes: z
+    .number()
+    .int()
+    .min(0)
+    .max(16 * 1024 * 1024),
+  diagnosticsIntervalMs: z.number().int().min(250).max(60_000),
+  redactionFields: z.array(z.string().trim().min(1).max(128)).max(100),
+  performanceFpsThreshold: z.number().min(1).max(120),
+  performanceStallThresholdMs: z.number().int().min(1).max(60_000),
+  performanceScreenThresholdMs: z.number().int().min(1).max(120_000),
+  performanceNetworkThresholdMs: z.number().int().min(1).max(120_000),
+  performanceMemoryGrowthMb: z.number().min(1).max(10_000),
+  pairingCodeLifetimeMinutes: z.number().int().min(1).max(30),
+  pairingRetryLimit: z.number().int().min(1).max(20),
+  updateChannel: z.enum(['stable', 'beta']),
+  motion: z.enum(['system', 'reduced', 'full']),
+  onboardingDismissed: z.boolean(),
   checkForUpdatesAutomatically: z.boolean(),
   launchAtLogin: z.boolean(),
   keepRunningInBackground: z.boolean(),
@@ -256,7 +308,15 @@ const remoteValueSchema = z.object({
   objectId: z.string().optional(),
 });
 const debuggerStateSchema = z.object({
-  status: z.enum(['disconnected', 'discovering', 'connecting', 'connected', 'paused', 'error']),
+  status: z.enum([
+    'disconnected',
+    'discovering',
+    'connecting',
+    'reconnecting',
+    'connected',
+    'paused',
+    'error',
+  ]),
   targets: z.array(
     z.object({
       id: z.string(),
@@ -274,6 +334,7 @@ const debuggerStateSchema = z.object({
       name: z.string(),
       internal: z.boolean(),
       original: z.boolean(),
+      group: z.string().optional(),
     }),
   ),
   breakpoints: z.array(
@@ -282,6 +343,9 @@ const debuggerStateSchema = z.object({
       appId: z.string().optional(),
       enabled: z.boolean(),
       condition: z.string().optional(),
+      hitCondition: z.number().int().positive().optional(),
+      logMessage: z.string().optional(),
+      hitCount: z.number().int().nonnegative().optional(),
       verified: z.boolean(),
       error: z.string().optional(),
     }),
@@ -310,6 +374,13 @@ const debuggerStateSchema = z.object({
     }),
   ),
   pauseOnExceptions: z.enum(['none', 'uncaught', 'all']),
+  blackboxInternal: z.boolean(),
+  capabilities: z.object({
+    asyncStacks: z.boolean(),
+    pauseOnExceptions: z.boolean(),
+    blackboxing: z.boolean(),
+    logpoints: z.boolean(),
+  }),
   pauseReason: z.string().optional(),
   error: z.string().optional(),
 });
@@ -512,6 +583,47 @@ const api: PulseRNDesktopApi = {
     const value: unknown = await ipcRenderer.invoke(STORAGE_CHANNEL, request);
     return storageResultSchema.parse(value);
   },
+  async listStorageAudit() {
+    const value: unknown = await ipcRenderer.invoke(STORAGE_LOCAL_CHANNEL, {
+      operation: 'audit',
+    });
+    return z.array(storageAuditSchema).max(500).parse(value);
+  },
+  async createStorageSnapshot(input) {
+    const request = storageIdentitySchema.parse(input);
+    const value: unknown = await ipcRenderer.invoke(STORAGE_LOCAL_CHANNEL, {
+      operation: 'snapshot-create',
+      ...request,
+    });
+    return storageSnapshotSchema.parse(value);
+  },
+  async listStorageSnapshots(providerId, key) {
+    const request = z
+      .object({
+        providerId: z.string().trim().min(1).max(256).optional(),
+        key: z.string().max(10_000).optional(),
+      })
+      .parse({ providerId, key });
+    const value: unknown = await ipcRenderer.invoke(STORAGE_LOCAL_CHANNEL, {
+      operation: 'snapshot-list',
+      ...request,
+    });
+    return z.array(storageSnapshotSchema).max(500).parse(value);
+  },
+  async deleteStorageSnapshot(id) {
+    const value: unknown = await ipcRenderer.invoke(STORAGE_LOCAL_CHANNEL, {
+      operation: 'snapshot-delete',
+      id: z.string().trim().min(1).max(256).parse(id),
+    });
+    return z.boolean().parse(value);
+  },
+  async exportStorageValues(items) {
+    const value: unknown = await ipcRenderer.invoke(STORAGE_LOCAL_CHANNEL, {
+      operation: 'export',
+      items: z.array(storageIdentitySchema).min(1).max(100).parse(items),
+    });
+    return storageExportResultSchema.parse(value);
+  },
   async getSettings() {
     const value: unknown = await ipcRenderer.invoke(SETTINGS_CHANNEL);
     return settingsSchema.parse(value);
@@ -628,7 +740,11 @@ const api: PulseRNDesktopApi = {
       await invokeDebugger({
         operation: 'addBreakpoint',
         ...debuggerLocationSchema
-          .extend({ condition: z.string().max(10_000).optional() })
+          .extend({
+            condition: z.string().max(10_000).optional(),
+            hitCondition: z.number().int().positive().max(1_000_000).optional(),
+            logMessage: z.string().max(10_000).optional(),
+          })
           .parse(input),
       }),
     );
@@ -691,6 +807,14 @@ const api: PulseRNDesktopApi = {
       await invokeDebugger({
         operation: 'pauseOnExceptions',
         mode: z.enum(['none', 'uncaught', 'all']).parse(mode),
+      }),
+    );
+  },
+  async setDebuggerBlackboxInternal(enabled) {
+    return debuggerStateSchema.parse(
+      await invokeDebugger({
+        operation: 'blackboxInternal',
+        enabled: z.boolean().parse(enabled),
       }),
     );
   },

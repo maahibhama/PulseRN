@@ -49,10 +49,17 @@ latest-mac.yml
 latest.yml
 latest-linux.yml
 SHA256SUMS.txt
+SBOM.spdx.json
+ARCHITECTURES.json
 ```
 
 The publishing job runs only after verification and every platform package succeeds. It confirms
-the complete artifact set before creating the GitHub Release.
+the complete artifact set, generates an SPDX SBOM and architecture report, and records GitHub
+artifact provenance attestations before creating the GitHub Release. Verify an attestation with:
+
+```bash
+gh attestation verify PulseRN-<version>-mac-arm64.dmg --repo maahibhama/PulseRN
+```
 
 ## Local packaging
 
@@ -93,9 +100,10 @@ Missing or partial credentials produce an unsigned preview with in-app installat
 than silently enabling an unsafe updater.
 
 `latest-mac.yml`, `latest.yml`, `latest-linux.yml`, blockmaps, and macOS ZIP payloads are uploaded
-with the installers. Signed macOS and Windows x64 builds, plus Linux release packages, can check
-these GitHub Release files. Windows ARM64 remains manually upgradable until a separately validated
-ARM64 update channel is added.
+with the installers. Only credential-verified signed macOS and Windows x64 builds enable in-app
+updates. Stable and beta channels reject malformed versions, downgrades, cross-channel metadata,
+and mismatched downloaded metadata. Linux and Windows ARM64 remain manually upgradable until
+separately signed update channels are validated.
 
 # SDK releases
 

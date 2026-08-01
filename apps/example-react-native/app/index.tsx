@@ -83,6 +83,7 @@ export default function HomeScreen() {
       ...(pairingCode ? { pairingCode } : {}),
       ...(reconnectToken ? { reconnectToken } : {}),
       appName: 'PulseRN Example',
+      environment: 'development',
       appId: 'dev.pulsern.example',
       appVersion: Constants.expoConfig?.version,
       device: {
@@ -114,6 +115,16 @@ export default function HomeScreen() {
       captureMemory: true,
       enableStorage: true,
       enableErrors: true,
+      categories: {
+        console: true,
+        network: true,
+        redux: true,
+        navigation: true,
+        performance: true,
+        storage: true,
+        error: true,
+      },
+      sampling: { performance: 1, console: 1, network: 1 },
     });
     const unregisterStorage = client.registerStorageProvider(
       createAsyncStorageProvider(AsyncStorage),
