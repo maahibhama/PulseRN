@@ -8,7 +8,7 @@
 
 PulseRN is an open-source desktop debugging foundation for React Native. Its central idea is a unified, chronological timeline that will correlate app interactions, navigation, Redux, network, rendering, performance, and errors.
 
-> Status: Phase 10. The inspectors are working, with scalable persistence and transport hardening now in progress.
+> Status: Phase 10 complete. The inspectors, scalable persistence, transport hardening, sustained-load checks, and Electron acceptance coverage are working.
 
 ## What works today
 
@@ -200,6 +200,7 @@ Open **Settings** in the Electron sidebar to configure:
 - Comfortable or compact interface density
 - Newest-first or oldest-first timeline ordering
 - Local Metro discovery port for the Hermes debugger
+- Event retention period, maximum stored events, maintenance, and history deletion
 - Launch at login on packaged macOS builds
 - Whether closing the window keeps PulseRN running in the background
 

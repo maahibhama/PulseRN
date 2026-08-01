@@ -1,4 +1,4 @@
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme } from 'electron';
 import { eventCategorySchema, storageOperationSchema } from '@pulse-rn/protocol';
 import { z } from 'zod';
@@ -16,6 +16,18 @@ const SETTINGS_CHANNEL = 'pulse-rn:settings';
 const DEBUGGER_CHANNEL = 'pulse-rn:debugger';
 const DARK_APP_ICON = join(__dirname, '../../resources/pulse-rn-app-icon-dark.png');
 const LIGHT_APP_ICON = join(__dirname, '../../resources/pulse-rn-app-icon-light.png');
+const e2eUserDataDirectory = process.env['PULSE_RN_E2E_USER_DATA_DIR'];
+if (!app.isPackaged && e2eUserDataDirectory && isAbsolute(e2eUserDataDirectory)) {
+  app.setPath('userData', e2eUserDataDirectory);
+}
+const configuredServerPort = Number(process.env['PULSE_RN_E2E_SERVER_PORT']);
+const serverPort =
+  !app.isPackaged &&
+  Number.isInteger(configuredServerPort) &&
+  configuredServerPort >= 1_024 &&
+  configuredServerPort <= 65_535
+    ? configuredServerPort
+    : 9090;
 const storageRequestSchema = z.object({
   connectionId: z.string().trim().min(1).max(256),
   providerId: z.string().trim().min(1).max(256),
@@ -290,7 +302,7 @@ app.whenReady().then(async () => {
         return debuggerManager.setPauseOnExceptions(input.mode);
     }
   });
-  server = new DevToolWebSocketServer(9090, {
+  server = new DevToolWebSocketServer(serverPort, {
     onConnected(device) {
       database?.recordSession(device);
       sessions.connect(device);

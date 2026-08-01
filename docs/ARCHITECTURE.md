@@ -40,6 +40,11 @@ databases and maintain session metadata. Timeline and category inspectors read d
 pages through a validated preload boundary. Category inspectors query only the histories they need,
 while the bounded in-memory projection drives live connection updates.
 
+The desktop acceptance harness launches the production renderer in the real Electron runtime and
+drives it through Chromium's loopback debugging endpoint. It verifies sandbox isolation, the narrow
+preload API, SDK WebSocket ingestion, persisted pagination, inspector navigation, settings, and
+maintenance. A separate 25,000-event load test traverses every cursor page before enforcing retention.
+
 ## Package responsibilities
 
 - `apps/desktop`: Electron main, preload, React renderer, local persistence, and connection server.

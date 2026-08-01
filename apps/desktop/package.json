@@ -21,6 +21,7 @@
     "pack": "pnpm build && electron-builder --dir",
     "preview": "electron-vite preview",
     "test": "vitest run",
+    "test:e2e": "pnpm build && node test/e2e/electron-smoke.mjs",
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit"
   },
   "dependencies": {
