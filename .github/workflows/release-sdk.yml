@@ -7,8 +7,8 @@ on:
       - 'sdk-v[0-9]+.[0-9]+.[0-9]+-*'
   workflow_dispatch:
     inputs:
-      release_tag:
-        description: Existing SDK version tag to verify and publish
+      version:
+        description: SDK version to prepare and publish (for example 1.0.3)
         required: true
         type: string
 
@@ -18,15 +18,72 @@ permissions:
 env:
   NODE_VERSION: '22'
   PNPM_VERSION: '10.14.0'
-  RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
 
 jobs:
-  verify:
+  prepare:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      release_tag: ${{ steps.release.outputs.release_tag }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.release_tag || github.ref }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.ref_name || github.ref }}
+          fetch-depth: 0
+
+      - id: release
+        name: Resolve or prepare SDK release tag
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            version="${REQUESTED_VERSION#sdk-v}"
+            version="${version#v}"
+            if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+              echo "::error::Version must use the form X.Y.Z or X.Y.Z-prerelease."
+              exit 1
+            fi
+            echo "version=$version" >> "$GITHUB_OUTPUT"
+            echo "release_tag=sdk-v$version" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${GITHUB_REF_NAME#sdk-v}" >> "$GITHUB_OUTPUT"
+            echo "release_tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: pnpm/action-setup@v4
+        if: github.event_name == 'workflow_dispatch'
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        if: github.event_name == 'workflow_dispatch'
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - if: github.event_name == 'workflow_dispatch'
+        run: pnpm install --frozen-lockfile
+
+      - name: Commit SDK version and create tag
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          pnpm release:sdk "$VERSION" --yes --skip-checks
+
+  verify:
+    needs: prepare
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.release_tag }}
       - uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
@@ -43,16 +100,18 @@ jobs:
       - run: pnpm release:verify:sdk "${RELEASE_TAG}"
 
   publish:
-    needs: verify
+    needs: [prepare, verify]
     runs-on: ubuntu-latest
     environment: npm
+    env:
+      RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
     permissions:
       contents: read
       id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.release_tag || github.ref }}
+          ref: ${{ needs.prepare.outputs.release_tag }}
       - uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
