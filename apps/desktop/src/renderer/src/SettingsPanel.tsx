@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react';
-import type { AppSettings, ConnectionInfo, DatabaseMaintenanceReport } from '../../preload/api.js';
+import type {
+  AppSettings,
+  ConnectionInfo,
+  DatabaseMaintenanceReport,
+  DesktopUpdateState,
+} from '../../preload/api.js';
 import darkAppIcon from '../../../resources/pulse-rn-app-icon-dark.png';
 import lightAppIcon from '../../../resources/pulse-rn-app-icon-light.png';
 import darkLogo from '../../../resources/pulse-rn-dark.png';
@@ -44,6 +49,8 @@ export function SettingsPanel({ resolvedTheme, settings, onChange }: SettingsPan
   const [maintaining, setMaintaining] = useState(false);
   const [connection, setConnection] = useState<ConnectionInfo>();
   const [connectionError, setConnectionError] = useState('');
+  const [updateState, setUpdateState] = useState<DesktopUpdateState>();
+  const [updateError, setUpdateError] = useState('');
 
   useEffect(() => {
     void window.pulseRN
@@ -55,6 +62,16 @@ export function SettingsPanel({ resolvedTheme, settings, onChange }: SettingsPan
         ),
       );
     return window.pulseRN.onConnectionInfo(setConnection);
+  }, []);
+
+  useEffect(() => {
+    void window.pulseRN
+      .getUpdateState()
+      .then(setUpdateState)
+      .catch((error: unknown) =>
+        setUpdateError(error instanceof Error ? error.message : 'Unable to load update status.'),
+      );
+    return window.pulseRN.onUpdateState(setUpdateState);
   }, []);
 
   const copyAccessToken = async () => {
@@ -122,6 +139,21 @@ export function SettingsPanel({ resolvedTheme, settings, onChange }: SettingsPan
       setMaintenanceError(error instanceof Error ? error.message : 'Database operation failed.');
     } finally {
       setMaintaining(false);
+    }
+  };
+
+  const runUpdateOperation = async (operation: 'check' | 'download' | 'install'): Promise<void> => {
+    setUpdateError('');
+    try {
+      const next =
+        operation === 'check'
+          ? await window.pulseRN.checkForUpdates()
+          : operation === 'download'
+            ? await window.pulseRN.downloadUpdate()
+            : await window.pulseRN.installUpdate();
+      setUpdateState(next);
+    } catch (error) {
+      setUpdateError(error instanceof Error ? error.message : 'Update operation failed.');
     }
   };
 
@@ -378,6 +410,66 @@ export function SettingsPanel({ resolvedTheme, settings, onChange }: SettingsPan
               <option value="oldest">Oldest first</option>
             </select>
           </label>
+        </section>
+
+        <section className="settings-card">
+          <header>
+            <strong>Software updates</strong>
+            <small>PulseRN {updateState?.currentVersion ?? '—'}</small>
+          </header>
+          <Toggle
+            checked={settings.checkForUpdatesAutomatically}
+            description="Check GitHub Releases after PulseRN starts. Downloads and installation still require your approval."
+            label="Check automatically"
+            onChange={(checkForUpdatesAutomatically) =>
+              void onChange({ checkForUpdatesAutomatically })
+            }
+          />
+          <div className="update-status-row">
+            <span>
+              <strong>
+                {updateState?.status === 'available'
+                  ? `Version ${updateState.availableVersion ?? ''} is available`
+                  : updateState?.status === 'downloaded'
+                    ? 'Ready to install'
+                    : updateState?.status === 'downloading'
+                      ? 'Downloading update'
+                      : updateState?.status === 'checking'
+                        ? 'Checking for updates'
+                        : updateState?.status === 'up-to-date'
+                          ? 'PulseRN is up to date'
+                          : updateState?.status === 'error'
+                            ? 'Update check failed'
+                            : updateState?.enabled
+                              ? 'Ready to check'
+                              : 'Automatic installation unavailable'}
+              </strong>
+              <small>{updateError || updateState?.message}</small>
+              {updateState?.status === 'downloading' && (
+                <progress max={100} value={updateState.progress ?? 0} />
+              )}
+            </span>
+            <div className="connection-actions">
+              {updateState?.status === 'available' ? (
+                <button onClick={() => void runUpdateOperation('download')}>Download</button>
+              ) : updateState?.status === 'downloaded' ? (
+                <button onClick={() => void runUpdateOperation('install')}>
+                  Restart and install
+                </button>
+              ) : (
+                <button
+                  disabled={
+                    !updateState?.enabled ||
+                    updateState.status === 'checking' ||
+                    updateState.status === 'downloading'
+                  }
+                  onClick={() => void runUpdateOperation('check')}
+                >
+                  Check now
+                </button>
+              )}
+            </div>
+          </div>
         </section>
 
         <section className="settings-card">

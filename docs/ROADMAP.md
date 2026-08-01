@@ -13,5 +13,6 @@
 - **Phase 11 — Session portability (complete):** opt-in persistent SDK device identity, a stored-session browser, versioned session archives, schema-validated imports, native export/import dialogs, duplicate-safe restoration, and retained-count reconciliation.
 - **Phase 12 — Authenticated LAN access (complete):** loopback-safe defaults, explicit LAN opt-in, 256-bit user-only access tokens, constant-time handshake authentication, token copy/rotation controls, configurable server port, trusted-network warnings, and physical-device configuration.
 - **Phase 13 — Optional TLS transport (complete):** user-supplied certificate/private-key validation, user-only credential storage, `wss://` device transport, certificate metadata and replacement controls, fail-closed startup recovery, SDK/example secure configuration, and encrypted authenticated LAN handshakes.
+- **Phase 14 — Secure desktop updates (complete):** signing-aware packaged builds, macOS hardened-runtime entitlements and notarization readiness, Windows Authenticode readiness, published updater metadata and macOS ZIP payloads, guarded update checks, explicit downloads, progress reporting, and confirmed restart/install. Unsigned previews remain update-disabled.
 
-Later phases add signed update delivery.
+Later phases expand interaction and React render profiling.

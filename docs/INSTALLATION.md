@@ -7,6 +7,11 @@ PulseRN publishes desktop applications through
 > Preview releases are unsigned. macOS Gatekeeper and Windows SmartScreen warnings are expected.
 > Signed and notarized packages are planned before the stable release.
 
+Unsigned preview builds deliberately disable automatic installation. Use GitHub Releases or
+Homebrew to upgrade them. Once maintainers activate the documented signing secrets, eligible
+packaged builds expose update checks and confirmed installation under **Settings → Software
+updates**.
+
 ## Homebrew
 
 Add the repository as a custom tap and install the Cask without quarantine:

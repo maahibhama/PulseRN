@@ -1,11 +1,14 @@
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import electronPath from 'electron';
 import WebSocket from 'ws';
 
 const desktopDirectory = join(import.meta.dirname, '../..');
+const desktopVersion = JSON.parse(
+  readFileSync(join(desktopDirectory, 'package.json'), 'utf8'),
+).version;
 const userDataDirectory = mkdtempSync(join(tmpdir(), 'pulse-rn-electron-e2e-'));
 const debuggingPort = 19_223;
 const serverPort = 19_090;
@@ -243,6 +246,13 @@ try {
     'A fresh profile unexpectedly reported TLS credentials.',
   );
   assert(connectionInfo.accessToken === undefined, 'Connection info leaked the access token.');
+  const updateState = await cdp.evaluate('window.pulseRN.getUpdateState()');
+  assert(updateState.enabled === false, 'Development build unexpectedly enabled installation.');
+  assert(updateState.status === 'disabled', 'Development updater did not fail closed.');
+  assert(
+    updateState.currentVersion === desktopVersion,
+    'Application version did not cross the update preload boundary.',
+  );
   const maintenance = await cdp.evaluate('window.pulseRN.runDatabaseMaintenance()');
   assert(maintenance.retainedEvents === 600, 'Database maintenance lost retained events.');
 

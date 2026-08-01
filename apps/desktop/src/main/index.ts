@@ -2,6 +2,7 @@ import { isAbsolute, join } from 'node:path';
 import { readFile, stat, writeFile } from 'node:fs/promises';
 import { networkInterfaces } from 'node:os';
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme } from 'electron';
+import electronUpdater from 'electron-updater';
 import { eventCategorySchema, storageOperationSchema } from '@pulse-rn/protocol';
 import { z } from 'zod';
 import { EventDatabase } from './database.js';
@@ -16,6 +17,7 @@ import {
 } from './session-archive.js';
 import { AccessTokenStore } from './access-token.js';
 import { TlsCertificateStore } from './tls-certificate.js';
+import { UpdateManager, type DesktopUpdaterAdapter } from './update-manager.js';
 
 const SNAPSHOT_CHANNEL = 'pulse-rn:snapshot';
 const DEVICES_CHANNEL = 'pulse-rn:devices';
@@ -24,6 +26,7 @@ const STORAGE_CHANNEL = 'pulse-rn:storage';
 const SETTINGS_CHANNEL = 'pulse-rn:settings';
 const DEBUGGER_CHANNEL = 'pulse-rn:debugger';
 const CONNECTION_CHANNEL = 'pulse-rn:connection';
+const UPDATE_CHANNEL = 'pulse-rn:update';
 const DARK_APP_ICON = join(__dirname, '../../resources/pulse-rn-app-icon-dark.png');
 const LIGHT_APP_ICON = join(__dirname, '../../resources/pulse-rn-app-icon-light.png');
 const e2eUserDataDirectory = process.env['PULSE_RN_E2E_USER_DATA_DIR'];
@@ -74,6 +77,8 @@ let settingsStore: SettingsStore | undefined;
 let debuggerManager: DebuggerManager | undefined;
 let accessTokenStore: AccessTokenStore | undefined;
 let tlsCertificateStore: TlsCertificateStore | undefined;
+let updateManager: UpdateManager | undefined;
+let automaticUpdateTimer: ReturnType<typeof setTimeout> | undefined;
 let isQuitting = false;
 let lastDatabaseMaintenanceAt = 0;
 
@@ -108,6 +113,21 @@ async function readTlsCredentialFile(path: string): Promise<Buffer> {
     throw new Error('TLS certificate and key selections must be files no larger than 1 MiB.');
   }
   return readFile(path);
+}
+
+async function isAutoUpdateBuild(): Promise<boolean> {
+  if (!app.isPackaged) return false;
+  try {
+    const metadata: unknown = JSON.parse(
+      await readFile(join(app.getAppPath(), 'package.json'), 'utf8'),
+    );
+    return z
+      .object({ pulseRNAutoUpdate: z.literal(true) })
+      .passthrough()
+      .safeParse(metadata).success;
+  } catch {
+    return false;
+  }
 }
 
 function connectionInfo(revealToken = false) {
@@ -245,6 +265,20 @@ app.whenReady().then(async () => {
   tlsCertificateStore = new TlsCertificateStore(
     join(app.getPath('userData'), 'tls', 'certificate.pem'),
     join(app.getPath('userData'), 'tls', 'private-key.pem'),
+  );
+  const autoUpdateBuild = await isAutoUpdateBuild();
+  updateManager = new UpdateManager(
+    electronUpdater.autoUpdater as unknown as DesktopUpdaterAdapter,
+    {
+      enabled: autoUpdateBuild,
+      currentVersion: app.getVersion(),
+      disabledReason: app.isPackaged
+        ? 'This unsigned preview cannot install updates automatically. Download the latest release from GitHub.'
+        : 'Automatic updates are available only in signed packaged builds.',
+      onState(state) {
+        if (window && !window.isDestroyed()) window.webContents.send(UPDATE_CHANNEL, state);
+      },
+    },
   );
   debuggerManager = new DebuggerManager(
     join(app.getPath('userData'), 'debugger.json'),
@@ -407,6 +441,13 @@ app.whenReady().then(async () => {
     nativeTheme.themeSource = settings.theme;
     applyAppIcon(settings.theme);
     if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: settings.launchAtLogin });
+    if (
+      settings.checkForUpdatesAutomatically &&
+      !previous.checkForUpdatesAutomatically &&
+      updateManager?.snapshot().enabled
+    ) {
+      void updateManager.check();
+    }
     maintainDatabase(true);
     if (window && !window.isDestroyed()) window.webContents.send(SETTINGS_CHANNEL, settings);
     return settings;
@@ -532,6 +573,41 @@ app.whenReady().then(async () => {
     }
     return connectionInfo(input.operation === 'revealToken');
   });
+  ipcMain.handle(UPDATE_CHANNEL, async (_event, value?: unknown) => {
+    if (!updateManager) throw new Error('PulseRN updates are not ready.');
+    const input = z
+      .discriminatedUnion('operation', [
+        z.object({ operation: z.literal('state') }),
+        z.object({ operation: z.literal('check') }),
+        z.object({ operation: z.literal('download') }),
+        z.object({ operation: z.literal('install') }),
+      ])
+      .parse(value ?? { operation: 'state' });
+    if (input.operation === 'state') return updateManager.snapshot();
+    if (input.operation === 'check') return updateManager.check();
+    if (input.operation === 'download') return updateManager.download();
+    const confirmation = window
+      ? await dialog.showMessageBox(window, {
+          type: 'info',
+          title: 'Install PulseRN update',
+          message: 'Restart PulseRN and install the downloaded update?',
+          detail: 'Connected devices will disconnect while the application restarts.',
+          buttons: ['Cancel', 'Restart and install'],
+          defaultId: 1,
+          cancelId: 0,
+          noLink: true,
+        })
+      : await dialog.showMessageBox({
+          type: 'info',
+          title: 'Install PulseRN update',
+          message: 'Restart PulseRN and install the downloaded update?',
+          buttons: ['Cancel', 'Restart and install'],
+          defaultId: 1,
+          cancelId: 0,
+        });
+    if (confirmation.response !== 1) return updateManager.snapshot();
+    return updateManager.install();
+  });
   ipcMain.handle(DEBUGGER_CHANNEL, async (_event, value?: unknown) => {
     if (!debuggerManager) throw new Error('PulseRN debugger is not ready.');
     const input = z
@@ -610,6 +686,9 @@ app.whenReady().then(async () => {
   });
   await restartServer();
   createWindow();
+  if (initialSettings.checkForUpdatesAutomatically && updateManager.snapshot().enabled) {
+    automaticUpdateTimer = setTimeout(() => void updateManager?.check(), 5_000);
+  }
   app.on('activate', () => {
     if (window && !window.isDestroyed()) window.show();
     else createWindow();
@@ -628,6 +707,8 @@ app.on('before-quit', () => {
   ipcMain.removeHandler(SETTINGS_CHANNEL);
   ipcMain.removeHandler(DEBUGGER_CHANNEL);
   ipcMain.removeHandler(CONNECTION_CHANNEL);
+  ipcMain.removeHandler(UPDATE_CHANNEL);
+  if (automaticUpdateTimer) clearTimeout(automaticUpdateTimer);
   nativeTheme.removeListener('updated', handleNativeThemeUpdated);
   void server?.close();
   debuggerManager?.close();

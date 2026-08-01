@@ -8,7 +8,7 @@
 
 PulseRN is an open-source desktop debugging foundation for React Native. Its central idea is a unified, chronological timeline that will correlate app interactions, navigation, Redux, network, rendering, performance, and errors.
 
-> Status: Phase 13 complete. The inspectors, scalable persistence, session portability, authenticated LAN access, optional TLS transport, sustained-load checks, and Electron acceptance coverage are working.
+> Status: Phase 14 complete. The inspectors, scalable persistence, session portability, authenticated LAN/TLS transport, signing-ready releases, guarded desktop updates, sustained-load checks, and Electron acceptance coverage are working.
 
 ## What works today
 
@@ -20,6 +20,7 @@ PulseRN is an open-source desktop debugging foundation for React Native. Its cen
 - SQLite event persistence with configurable age/count retention and recovery cleanup
 - Cursor-paginated unified timeline and category inspectors with bounded timeline virtualization
 - Versioned, validated session archive import/export through native file dialogs
+- Guarded desktop update checks, explicit download/install controls, and signing-aware release builds
 - Console interception for log, info, warn, error, and debug
 - Console filtering, search, pause, clear, payload expansion, copy, source, and stack inspection
 - Fetch and XMLHttpRequest inspection with optional Axios interceptors
@@ -211,6 +212,7 @@ Open **Settings** in the Electron sidebar to configure:
 - Local Metro discovery port for the Hermes debugger
 - Debugger server port, authenticated LAN access, access-token rotation, and TLS certificate
   configuration
+- Signed-build update checks, download progress, and confirmed restart/install
 - Event retention period, maximum stored events, maintenance, and history deletion
 - Launch at login on packaged macOS builds
 - Whether closing the window keeps PulseRN running in the background
@@ -235,6 +237,8 @@ controls, keyboard shortcuts, examples, and current limitations.
 
 - TLS requires a user-supplied certificate and private key; PulseRN does not create or install a
   trusted certificate authority on mobile devices.
+- Automatic installation remains disabled in development and unsigned preview builds. Maintainers
+  must configure the documented Apple and Windows signing secrets before publishing signed updates.
 - Live updates keep a bounded 2,000-event projection in memory; inspectors page older retained history from SQLite.
 - The Expo example uses prebuild; the Community CLI example includes committed native iOS and Android projects.
 - Console fields, network headers, URL query parameters, and structured request/response fields are redacted before transmission.

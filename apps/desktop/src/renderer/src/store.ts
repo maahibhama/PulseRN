@@ -25,6 +25,7 @@ export const useDesktopStore = create<DesktopState>((set) => ({
     tlsEnabled: false,
     eventRetentionDays: 30,
     maxStoredEvents: 100_000,
+    checkForUpdatesAutomatically: true,
     launchAtLogin: false,
     keepRunningInBackground: true,
   },

@@ -17,6 +17,7 @@ const STORAGE_CHANNEL = 'pulse-rn:storage';
 const SETTINGS_CHANNEL = 'pulse-rn:settings';
 const DEBUGGER_CHANNEL = 'pulse-rn:debugger';
 const CONNECTION_CHANNEL = 'pulse-rn:connection';
+const UPDATE_CHANNEL = 'pulse-rn:update';
 const connectedDeviceSchema = z.object({
   connectionId: z.string(),
   deviceId: z.string(),
@@ -84,6 +85,7 @@ const settingsSchema = z.object({
   tlsEnabled: z.boolean(),
   eventRetentionDays: z.number().int().min(1).max(365),
   maxStoredEvents: z.number().int().min(1_000).max(1_000_000),
+  checkForUpdatesAutomatically: z.boolean(),
   launchAtLogin: z.boolean(),
   keepRunningInBackground: z.boolean(),
 });
@@ -117,6 +119,24 @@ const connectionInfoSchema = z.object({
     validFrom: z.string().optional(),
     validTo: z.string().optional(),
   }),
+});
+const updateStateSchema = z.object({
+  enabled: z.boolean(),
+  status: z.enum([
+    'disabled',
+    'idle',
+    'checking',
+    'available',
+    'downloading',
+    'downloaded',
+    'up-to-date',
+    'installing',
+    'error',
+  ]),
+  currentVersion: z.string().max(100),
+  availableVersion: z.string().max(100).optional(),
+  progress: z.number().min(0).max(100).optional(),
+  message: z.string().max(2_000).optional(),
 });
 const debuggerLocationSchema = z.object({
   sourceId: z.string(),
@@ -323,6 +343,34 @@ const api: PulseRNDesktopApi = {
     };
     ipcRenderer.on(CONNECTION_CHANNEL, handler);
     return () => ipcRenderer.removeListener(CONNECTION_CHANNEL, handler);
+  },
+  async getUpdateState() {
+    return updateStateSchema.parse(
+      await ipcRenderer.invoke(UPDATE_CHANNEL, { operation: 'state' }),
+    );
+  },
+  async checkForUpdates() {
+    return updateStateSchema.parse(
+      await ipcRenderer.invoke(UPDATE_CHANNEL, { operation: 'check' }),
+    );
+  },
+  async downloadUpdate() {
+    return updateStateSchema.parse(
+      await ipcRenderer.invoke(UPDATE_CHANNEL, { operation: 'download' }),
+    );
+  },
+  async installUpdate() {
+    return updateStateSchema.parse(
+      await ipcRenderer.invoke(UPDATE_CHANNEL, { operation: 'install' }),
+    );
+  },
+  onUpdateState(listener) {
+    const handler = (_event: Electron.IpcRendererEvent, value: unknown) => {
+      const result = updateStateSchema.safeParse(value);
+      if (result.success) listener(result.data);
+    };
+    ipcRenderer.on(UPDATE_CHANNEL, handler);
+    return () => ipcRenderer.removeListener(UPDATE_CHANNEL, handler);
   },
   async getDebuggerState() {
     return debuggerStateSchema.parse(await invokeDebugger({ operation: 'state' }));

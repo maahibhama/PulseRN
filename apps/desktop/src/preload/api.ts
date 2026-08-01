@@ -5,6 +5,8 @@ import type {
   StorageOperation,
   StorageResult,
 } from '@pulse-rn/protocol';
+import type { DesktopUpdateState } from '../update-types.js';
+export type { DesktopUpdateState } from '../update-types.js';
 
 export interface EventCursor {
   timestamp: number;
@@ -75,6 +77,7 @@ export interface AppSettings {
   tlsEnabled: boolean;
   eventRetentionDays: number;
   maxStoredEvents: number;
+  checkForUpdatesAutomatically: boolean;
   launchAtLogin: boolean;
   keepRunningInBackground: boolean;
 }
@@ -198,6 +201,11 @@ export interface PulseRNDesktopApi {
   installTlsCertificate(): Promise<ConnectionInfo>;
   disableTls(): Promise<ConnectionInfo>;
   onConnectionInfo(listener: (info: ConnectionInfo) => void): () => void;
+  getUpdateState(): Promise<DesktopUpdateState>;
+  checkForUpdates(): Promise<DesktopUpdateState>;
+  downloadUpdate(): Promise<DesktopUpdateState>;
+  installUpdate(): Promise<DesktopUpdateState>;
+  onUpdateState(listener: (state: DesktopUpdateState) => void): () => void;
   getDebuggerState(): Promise<DebuggerState>;
   onDebuggerState(listener: (state: DebuggerState) => void): () => void;
   discoverDebuggerTargets(): Promise<DebuggerState>;

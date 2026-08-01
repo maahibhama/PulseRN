@@ -373,7 +373,7 @@ export function App() {
             </small>
           )}
         </div>
-        <div className="phase-pill">Phase 9 · JavaScript Debugger</div>
+        <div className="phase-pill">Phase 14 · Secure Updates</div>
       </header>
       <aside className="sidebar">
         <div className="section-label">Inspect</div>

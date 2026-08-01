@@ -2,7 +2,7 @@
 
 Desktop releases are built only from version tags. GitHub Actions creates separate macOS Apple
 Silicon and Intel DMGs, Windows x64 and ARM64 NSIS installers, Linux x64 AppImage and Debian
-packages, and a checksum file.
+packages, updater metadata, macOS ZIP update payloads, and a checksum file.
 
 ## Prepare a release
 
@@ -39,10 +39,15 @@ Stable artifact names are part of the release interface:
 ```text
 PulseRN-<version>-mac-arm64.dmg
 PulseRN-<version>-mac-x64.dmg
+PulseRN-<version>-mac-arm64.zip
+PulseRN-<version>-mac-x64.zip
 PulseRN-<version>-windows-x64-setup.exe
 PulseRN-<version>-windows-arm64-setup.exe
 PulseRN-<version>-linux-x64.AppImage
 PulseRN-<version>-linux-x64.deb
+latest-mac.yml
+latest.yml
+latest-linux.yml
 SHA256SUMS.txt
 ```
 
@@ -66,8 +71,31 @@ pnpm dist:win:arm64
 pnpm dist:linux
 ```
 
-macOS and Windows output is intentionally unsigned in the preview phase. Do not enable automatic
-updates until Apple Developer ID notarization and Windows code-signing secrets are configured.
+## Signing and automatic updates
+
+The workflow remains compatible with unsigned previews, but marks a macOS or Windows x64 package as
+update-capable only when all required signing secrets are present. Add these repository or
+environment secrets in GitHub:
+
+| Platform | Required secrets                                                                                                 |
+| -------- | ---------------------------------------------------------------------------------------------------------------- |
+| macOS    | `MAC_CSC_LINK`, `MAC_CSC_KEY_PASSWORD`, `APPLE_API_KEY`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`, `APPLE_TEAM_ID` |
+| Windows  | `WIN_CSC_LINK`, `WIN_CSC_KEY_PASSWORD`                                                                           |
+
+`MAC_CSC_LINK` must contain a Developer ID Application `.p12`; the Apple API values authorize
+notarization. Windows secrets contain the Authenticode `.pfx` and its password. Never store either
+certificate or password in the repository.
+
+When macOS secrets are complete, CI enforces code signing, hardened runtime, notarization, Gatekeeper
+assessment, and stapler validation for both Apple Silicon and Intel applications. When Windows
+secrets are complete, CI enforces Authenticode signing and validates the installer signature.
+Missing or partial credentials produce an unsigned preview with in-app installation disabled rather
+than silently enabling an unsafe updater.
+
+`latest-mac.yml`, `latest.yml`, `latest-linux.yml`, blockmaps, and macOS ZIP payloads are uploaded
+with the installers. Signed macOS and Windows x64 builds, plus Linux release packages, can check
+these GitHub Release files. Windows ARM64 remains manually upgradable until a separately validated
+ARM64 update channel is added.
 
 # SDK releases
 
