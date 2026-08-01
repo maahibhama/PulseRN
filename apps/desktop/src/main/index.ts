@@ -181,6 +181,8 @@ let tlsCertificateStore: TlsCertificateStore | undefined;
 let updateManager: UpdateManager | undefined;
 let automaticUpdateTimer: ReturnType<typeof setTimeout> | undefined;
 let isQuitting = false;
+let shutdownComplete = false;
+let shutdownPromise: Promise<void> | undefined;
 let lastDatabaseMaintenanceAt = 0;
 
 function retentionPolicy() {
@@ -999,6 +1001,7 @@ app.whenReady().then(async () => {
         }),
         z.object({ operation: z.literal('selectFrame'), id: z.string().min(1).max(100_000) }),
         z.object({ operation: z.literal('scope'), objectId: z.string().min(1).max(100_000) }),
+        z.object({ operation: z.literal('properties'), objectId: z.string().min(1).max(100_000) }),
         z.object({
           operation: z.literal('addWatch'),
           expression: z.string().trim().min(1).max(10_000),
@@ -1007,6 +1010,28 @@ app.whenReady().then(async () => {
         z.object({
           operation: z.literal('evaluate'),
           expression: z.string().trim().min(1).max(10_000),
+          options: z
+            .object({
+              frameId: z.string().min(1).max(100_000).optional(),
+              allowRunning: z.boolean().optional(),
+            })
+            .optional(),
+        }),
+        z.object({
+          operation: z.literal('releaseObject'),
+          objectId: z.string().min(1).max(100_000),
+        }),
+        z.object({ operation: z.literal('reactComponents') }),
+        z.object({
+          operation: z.literal('reactComponentInteraction'),
+          action: z.enum([
+            'highlight',
+            'hideHighlight',
+            'startPicking',
+            'stopPicking',
+            'pollPicked',
+          ]),
+          componentId: z.string().min(1).max(256).optional(),
         }),
         z.object({
           operation: z.literal('pauseOnExceptions'),
@@ -1038,12 +1063,20 @@ app.whenReady().then(async () => {
         return debuggerManager.selectCallFrame(input.id);
       case 'scope':
         return debuggerManager.getScope(input.objectId);
+      case 'properties':
+        return debuggerManager.getProperties(input.objectId);
       case 'addWatch':
         return debuggerManager.addWatch(input.expression);
       case 'removeWatch':
         return debuggerManager.removeWatch(input.id);
       case 'evaluate':
-        return debuggerManager.evaluate(input.expression);
+        return debuggerManager.evaluate(input.expression, input.options);
+      case 'releaseObject':
+        return debuggerManager.releaseObject(input.objectId);
+      case 'reactComponents':
+        return debuggerManager.getReactComponentSnapshot();
+      case 'reactComponentInteraction':
+        return debuggerManager.interactWithReactComponent(input.action, input.componentId);
       case 'pauseOnExceptions':
         return debuggerManager.setPauseOnExceptions(input.mode);
       case 'blackboxInternal':
@@ -1065,18 +1098,38 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-app.on('before-quit', () => {
+app.on('before-quit', (event) => {
+  if (shutdownComplete) return;
+  event.preventDefault();
   isQuitting = true;
-  ipcMain.removeHandler(SNAPSHOT_CHANNEL);
-  ipcMain.removeHandler(EVENTS_CHANNEL);
-  ipcMain.removeHandler(STORAGE_CHANNEL);
-  ipcMain.removeHandler(SETTINGS_CHANNEL);
-  ipcMain.removeHandler(DEBUGGER_CHANNEL);
-  ipcMain.removeHandler(CONNECTION_CHANNEL);
-  ipcMain.removeHandler(UPDATE_CHANNEL);
-  if (automaticUpdateTimer) clearTimeout(automaticUpdateTimer);
-  nativeTheme.removeListener('updated', handleNativeThemeUpdated);
-  void server?.close();
-  debuggerManager?.close();
-  database?.close();
+  if (!shutdownPromise) {
+    ipcMain.removeHandler(SNAPSHOT_CHANNEL);
+    ipcMain.removeHandler(EVENTS_CHANNEL);
+    ipcMain.removeHandler(STORAGE_CHANNEL);
+    ipcMain.removeHandler(SETTINGS_CHANNEL);
+    ipcMain.removeHandler(DEBUGGER_CHANNEL);
+    ipcMain.removeHandler(CONNECTION_CHANNEL);
+    ipcMain.removeHandler(UPDATE_CHANNEL);
+    if (automaticUpdateTimer) clearTimeout(automaticUpdateTimer);
+    nativeTheme.removeListener('updated', handleNativeThemeUpdated);
+    debuggerManager?.close();
+    debuggerManager = undefined;
+
+    const activeServer = server;
+    server = undefined;
+    shutdownPromise = (async () => {
+      try {
+        await activeServer?.close();
+      } catch (error) {
+        console.warn('[PulseRN] WebSocket shutdown failed:', error);
+      }
+
+      const activeDatabase = database;
+      database = undefined;
+      activeDatabase?.close();
+    })().finally(() => {
+      shutdownComplete = true;
+      app.quit();
+    });
+  }
 });

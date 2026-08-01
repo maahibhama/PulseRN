@@ -20,6 +20,8 @@ import type {
   DebuggerState,
   DebuggerTarget,
   DebuggerWatch,
+  ReactComponentInteraction,
+  ReactComponentSnapshot,
 } from '../preload/api.js';
 
 const targetSchema = z
@@ -93,6 +95,74 @@ const storedBreakpointSchema = z.object({
 const storedWatchSchema = z.object({
   id: z.string().uuid(),
   expression: z.string().trim().min(1).max(10_000),
+});
+const reactComponentSnapshotSchema: z.ZodType<ReactComponentSnapshot> = z.object({
+  available: z.boolean(),
+  rendererCount: z.number().int().nonnegative().max(100),
+  roots: z.array(z.string().max(256)).max(1_000),
+  nodes: z
+    .array(
+      z.object({
+        id: z.string().max(256),
+        parentId: z.string().max(256).optional(),
+        ownerId: z.string().max(256).optional(),
+        name: z.string().max(1_024),
+        key: z.string().max(1_024).optional(),
+        kind: z.enum([
+          'function',
+          'class',
+          'host',
+          'memo',
+          'forwardRef',
+          'context',
+          'suspense',
+          'other',
+        ]),
+        depth: z.number().int().nonnegative().max(200),
+        source: z
+          .object({
+            sourceId: z.string().max(100_000),
+            line: z.number().int().positive(),
+            column: z.number().int().positive(),
+          })
+          .optional(),
+        props: z.record(z.string()),
+        state: z.record(z.string()),
+        hooks: z
+          .array(z.object({ index: z.number().int().nonnegative(), value: z.string() }))
+          .max(100),
+        context: z.record(z.string()),
+        renderDuration: z.number().finite().nonnegative().optional(),
+        renderCount: z.number().int().nonnegative().optional(),
+        changed: z.array(z.enum(['props', 'state', 'hooks'])).max(3),
+        nativeTag: z.number().int().optional(),
+        style: z.record(z.string()).optional(),
+        accessibility: z
+          .object({
+            label: z.string().optional(),
+            role: z.string().optional(),
+            hint: z.string().optional(),
+            disabled: z.boolean().optional(),
+          })
+          .optional(),
+        children: z.array(z.string().max(256)).max(10_000),
+      }),
+    )
+    .max(10_000),
+  truncated: z.boolean(),
+  capturedAt: z.number().finite().nonnegative(),
+  capabilities: z.object({
+    highlight: z.boolean(),
+    pick: z.boolean(),
+  }),
+  selectedId: z.string().max(256).optional(),
+  error: z.string().max(10_000).optional(),
+});
+const reactComponentInteractionSchema: z.ZodType<ReactComponentInteraction> = z.object({
+  supported: z.boolean(),
+  active: z.boolean(),
+  selectedId: z.string().max(256).optional(),
+  error: z.string().max(10_000).optional(),
 });
 
 interface CdpScript {
@@ -168,6 +238,20 @@ function remoteValue(value: unknown): DebuggerRemoteValue {
       value: z.unknown().optional(),
       unserializableValue: z.string().optional(),
       objectId: z.string().optional(),
+      preview: z
+        .object({
+          overflow: z.boolean().optional().default(false),
+          properties: z
+            .array(
+              z.object({
+                name: z.string(),
+                type: z.string(),
+                value: z.string().optional(),
+              }),
+            )
+            .max(100),
+        })
+        .optional(),
     })
     .passthrough()
     .parse(value);
@@ -179,6 +263,14 @@ function remoteValue(value: unknown): DebuggerRemoteValue {
       (parsed.value === undefined ? parsed.type : JSON.stringify(parsed.value)),
     ...(parsed.value === undefined ? {} : { value: parsed.value }),
     ...(parsed.objectId ? { objectId: parsed.objectId } : {}),
+    ...(parsed.preview
+      ? {
+          preview: {
+            overflow: parsed.preview.overflow,
+            properties: parsed.preview.properties.slice(0, 20),
+          },
+        }
+      : {}),
   };
 }
 
@@ -339,6 +431,10 @@ export class DebuggerManager {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.reconnectTimer = undefined;
     const socket = this.socket;
+    if (socket?.readyState === WebSocket.OPEN) {
+      await this.interactWithReactComponent('hideHighlight').catch(() => undefined);
+      await this.interactWithReactComponent('stopPicking').catch(() => undefined);
+    }
     this.socket = undefined;
     if (socket) {
       socket.removeAllListeners();
@@ -463,14 +559,21 @@ export class DebuggerManager {
   }
 
   async getScope(objectId: string): Promise<DebuggerProperty[]> {
+    return this.getProperties(objectId);
+  }
+
+  async getProperties(objectId: string): Promise<DebuggerProperty[]> {
     const result = z
       .object({
         result: z.array(
           z.object({
             name: z.string(),
             value: z.unknown().optional(),
+            enumerable: z.boolean().optional(),
+            writable: z.boolean().optional(),
+            get: z.unknown().optional(),
           }),
-        ),
+        ).max(10_000),
       })
       .parse(
         await this.send('Runtime.getProperties', {
@@ -481,7 +584,14 @@ export class DebuggerManager {
       );
     return result.result
       .filter((property) => property.value !== undefined)
-      .map((property) => ({ name: property.name, value: remoteValue(property.value) }));
+      .slice(0, 500)
+      .map((property) => ({
+        name: property.name,
+        value: remoteValue(property.value),
+        ...(property.enumerable === undefined ? {} : { enumerable: property.enumerable }),
+        ...(property.writable === undefined ? {} : { writable: property.writable }),
+        ...(property.get === undefined ? {} : { accessor: true }),
+      }));
   }
 
   async addWatch(expression: string): Promise<DebuggerState> {
@@ -500,20 +610,31 @@ export class DebuggerManager {
     return this.snapshot();
   }
 
-  async evaluate(expression: string): Promise<DebuggerRemoteValue> {
-    const callFrameId = this.state.selectedCallFrameId;
-    if (!callFrameId || this.state.status !== 'paused') {
-      throw new Error('Expressions can only be evaluated while paused.');
+  async evaluate(
+    expression: string,
+    options: { frameId?: string; allowRunning?: boolean } = {},
+  ): Promise<DebuggerRemoteValue> {
+    const trimmed = expression.trim();
+    if (!trimmed || trimmed.length > 10_000) {
+      throw new Error('Expression must contain between 1 and 10,000 characters.');
     }
+    const callFrameId = options.frameId ?? this.state.selectedCallFrameId;
+    const method =
+      this.state.status === 'paused' && callFrameId
+        ? 'Debugger.evaluateOnCallFrame'
+        : options.allowRunning
+          ? 'Runtime.evaluate'
+          : undefined;
+    if (!method) throw new Error('Pause execution before evaluating this expression.');
     const result = z
       .object({
         result: z.unknown(),
         exceptionDetails: z.object({ text: z.string().optional() }).passthrough().optional(),
       })
       .parse(
-        await this.send('Debugger.evaluateOnCallFrame', {
-          callFrameId,
-          expression,
+        await this.send(method, {
+          ...(method === 'Debugger.evaluateOnCallFrame' ? { callFrameId } : {}),
+          expression: trimmed,
           generatePreview: true,
           silent: true,
           objectGroup: 'pulsern-debugger',
@@ -525,6 +646,261 @@ export class DebuggerManager {
     return remoteValue(result.result);
   }
 
+  async releaseObject(objectId: string): Promise<boolean> {
+    if (!objectId || objectId.length > 100_000) throw new Error('Invalid debugger object ID.');
+    await this.send('Runtime.releaseObject', { objectId }).catch(() => undefined);
+    return true;
+  }
+
+  async getReactComponentSnapshot(): Promise<ReactComponentSnapshot> {
+    if (!this.socket) throw new Error('Connect to a Hermes target first.');
+    const expression = `(() => {
+      const hook = globalThis.__REACT_DEVTOOLS_GLOBAL_HOOK__;
+      const capturedAt = Date.now();
+      if (!hook || typeof hook.getFiberRoots !== 'function' || !hook.renderers) {
+        return { available: false, rendererCount: 0, roots: [], nodes: [], truncated: false, capturedAt,
+          capabilities: { highlight: false, pick: false },
+          error: 'React DevTools backend is not available in this development runtime.' };
+      }
+      const preview = (value, depth = 0) => {
+        if (value === null) return 'null';
+        const type = typeof value;
+        if (type === 'string') return value.length > 160 ? value.slice(0, 157) + '…' : value;
+        if (type === 'number' || type === 'boolean' || type === 'undefined' || type === 'bigint')
+          return String(value);
+        if (type === 'function') return 'ƒ ' + (value.name || 'anonymous');
+        if (depth > 0) return Array.isArray(value) ? 'Array(' + value.length + ')' : '{…}';
+        try {
+          if (Array.isArray(value)) return '[' + value.slice(0, 5).map(v => preview(v, 1)).join(', ') +
+            (value.length > 5 ? ', …' : '') + ']';
+          return '{' + Object.keys(value).slice(0, 5).map(key => key + ': ' + preview(value[key], 1)).join(', ') +
+            (Object.keys(value).length > 5 ? ', …' : '') + '}';
+        } catch { return '<unavailable>'; }
+      };
+      const record = value => {
+        const output = {};
+        if (!value || typeof value !== 'object') return output;
+        for (const key of Object.keys(value).slice(0, 20)) {
+          if (key === 'children') continue;
+          try { output[key] = preview(value[key]); } catch { output[key] = '<unavailable>'; }
+        }
+        return output;
+      };
+      const nameOf = fiber => {
+        const type = fiber.elementType || fiber.type;
+        if (typeof type === 'string') return type;
+        return type?.displayName || type?.name || fiber.type?.displayName || fiber.type?.name ||
+          (fiber.tag === 3 ? 'Root' : fiber.tag === 6 ? 'Text' : 'Anonymous');
+      };
+      const kindOf = fiber => {
+        if (typeof fiber.type === 'string') return 'host';
+        if (fiber.tag === 1) return 'class';
+        if (fiber.tag === 5 || fiber.tag === 6) return 'host';
+        if (fiber.tag === 9 || fiber.tag === 10) return 'context';
+        if (fiber.tag === 11) return 'forwardRef';
+        if (fiber.tag === 13) return 'suspense';
+        if (fiber.tag === 14 || fiber.tag === 15) return 'memo';
+        if (fiber.tag === 0) return 'function';
+        return 'other';
+      };
+      const nodes = [];
+      const roots = [];
+      const previousInspector = globalThis.__pulseRNComponentInspector;
+      const inspector = previousInspector && previousInspector.meta instanceof WeakMap
+        ? previousInspector
+        : { meta: new WeakMap() };
+      inspector.fibers = new Map();
+      inspector.renderers = new Map();
+      inspector.fiberIds = new WeakMap();
+      inspector.selectedId = inspector.selectedId || undefined;
+      globalThis.__pulseRNComponentInspector = inspector;
+      const hash = input => {
+        let value = 2166136261;
+        for (let index = 0; index < input.length; index++) {
+          value ^= input.charCodeAt(index);
+          value = Math.imul(value, 16777619);
+        }
+        return (value >>> 0).toString(36);
+      };
+      const visit = (fiber, parentId, depth, renderer, rendererId, path) => {
+        if (!fiber || nodes.length >= 1000 || depth > 100) return;
+        const id = 'fiber-' + rendererId + '-' + hash(path);
+        inspector.fibers.set(id, fiber);
+        inspector.renderers.set(id, renderer);
+        inspector.fiberIds.set(fiber, id);
+        if (fiber.alternate) inspector.fiberIds.set(fiber.alternate, id);
+        if (!parentId) roots.push(id);
+        const hooks = [];
+        let hookNode = fiber.memoizedState;
+        let hookIndex = 0;
+        while (fiber.tag === 0 && hookNode && hookIndex < 30) {
+          hooks.push({ index: hookIndex++, value: preview(hookNode.memoizedState) });
+          hookNode = hookNode.next;
+        }
+        const props = fiber.memoizedProps;
+        const state = fiber.tag === 1 ? fiber.memoizedState : undefined;
+        const previous = inspector.meta.get(fiber) ||
+          (fiber.alternate ? inspector.meta.get(fiber.alternate) : undefined);
+        const changed = [];
+        if (previous && previous.props !== props) changed.push('props');
+        if (previous && previous.state !== state) changed.push('state');
+        if (previous && previous.hooks !== fiber.memoizedState && fiber.tag === 0) changed.push('hooks');
+        const renderCount = (previous?.renderCount || 0) + (previous && changed.length === 0 ? 0 : 1);
+        const metadata = { props, state, hooks: fiber.memoizedState, renderCount };
+        inspector.meta.set(fiber, metadata);
+        if (fiber.alternate) inspector.meta.set(fiber.alternate, metadata);
+        const source = fiber._debugSource;
+        const nativeTag = typeof fiber.stateNode?._nativeTag === 'number'
+          ? fiber.stateNode._nativeTag
+          : typeof fiber.stateNode?.__nativeTag === 'number' ? fiber.stateNode.__nativeTag : undefined;
+        const node = {
+          id, ...(parentId ? { parentId } : {}), name: nameOf(fiber),
+          ...(inspector.fiberIds.get(fiber._debugOwner)
+            ? { ownerId: inspector.fiberIds.get(fiber._debugOwner) } : {}),
+          ...(fiber.key == null ? {} : { key: String(fiber.key) }),
+          kind: kindOf(fiber), depth,
+          ...(source?.fileName && source?.lineNumber ? {
+            source: { sourceId: String(source.fileName), line: Number(source.lineNumber),
+              column: Number(source.columnNumber || 1) }
+          } : {}),
+          props: record(props), state: record(state), hooks, context: {},
+          ...(typeof fiber.actualDuration === 'number' ? { renderDuration: fiber.actualDuration } : {}),
+          renderCount, changed,
+          ...(nativeTag === undefined ? {} : { nativeTag }),
+          style: record(props?.style),
+          accessibility: {
+            ...(typeof props?.accessibilityLabel === 'string' ? { label: props.accessibilityLabel } : {}),
+            ...(typeof props?.accessibilityRole === 'string' ? { role: props.accessibilityRole } : {}),
+            ...(typeof props?.accessibilityHint === 'string' ? { hint: props.accessibilityHint } : {}),
+            ...(typeof props?.accessibilityState?.disabled === 'boolean'
+              ? { disabled: props.accessibilityState.disabled } : {})
+          },
+          children: []
+        };
+        nodes.push(node);
+        let child = fiber.child;
+        let childIndex = 0;
+        while (child) {
+          const before = nodes.length;
+          const childName = nameOf(child);
+          const childKey = child.key == null ? childIndex : String(child.key);
+          visit(child, id, depth + 1, renderer, rendererId,
+            path + '/' + childName + ':' + childKey);
+          const added = nodes[before];
+          if (added) node.children.push(added.id);
+          child = child.sibling;
+          childIndex++;
+        }
+      };
+      let rendererCount = 0;
+      for (const [rendererId, renderer] of hook.renderers) {
+        rendererCount++;
+        const fiberRoots = hook.getFiberRoots(rendererId);
+        if (fiberRoots) {
+          let rootIndex = 0;
+          for (const root of fiberRoots) {
+            visit(root.current, undefined, 0, renderer, rendererId, 'root:' + rootIndex++);
+          }
+        }
+      }
+      const agent = hook.reactDevtoolsAgent;
+      const canEmit = typeof agent?.emit === 'function';
+      return { available: nodes.length > 0, rendererCount, roots, nodes,
+        truncated: nodes.length >= 1000, capturedAt,
+        capabilities: { highlight: canEmit, pick: canEmit && typeof agent?.selectNode === 'function' },
+        ...(inspector.selectedId ? { selectedId: inspector.selectedId } : {}),
+        ...(nodes.length ? {} : { error: 'React is connected but no mounted component roots were found.' }) };
+    })()`;
+    return reactComponentSnapshotSchema.parse(
+      await this.evaluateByValue(expression, 'React component inspection failed.'),
+    );
+  }
+
+  async interactWithReactComponent(
+    action: 'highlight' | 'hideHighlight' | 'startPicking' | 'stopPicking' | 'pollPicked',
+    componentId?: string,
+  ): Promise<ReactComponentInteraction> {
+    if (!this.socket) throw new Error('Connect to a Hermes target first.');
+    const serializedAction = JSON.stringify(action);
+    const serializedId = JSON.stringify(componentId ?? '');
+    const expression = `(() => {
+      const action = ${serializedAction};
+      const componentId = ${serializedId};
+      const hook = globalThis.__REACT_DEVTOOLS_GLOBAL_HOOK__;
+      const agent = hook?.reactDevtoolsAgent;
+      const inspector = globalThis.__pulseRNComponentInspector;
+      if (!agent || !inspector || typeof agent.emit !== 'function') {
+        return { supported: false, active: false,
+          error: 'This React Native renderer does not expose native inspection events.' };
+      }
+      try {
+        if (action === 'highlight') {
+          const fiber = inspector.fibers?.get(componentId);
+          const renderer = inspector.renderers?.get(componentId);
+          if (!fiber || !renderer) {
+            return { supported: true, active: false,
+              error: 'The component changed. Refresh the component tree and try again.' };
+          }
+          const host = typeof renderer.findHostInstanceByFiber === 'function'
+            ? renderer.findHostInstanceByFiber(fiber)
+            : fiber.stateNode;
+          if (!host) {
+            return { supported: true, active: false,
+              error: 'This component has no highlightable native host view.' };
+          }
+          agent.emit('showNativeHighlight', [host]);
+          return { supported: true, active: true, selectedId: componentId };
+        }
+        if (action === 'hideHighlight') {
+          agent.emit('hideNativeHighlight');
+          return { supported: true, active: false };
+        }
+        if (action === 'startPicking') {
+          if (!inspector.originalSelectNode) {
+            inspector.originalSelectNode = agent.selectNode;
+            agent.selectNode = function(node) {
+              try {
+                for (const [id, renderer] of inspector.renderers) {
+                  if (typeof renderer.findFiberByHostInstance !== 'function') continue;
+                  const fiber = renderer.findFiberByHostInstance(node);
+                  const selectedId = inspector.fiberIds?.get(fiber) ||
+                    inspector.fiberIds?.get(fiber?.alternate);
+                  if (selectedId) {
+                    inspector.selectedId = selectedId;
+                    break;
+                  }
+                }
+              } catch {}
+              return inspector.originalSelectNode.call(this, node);
+            };
+          }
+          inspector.picking = true;
+          inspector.selectedId = undefined;
+          agent.emit('startInspectingNative');
+          return { supported: true, active: true };
+        }
+        if (action === 'stopPicking') {
+          if (inspector.originalSelectNode) {
+            agent.selectNode = inspector.originalSelectNode;
+            inspector.originalSelectNode = undefined;
+          }
+          inspector.picking = false;
+          agent.emit('stopInspectingNative');
+          return { supported: true, active: false,
+            ...(inspector.selectedId ? { selectedId: inspector.selectedId } : {}) };
+        }
+        return { supported: true, active: Boolean(inspector.picking),
+          ...(inspector.selectedId ? { selectedId: inspector.selectedId } : {}) };
+      } catch (error) {
+        return { supported: true, active: false,
+          error: error instanceof Error ? error.message : String(error) };
+      }
+    })()`;
+    return reactComponentInteractionSchema.parse(
+      await this.evaluateByValue(expression, 'Component interaction failed.'),
+    );
+  }
+
   async setPauseOnExceptions(mode: DebuggerState['pauseOnExceptions']): Promise<DebuggerState> {
     this.data.pauseOnExceptions = mode;
     this.persist();
@@ -534,6 +910,29 @@ export class DebuggerManager {
     });
     this.publishData();
     return this.snapshot();
+  }
+
+  private async evaluateByValue(expression: string, fallbackError: string): Promise<unknown> {
+    const callFrameId = this.state.selectedCallFrameId;
+    const paused = this.state.status === 'paused' && callFrameId;
+    const result = z
+      .object({
+        result: z.object({ value: z.unknown().optional() }).passthrough(),
+        exceptionDetails: z.object({ text: z.string().optional() }).passthrough().optional(),
+      })
+      .parse(
+        await this.send(paused ? 'Debugger.evaluateOnCallFrame' : 'Runtime.evaluate', {
+          ...(paused ? { callFrameId } : {}),
+          expression,
+          returnByValue: true,
+          silent: true,
+          objectGroup: 'pulsern-components',
+        }),
+      );
+    if (result.exceptionDetails) {
+      throw new Error(result.exceptionDetails.text ?? fallbackError);
+    }
+    return result.result.value;
   }
 
   async setBlackboxInternal(enabled: boolean): Promise<DebuggerState> {

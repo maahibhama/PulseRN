@@ -4,6 +4,19 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 const PAGE_SIZE = 250;
 export const MAX_RENDERER_EVENTS = 2_000;
 
+export function latestMatchingEventId(
+  events: readonly DevToolEventEnvelope[],
+  categories?: readonly DevToolEventCategory[],
+): string | undefined {
+  if (!categories?.length) return undefined;
+  const allowed = new Set(categories);
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event && allowed.has(event.category)) return event.id;
+  }
+  return undefined;
+}
+
 function cursorOf(event: DevToolEventEnvelope | undefined) {
   return event ? { id: event.id, sequence: event.sequence, timestamp: event.timestamp } : undefined;
 }

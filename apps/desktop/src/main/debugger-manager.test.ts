@@ -69,10 +69,105 @@ async function createHarness(rejectDebugger = false): Promise<Harness> {
           }),
         );
       } else if (command.method === 'Debugger.evaluateOnCallFrame') {
+        const expression = String(command.params?.expression);
+        const isInteraction =
+          expression.includes('__pulseRNComponentInspector') &&
+          expression.includes('const action =');
+        const isComponentSnapshot = expression.includes('__REACT_DEVTOOLS_GLOBAL_HOOK__');
         socket.send(
           JSON.stringify({
             id: command.id,
-            result: { result: { type: 'number', value: 12, description: '12' } },
+            result: {
+              result:
+                isInteraction
+                  ? {
+                      type: 'object',
+                      value: { supported: true, active: false, selectedId: 'fiber-1' },
+                    }
+                  : isComponentSnapshot
+                    ? {
+                        type: 'object',
+                        value: {
+                          available: true,
+                          rendererCount: 1,
+                          roots: ['fiber-1'],
+                          nodes: [
+                            {
+                              id: 'fiber-1',
+                              name: 'App',
+                              kind: 'function',
+                              depth: 0,
+                              props: { title: 'PulseRN' },
+                              state: {},
+                              hooks: [{ index: 0, value: '1' }],
+                              context: {},
+                              renderDuration: 2.4,
+                              renderCount: 1,
+                              changed: [],
+                              children: [],
+                            },
+                          ],
+                          truncated: false,
+                          capturedAt: 100,
+                          capabilities: { highlight: true, pick: true },
+                        },
+                      }
+                    : command.params?.expression === 'values'
+                  ? {
+                      type: 'object',
+                      subtype: 'array',
+                      objectId: 'values-1',
+                      description: 'Array(3)',
+                      preview: {
+                        overflow: false,
+                        properties: [
+                          { name: '0', type: 'number', value: '1' },
+                          { name: '1', type: 'number', value: '2' },
+                        ],
+                      },
+                    }
+                      : { type: 'number', value: 12, description: '12' },
+            },
+          }),
+        );
+      } else if (command.method === 'Runtime.evaluate') {
+        const isInteraction = String(command.params?.expression).includes(
+          '__pulseRNComponentInspector',
+        ) && String(command.params?.expression).includes("const action =");
+        socket.send(
+          JSON.stringify({
+            id: command.id,
+            result: {
+              result: {
+                type: 'object',
+                value: isInteraction
+                  ? { supported: true, active: false, selectedId: 'fiber-1' }
+                  : {
+                  available: true,
+                  rendererCount: 1,
+                  roots: ['fiber-1'],
+                  nodes: [
+                    {
+                      id: 'fiber-1',
+                      name: 'App',
+                      kind: 'function',
+                      depth: 0,
+                      props: { title: 'PulseRN' },
+                      state: {},
+                      hooks: [{ index: 0, value: '1' }],
+                      context: {},
+                      renderDuration: 2.4,
+                      renderCount: 1,
+                      changed: [],
+                      children: [],
+                    },
+                  ],
+                  truncated: false,
+                  capturedAt: 100,
+                  capabilities: { highlight: true, pick: true },
+                },
+              },
+            },
           }),
         );
       } else {
@@ -215,12 +310,35 @@ describe('DebuggerManager', () => {
     });
     await manager.addWatch('total');
     expect(manager.snapshot().watches[0]?.result?.description).toBe('12');
+    expect(await manager.evaluate('values')).toMatchObject({
+      type: 'array',
+      description: 'Array(3)',
+      objectId: 'values-1',
+      preview: { overflow: false },
+    });
     expect(await manager.getScope('scope-1')).toEqual([
       {
         name: 'total',
         value: { type: 'number', value: 12, description: '12' },
       },
     ]);
+    expect(await manager.getReactComponentSnapshot()).toMatchObject({
+      available: true,
+      rendererCount: 1,
+      roots: ['fiber-1'],
+      nodes: [{ name: 'App', renderDuration: 2.4 }],
+    });
+    expect(
+      [...harness.commands]
+        .reverse()
+        .find((command) =>
+          String(command.params?.expression).includes('__REACT_DEVTOOLS_GLOBAL_HOOK__'),
+        )?.method,
+    ).toBe('Debugger.evaluateOnCallFrame');
+    expect(await manager.interactWithReactComponent('pollPicked')).toMatchObject({
+      supported: true,
+      selectedId: 'fiber-1',
+    });
 
     await manager.disconnect();
     await manager.connect('target-1');

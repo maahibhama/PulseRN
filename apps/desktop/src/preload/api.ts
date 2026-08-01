@@ -284,11 +284,18 @@ export interface DebuggerRemoteValue {
   description: string;
   value?: unknown;
   objectId?: string;
+  preview?: {
+    overflow: boolean;
+    properties: { name: string; type: string; value?: string }[];
+  };
 }
 
 export interface DebuggerProperty {
   name: string;
   value: DebuggerRemoteValue;
+  enumerable?: boolean;
+  writable?: boolean;
+  accessor?: boolean;
 }
 
 export interface DebuggerScope {
@@ -308,6 +315,64 @@ export interface DebuggerWatch {
   id: string;
   expression: string;
   result?: DebuggerRemoteValue;
+  error?: string;
+}
+
+export interface DebuggerEvaluation {
+  id: string;
+  expression: string;
+  createdAt: number;
+  frameId?: string;
+  result?: DebuggerRemoteValue;
+  error?: string;
+}
+
+export interface ReactComponentNode {
+  id: string;
+  parentId?: string;
+  ownerId?: string;
+  name: string;
+  key?: string;
+  kind: 'function' | 'class' | 'host' | 'memo' | 'forwardRef' | 'context' | 'suspense' | 'other';
+  depth: number;
+  source?: DebuggerLocation;
+  props: Record<string, string>;
+  state: Record<string, string>;
+  hooks: { index: number; value: string }[];
+  context: Record<string, string>;
+  renderDuration?: number;
+  renderCount?: number;
+  changed: ('props' | 'state' | 'hooks')[];
+  nativeTag?: number;
+  style?: Record<string, string>;
+  accessibility?: {
+    label?: string;
+    role?: string;
+    hint?: string;
+    disabled?: boolean;
+  };
+  children: string[];
+}
+
+export interface ReactComponentSnapshot {
+  available: boolean;
+  rendererCount: number;
+  roots: string[];
+  nodes: ReactComponentNode[];
+  truncated: boolean;
+  capturedAt: number;
+  capabilities: {
+    highlight: boolean;
+    pick: boolean;
+  };
+  selectedId?: string;
+  error?: string;
+}
+
+export interface ReactComponentInteraction {
+  supported: boolean;
+  active: boolean;
+  selectedId?: string;
   error?: string;
 }
 
@@ -415,9 +480,19 @@ export interface PulseRNDesktopApi {
   ): Promise<DebuggerState>;
   selectDebuggerCallFrame(id: string): Promise<DebuggerState>;
   getDebuggerScope(objectId: string): Promise<DebuggerProperty[]>;
+  getDebuggerProperties(objectId: string): Promise<DebuggerProperty[]>;
   addDebuggerWatch(expression: string): Promise<DebuggerState>;
   removeDebuggerWatch(id: string): Promise<DebuggerState>;
-  evaluateDebuggerExpression(expression: string): Promise<DebuggerRemoteValue>;
+  evaluateDebuggerExpression(
+    expression: string,
+    options?: { frameId?: string; allowRunning?: boolean },
+  ): Promise<DebuggerRemoteValue>;
+  releaseDebuggerObject(objectId: string): Promise<boolean>;
+  getReactComponentSnapshot(): Promise<ReactComponentSnapshot>;
+  interactWithReactComponent(
+    action: 'highlight' | 'hideHighlight' | 'startPicking' | 'stopPicking' | 'pollPicked',
+    componentId?: string,
+  ): Promise<ReactComponentInteraction>;
   setPauseOnExceptions(mode: 'none' | 'uncaught' | 'all'): Promise<DebuggerState>;
   setDebuggerBlackboxInternal(enabled: boolean): Promise<DebuggerState>;
 }
