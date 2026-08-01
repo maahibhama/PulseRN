@@ -93,6 +93,32 @@ export const PULSERN_MCP_TOOLS: readonly PulseRNTool[] = [
     inputSchema: objectSchema({ sessionId: string(), limit: integer(1, 100) }),
   },
   {
+    name: 'pulsern_diagnose_session',
+    description:
+      'Build a deterministic, evidence-backed diagnosis for one PulseRN session or the newest session.',
+    inputSchema: objectSchema({ sessionId: string() }),
+  },
+  {
+    name: 'pulsern_create_diagnostic_snapshot',
+    description: 'Persist a bounded diagnostic snapshot for a session.',
+    inputSchema: objectSchema({ sessionId: string(), triggerEventId: string() }),
+  },
+  {
+    name: 'pulsern_list_diagnostic_snapshots',
+    description: 'List persistent diagnostic snapshots, optionally for one session.',
+    inputSchema: objectSchema({ sessionId: string() }),
+  },
+  {
+    name: 'pulsern_get_diagnostic_snapshot',
+    description: 'Read one persistent diagnostic snapshot.',
+    inputSchema: objectSchema({ id: string() }, ['id']),
+  },
+  {
+    name: 'pulsern_delete_diagnostic_snapshot',
+    description: 'Delete one persistent diagnostic snapshot.',
+    inputSchema: objectSchema({ id: string() }, ['id']),
+  },
+  {
     name: 'pulsern_inspect_network',
     description: 'Inspect bounded network events, optionally by correlation ID.',
     inputSchema: objectSchema({
@@ -137,6 +163,23 @@ export const PULSERN_MCP_TOOLS: readonly PulseRNTool[] = [
     description: 'Get debugger status, targets, call frames, breakpoints, and capabilities.',
     inputSchema: objectSchema(),
   },
+  {
+    name: 'pulsern_search_sources',
+    description: 'Search the connected Hermes source catalog by file name or URL.',
+    inputSchema: objectSchema({ query: string(), limit: integer(1, 100) }, ['query']),
+  },
+  {
+    name: 'pulsern_get_source_context',
+    description: 'Read a bounded, source-mapped line range around a debugger source location.',
+    inputSchema: objectSchema(
+      {
+        sourceId: string(),
+        line: integer(1, 10_000_000),
+        contextLines: integer(1, 50),
+      },
+      ['sourceId', 'line'],
+    ),
+  },
   ...(['pause', 'resume'] as const).map((command) => ({
     name: `pulsern_${command}`,
     description: `${command === 'pause' ? 'Pause' : 'Resume'} the connected Hermes runtime.`,
@@ -160,6 +203,7 @@ export const PULSERN_MCP_TOOLS: readonly PulseRNTool[] = [
         condition: string(),
         hitCondition: integer(1, 1_000_000),
         logMessage: string(),
+        temporary: { type: 'boolean' },
       },
       ['sourceId', 'line'],
     ),
@@ -168,6 +212,11 @@ export const PULSERN_MCP_TOOLS: readonly PulseRNTool[] = [
     name: 'pulsern_remove_breakpoint',
     description: 'Remove a debugger breakpoint.',
     inputSchema: objectSchema({ id: string() }, ['id']),
+  },
+  {
+    name: 'pulsern_remove_temporary_breakpoints',
+    description: 'Remove all AI-created temporary diagnostic breakpoints.',
+    inputSchema: objectSchema(),
   },
   {
     name: 'pulsern_get_call_frames',

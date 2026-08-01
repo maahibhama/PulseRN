@@ -86,9 +86,9 @@ describe('EventDatabase', () => {
     legacy.close();
 
     const database = new EventDatabase(path);
-    expect(database.schemaVersion()).toBe(7);
+    expect(database.schemaVersion()).toBe(8);
     expect(database.migrationHistory().map((migration) => migration.version)).toEqual([
-      1, 2, 3, 4, 5, 6, 7,
+      1, 2, 3, 4, 5, 6, 7, 8,
     ]);
     expect(database.query().events).toEqual([existing]);
     expect(database.listSessions()).toMatchObject([
@@ -176,9 +176,9 @@ describe('EventDatabase', () => {
     legacy.close();
 
     const database = new EventDatabase(path);
-    expect(database.schemaVersion()).toBe(7);
+    expect(database.schemaVersion()).toBe(8);
     expect(database.migrationHistory().map((migration) => migration.version)).toEqual([
-      1, 2, 3, 4, 5, 6, 7,
+      1, 2, 3, 4, 5, 6, 7, 8,
     ]);
     database.close();
   });
@@ -497,7 +497,7 @@ describe('EventDatabase', () => {
     expect(recovery.status).toBe('recovered');
     expect(recovery.backupPath && existsSync(recovery.backupPath)).toBe(true);
     expect(recovery.lossesUnknown).toBe(true);
-    expect(database.schemaVersion()).toBe(7);
+    expect(database.schemaVersion()).toBe(8);
     expect(database.query().total).toBe(0);
     database.close();
   });
@@ -539,7 +539,7 @@ describe('EventDatabase', () => {
 
     const reopened = new EventDatabase(path);
     expect(reopened.findById('interrupted')).toBeUndefined();
-    expect(reopened.schemaVersion()).toBe(7);
+    expect(reopened.schemaVersion()).toBe(8);
     reopened.close();
   });
 

@@ -1,4 +1,4 @@
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { appendFile, chmod, mkdir, rename, unlink, writeFile } from 'node:fs/promises';
 import { createServer, type Server, type Socket } from 'node:net';
 import { dirname, join } from 'node:path';
@@ -9,8 +9,9 @@ import {
   type PulseRNBridgeRequest,
   type PulseRNBridgeResponse,
 } from '@pulse-rn/mcp';
-import { eventCategorySchema } from '@pulse-rn/protocol';
+import { eventCategorySchema, type McpAccessMode } from '@pulse-rn/protocol';
 import type { EventDatabase, EventQuery } from './database.js';
+import type { DiagnosticService } from './diagnostic-service.js';
 import type { DebuggerManager } from './debugger-manager.js';
 import type { SessionManager } from './session-manager.js';
 import type { DevToolWebSocketServer } from './websocket-server.js';
@@ -31,6 +32,8 @@ export interface McpBridgeDependencies {
   debugger(): DebuggerManager;
   sessions: SessionManager;
   server(): DevToolWebSocketServer;
+  diagnostics(): DiagnosticService;
+  accessMode(): McpAccessMode;
 }
 
 export interface McpClientStatus {
@@ -49,6 +52,24 @@ interface AuditEntry {
   arguments: Record<string, unknown>;
   error?: string;
 }
+
+const debuggerControlTools = new Set([
+  'pulsern_connect_debugger',
+  'pulsern_pause',
+  'pulsern_resume',
+  'pulsern_step',
+  'pulsern_add_breakpoint',
+  'pulsern_remove_breakpoint',
+  'pulsern_remove_temporary_breakpoints',
+]);
+const fullControlTools = new Set([
+  'pulsern_evaluate',
+  'pulsern_interact_with_component',
+  'pulsern_set_storage',
+  'pulsern_delete_storage',
+]);
+
+class McpPermissionError extends Error {}
 
 function safeArguments(tool: string, args: Record<string, unknown>): Record<string, unknown> {
   const safe = { ...args };
@@ -164,6 +185,7 @@ export class McpBridge {
     try {
       request = requestSchema.parse(JSON.parse(line));
       if (!tokensMatch(this.token, request.token)) throw new Error('MCP authentication failed.');
+      this.assertAllowed(request.tool);
       this.checkRateLimit(request.client, request.tool);
       const result = await this.execute(request.tool, request.arguments);
       const now = Date.now();
@@ -200,7 +222,13 @@ export class McpBridge {
       }
       this.respond(socket, {
         id: request?.id ?? 'invalid',
-        error: { code: 'PULSERN_MCP_ERROR', message },
+        error: {
+          code:
+            error instanceof McpPermissionError
+              ? 'PULSERN_MCP_PERMISSION_DENIED'
+              : 'PULSERN_MCP_ERROR',
+          message,
+        },
       });
     }
   }
@@ -225,6 +253,18 @@ export class McpBridge {
     if (recent.length >= 10) throw new Error('Sensitive MCP tool rate limit exceeded.');
     recent.push(now);
     this.rateLimits.set(key, recent);
+  }
+
+  private assertAllowed(tool: string): void {
+    const mode = this.dependencies.accessMode();
+    if (fullControlTools.has(tool) && mode !== 'full') {
+      throw new McpPermissionError(`${tool} requires full MCP access. Current mode is ${mode}.`);
+    }
+    if (debuggerControlTools.has(tool) && mode === 'read-only') {
+      throw new McpPermissionError(
+        `${tool} requires debugger or full MCP access. Current mode is read-only.`,
+      );
+    }
   }
 
   private async audit(entry: AuditEntry): Promise<void> {
@@ -289,7 +329,80 @@ export class McpBridge {
           })
           .strict()
           .parse(args);
-        return database.query({ ...input, errorsOnly: true, order: 'newest' });
+        return this.dependencies.diagnostics().diagnose(input.sessionId);
+      }
+      case 'pulsern_diagnose_session': {
+        const { sessionId } = z.object({ sessionId: identifier.optional() }).strict().parse(args);
+        return this.dependencies.diagnostics().diagnose(sessionId);
+      }
+      case 'pulsern_create_diagnostic_snapshot': {
+        const input = z
+          .object({
+            sessionId: identifier.optional(),
+            triggerEventId: identifier.optional(),
+          })
+          .strict()
+          .parse(args);
+        const diagnosis = this.dependencies.diagnostics().diagnose(input.sessionId);
+        const session = database
+          .listSessions(500)
+          .find((entry) => entry.sessionId === diagnosis.sessionId)!;
+        if (input.triggerEventId) {
+          const trigger = database.findById(input.triggerEventId);
+          if (!trigger || trigger.sessionId !== diagnosis.sessionId) {
+            throw new Error('The trigger event does not belong to the diagnostic session.');
+          }
+        }
+        const evidenceIds = new Set(diagnosis.evidence.map((entry) => entry.eventId));
+        if (input.triggerEventId) evidenceIds.add(input.triggerEventId);
+        const events = this.dependencies
+          .diagnostics()
+          .eventsForDiagnosis(diagnosis.sessionId)
+          .filter((event) => evidenceIds.has(event.id))
+          .slice(0, 500);
+        const state = debuggerManager.snapshot();
+        const target = state.targets.find((entry) => entry.id === state.activeTargetId);
+        const debuggerSnapshot =
+          state.status === 'paused' && target?.appId === session.appId
+            ? {
+                targetId: target.id,
+                ...(state.pauseReason ? { pauseReason: state.pauseReason } : {}),
+                callFrames: state.callFrames.slice(0, 100).map((frame) => ({
+                  functionName: frame.functionName,
+                  sourceId: frame.location.sourceId,
+                  line: frame.location.line,
+                  column: frame.location.column,
+                  scopes: frame.scopes.slice(0, 50).map((scope) => ({
+                    type: scope.type,
+                    ...(scope.name ? { name: scope.name } : {}),
+                  })),
+                })),
+              }
+            : undefined;
+        return database.saveDiagnosticSnapshot({
+          version: 1,
+          id: randomUUID(),
+          sessionId: diagnosis.sessionId,
+          createdAt: Date.now(),
+          ...(input.triggerEventId ? { triggerEventId: input.triggerEventId } : {}),
+          diagnosis,
+          events,
+          ...(debuggerSnapshot ? { debugger: debuggerSnapshot } : {}),
+        });
+      }
+      case 'pulsern_list_diagnostic_snapshots': {
+        const { sessionId } = z.object({ sessionId: identifier.optional() }).strict().parse(args);
+        return database.listDiagnosticSnapshots(sessionId);
+      }
+      case 'pulsern_get_diagnostic_snapshot': {
+        const { id } = z.object({ id: z.string().uuid() }).strict().parse(args);
+        const snapshot = database.getDiagnosticSnapshot(id);
+        if (!snapshot) throw new Error('Diagnostic snapshot not found.');
+        return snapshot;
+      }
+      case 'pulsern_delete_diagnostic_snapshot': {
+        const { id } = z.object({ id: z.string().uuid() }).strict().parse(args);
+        return database.deleteDiagnosticSnapshot(id);
       }
       case 'pulsern_inspect_network':
         return database.query(
@@ -320,6 +433,27 @@ export class McpBridge {
       case 'pulsern_get_debugger_state':
         z.object({}).strict().parse(args);
         return debuggerManager.snapshot();
+      case 'pulsern_search_sources': {
+        const input = z
+          .object({
+            query: z.string().trim().min(1).max(1_000),
+            limit: z.number().int().min(1).max(100).optional(),
+          })
+          .strict()
+          .parse(args);
+        return debuggerManager.searchSources(input.query, input.limit);
+      }
+      case 'pulsern_get_source_context': {
+        const input = z
+          .object({
+            sourceId: identifier,
+            line: z.number().int().min(1).max(10_000_000),
+            contextLines: z.number().int().min(1).max(50).optional(),
+          })
+          .strict()
+          .parse(args);
+        return debuggerManager.getSourceContext(input.sourceId, input.line, input.contextLines);
+      }
       case 'pulsern_pause':
       case 'pulsern_resume':
         z.object({}).strict().parse(args);
@@ -342,6 +476,7 @@ export class McpBridge {
             condition: z.string().max(10_000).optional(),
             hitCondition: z.number().int().positive().max(1_000_000).optional(),
             logMessage: z.string().max(10_000).optional(),
+            temporary: z.boolean().optional(),
           })
           .strict()
           .parse(args);
@@ -351,6 +486,9 @@ export class McpBridge {
         const { id } = z.object({ id: z.string().uuid() }).strict().parse(args);
         return debuggerManager.removeBreakpoint(id);
       }
+      case 'pulsern_remove_temporary_breakpoints':
+        z.object({}).strict().parse(args);
+        return debuggerManager.removeTemporaryBreakpoints();
       case 'pulsern_get_call_frames':
         z.object({}).strict().parse(args);
         return debuggerManager.snapshot().callFrames;

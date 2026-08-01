@@ -371,6 +371,115 @@ export type DevToolEventEnvelope<TPayload extends JsonValue = JsonValue> = Omit<
   'payload'
 > & { payload: TPayload };
 
+export type DiagnosticFindingKind =
+  | 'application_error'
+  | 'network_failure'
+  | 'redux_preceding_failure'
+  | 'navigation_preceding_failure'
+  | 'performance_anomaly'
+  | 'transport_degradation';
+
+export type DiagnosticSeverity = 'info' | 'warning' | 'error' | 'critical';
+
+export interface DiagnosticRelation {
+  eventId: string;
+  confidence: number;
+  reason:
+    | 'explicit_event_id'
+    | 'matching_correlation_id'
+    | 'parent_child'
+    | 'error_context'
+    | 'matching_metadata'
+    | 'time_proximity';
+  description: string;
+}
+
+export interface DiagnosticEvidence {
+  eventId: string;
+  timestamp: number;
+  category: DevToolEventCategory;
+  type: string;
+  summary?: string;
+}
+
+export interface DiagnosticFinding {
+  id: string;
+  kind: DiagnosticFindingKind;
+  severity: DiagnosticSeverity;
+  summary: string;
+  primaryEventId?: string;
+  timestamp: number;
+  confidence: number;
+  relations: DiagnosticRelation[];
+  source?: {
+    file: string;
+    line?: number;
+    column?: number;
+    symbolicated: boolean;
+  };
+}
+
+export interface DiagnosticCompleteness {
+  scannedEvents: number;
+  totalEvents: number;
+  truncated: boolean;
+  warnings: string[];
+}
+
+export interface SessionDiagnosis {
+  version: 1;
+  sessionId: string;
+  generatedAt: number;
+  findings: DiagnosticFinding[];
+  evidence: DiagnosticEvidence[];
+  completeness: DiagnosticCompleteness;
+}
+
+export interface DiagnosticSnapshot {
+  version: 1;
+  id: string;
+  sessionId: string;
+  createdAt: number;
+  triggerEventId?: string;
+  diagnosis: SessionDiagnosis;
+  events: DevToolEventEnvelope[];
+  debugger?: {
+    targetId: string;
+    pauseReason?: string;
+    callFrames: {
+      functionName: string;
+      sourceId: string;
+      line: number;
+      column: number;
+      scopes: {
+        type: string;
+        name?: string;
+      }[];
+    }[];
+  };
+}
+
+export interface SourceSearchResult {
+  sourceId: string;
+  name: string;
+  url: string;
+  original: boolean;
+}
+
+export interface SourceContext {
+  sourceId: string;
+  name: string;
+  url: string;
+  original: boolean;
+  mappingStatus: 'original' | 'generated' | 'unavailable';
+  requestedLine: number;
+  startLine: number;
+  endLine: number;
+  lines: { line: number; text: string }[];
+}
+
+export type McpAccessMode = 'read-only' | 'debugger' | 'full';
+
 export const deviceInfoSchema = z.object({
   name: identifier,
   platform: z.enum(['ios', 'android', 'unknown']),

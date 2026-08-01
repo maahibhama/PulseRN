@@ -23,6 +23,7 @@ import type {
   ReactComponentInteraction,
   ReactComponentSnapshot,
 } from '../preload/api.js';
+import type { SourceContext, SourceSearchResult } from '@pulse-rn/protocol';
 
 const targetSchema = z
   .object({
@@ -91,6 +92,7 @@ const storedBreakpointSchema = z.object({
   hitCount: z.number().int().nonnegative().default(0),
   verified: z.boolean().default(false),
   error: z.string().optional(),
+  temporary: z.boolean().optional(),
 });
 const storedWatchSchema = z.object({
   id: z.string().uuid(),
@@ -487,6 +489,67 @@ export class DebuggerManager {
     return result.scriptSource;
   }
 
+  searchSources(query: string, limit = 50): SourceSearchResult[] {
+    const needle = query.trim().toLowerCase();
+    if (needle.length < 1 || needle.length > 1_000) {
+      throw new Error('Source search must contain between 1 and 1,000 characters.');
+    }
+    const safeLimit = Math.max(1, Math.min(Math.trunc(limit), 100));
+    return this.state.sources
+      .filter(
+        (source) =>
+          source.name.toLowerCase().includes(needle) || source.url.toLowerCase().includes(needle),
+      )
+      .sort(
+        (left, right) =>
+          Number(right.original) - Number(left.original) ||
+          left.name.localeCompare(right.name) ||
+          left.id.localeCompare(right.id),
+      )
+      .slice(0, safeLimit)
+      .map((source) => ({
+        sourceId: source.id,
+        name: source.name,
+        url: source.url,
+        original: source.original,
+      }));
+  }
+
+  async getSourceContext(
+    sourceId: string,
+    line: number,
+    contextLines = 10,
+  ): Promise<SourceContext> {
+    if (!Number.isInteger(line) || line < 1 || line > 10_000_000) {
+      throw new Error('Source context line is invalid.');
+    }
+    const safeContext = Math.max(1, Math.min(Math.trunc(contextLines), 50));
+    const source = this.state.sources.find((entry) => entry.id === sourceId);
+    if (!source) throw new Error('Source is no longer available.');
+    const text = await this.getSource(sourceId);
+    const lines = text.split(/\r?\n/);
+    const startLine = Math.max(1, line - safeContext);
+    const endLine = Math.min(lines.length, line + safeContext);
+    const selected = lines.slice(startLine - 1, endLine).map((value, index) => ({
+      line: startLine + index,
+      text: value.slice(0, 20_000),
+    }));
+    if (Buffer.byteLength(JSON.stringify(selected)) > 512 * 1024) {
+      throw new Error('Source context exceeds the 512 KiB response limit.');
+    }
+    return {
+      sourceId,
+      name: source.name,
+      url: source.url,
+      original: source.original,
+      mappingStatus: source.original ? 'original' : 'generated',
+      requestedLine: line,
+      startLine,
+      endLine,
+      lines: selected,
+    };
+  }
+
   async addBreakpoint(input: AddBreakpointInput): Promise<DebuggerState> {
     const breakpoint: DebuggerBreakpoint = {
       id: crypto.randomUUID(),
@@ -500,6 +563,7 @@ export class DebuggerManager {
       hitCount: 0,
       enabled: true,
       verified: false,
+      temporary: input.temporary,
     };
     this.data.breakpoints.push(breakpoint);
     this.persist();
@@ -517,6 +581,14 @@ export class DebuggerManager {
     this.data.breakpoints = this.data.breakpoints.filter((entry) => entry.id !== id);
     this.persist();
     this.publishData();
+    return this.snapshot();
+  }
+
+  async removeTemporaryBreakpoints(): Promise<DebuggerState> {
+    const ids = this.data.breakpoints
+      .filter((breakpoint) => breakpoint.temporary)
+      .map((breakpoint) => breakpoint.id);
+    for (const id of ids) await this.removeBreakpoint(id);
     return this.snapshot();
   }
 
@@ -565,15 +637,17 @@ export class DebuggerManager {
   async getProperties(objectId: string): Promise<DebuggerProperty[]> {
     const result = z
       .object({
-        result: z.array(
-          z.object({
-            name: z.string(),
-            value: z.unknown().optional(),
-            enumerable: z.boolean().optional(),
-            writable: z.boolean().optional(),
-            get: z.unknown().optional(),
-          }),
-        ).max(10_000),
+        result: z
+          .array(
+            z.object({
+              name: z.string(),
+              value: z.unknown().optional(),
+              enumerable: z.boolean().optional(),
+              writable: z.boolean().optional(),
+              get: z.unknown().optional(),
+            }),
+          )
+          .max(10_000),
       })
       .parse(
         await this.send('Runtime.getProperties', {

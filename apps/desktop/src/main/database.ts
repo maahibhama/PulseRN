@@ -2,11 +2,16 @@ import { DatabaseSync } from 'node:sqlite';
 import { randomUUID } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { eventEnvelopeSchema, type DevToolEventEnvelope } from '@pulse-rn/protocol';
+import {
+  eventEnvelopeSchema,
+  type DevToolEventEnvelope,
+  type DiagnosticSnapshot,
+} from '@pulse-rn/protocol';
 import type { ConnectedDevice } from './session-manager.js';
 import type { DisconnectInfo } from './session-manager.js';
 
-const CURRENT_SCHEMA_VERSION = 7;
+const CURRENT_SCHEMA_VERSION = 8;
+const MAX_DIAGNOSTIC_SNAPSHOT_BYTES = 2 * 1024 * 1024;
 
 export interface EventCursor {
   timestamp: number;
@@ -412,6 +417,19 @@ export class EventDatabase {
         );
         CREATE INDEX idx_storage_snapshots_provider_key
           ON storage_snapshots(provider_id, storage_key, created_at DESC);
+      `,
+      8: `
+        CREATE TABLE diagnostic_snapshots (
+          id TEXT PRIMARY KEY,
+          session_id TEXT NOT NULL,
+          trigger_event_id TEXT,
+          created_at INTEGER NOT NULL,
+          snapshot_json TEXT NOT NULL CHECK (json_valid(snapshot_json)),
+          snapshot_bytes INTEGER NOT NULL,
+          FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
+        );
+        CREATE INDEX idx_diagnostic_snapshots_session_created
+          ON diagnostic_snapshots(session_id, created_at DESC);
       `,
     };
     const sql = migrations[version];
@@ -1101,6 +1119,10 @@ export class EventDatabase {
           `,
         )
         .run(maxEvents).changes;
+      this.database.exec(`
+        DELETE FROM diagnostic_snapshots
+        WHERE session_id NOT IN (SELECT DISTINCT session_id FROM events);
+      `);
       this.refreshSessionCounts();
       const retained = (
         this.database.prepare('SELECT COUNT(*) AS count FROM events').get() as unknown as {
@@ -1140,6 +1162,7 @@ export class EventDatabase {
     this.database.exec('BEGIN IMMEDIATE;');
     try {
       const removed = this.database.prepare('DELETE FROM events').run().changes;
+      this.database.exec('DELETE FROM diagnostic_snapshots;');
       this.refreshSessionCounts();
       this.database.exec('COMMIT;');
       return {
@@ -1247,6 +1270,102 @@ export class EventDatabase {
       this.database.exec('ROLLBACK;');
       throw error;
     }
+  }
+
+  saveDiagnosticSnapshot(snapshot: DiagnosticSnapshot): DiagnosticSnapshot {
+    const serialized = JSON.stringify(snapshot);
+    const bytes = Buffer.byteLength(serialized);
+    if (bytes > MAX_DIAGNOSTIC_SNAPSHOT_BYTES) {
+      throw new Error('Diagnostic snapshots must not exceed 2 MiB.');
+    }
+    this.database.exec('BEGIN IMMEDIATE;');
+    try {
+      const session = this.database
+        .prepare('SELECT 1 AS found FROM sessions WHERE session_id = ?')
+        .get(snapshot.sessionId);
+      if (!session) throw new Error('The diagnostic session does not exist.');
+      this.database
+        .prepare(
+          `
+            INSERT INTO diagnostic_snapshots (
+              id, session_id, trigger_event_id, created_at, snapshot_json, snapshot_bytes
+            ) VALUES (?, ?, ?, ?, ?, ?)
+          `,
+        )
+        .run(
+          snapshot.id,
+          snapshot.sessionId,
+          snapshot.triggerEventId ?? null,
+          snapshot.createdAt,
+          serialized,
+          bytes,
+        );
+      this.database
+        .prepare(
+          `
+            DELETE FROM diagnostic_snapshots
+            WHERE id IN (
+              SELECT id
+              FROM diagnostic_snapshots
+              WHERE session_id = ?
+              ORDER BY created_at DESC, id DESC
+              LIMIT -1 OFFSET 20
+            )
+          `,
+        )
+        .run(snapshot.sessionId);
+      this.database.exec('COMMIT;');
+      return structuredClone(snapshot);
+    } catch (error) {
+      this.database.exec('ROLLBACK;');
+      throw error;
+    }
+  }
+
+  listDiagnosticSnapshots(sessionId?: string): DiagnosticSnapshot[] {
+    const rows = (sessionId
+      ? this.database
+          .prepare(
+            `
+                SELECT snapshot_json
+                FROM diagnostic_snapshots
+                WHERE session_id = ?
+                ORDER BY created_at DESC, id DESC
+                LIMIT 500
+              `,
+          )
+          .all(sessionId)
+      : this.database
+          .prepare(
+            `
+                SELECT snapshot_json
+                FROM diagnostic_snapshots
+                ORDER BY created_at DESC, id DESC
+                LIMIT 500
+              `,
+          )
+          .all()) as unknown as { snapshot_json: string }[];
+    return rows.flatMap((row) => {
+      try {
+        return [JSON.parse(row.snapshot_json) as DiagnosticSnapshot];
+      } catch {
+        return [];
+      }
+    });
+  }
+
+  getDiagnosticSnapshot(id: string): DiagnosticSnapshot | undefined {
+    const row = this.database
+      .prepare('SELECT snapshot_json FROM diagnostic_snapshots WHERE id = ?')
+      .get(id) as unknown as { snapshot_json: string } | undefined;
+    if (!row) return undefined;
+    return JSON.parse(row.snapshot_json) as DiagnosticSnapshot;
+  }
+
+  deleteDiagnosticSnapshot(id: string): boolean {
+    return (
+      this.database.prepare('DELETE FROM diagnostic_snapshots WHERE id = ?').run(id).changes > 0
+    );
   }
 
   listDevices(limit = 100): StoredDevice[] {

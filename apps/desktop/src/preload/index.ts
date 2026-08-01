@@ -214,6 +214,7 @@ const settingsSchema = z.object({
   launchAtLogin: z.boolean(),
   keepRunningInBackground: z.boolean(),
   mcpEnabled: z.boolean(),
+  mcpAccessMode: z.enum(['read-only', 'debugger', 'full']),
 });
 const databaseMaintenanceSchema = z.object({
   integrity: z.enum(['ok', 'recovered']),
@@ -375,6 +376,7 @@ const debuggerStateSchema = z.object({
       hitCount: z.number().int().nonnegative().optional(),
       verified: z.boolean(),
       error: z.string().optional(),
+      temporary: z.boolean().optional(),
     }),
   ),
   callFrames: z.array(
@@ -834,6 +836,48 @@ const api: PulseRNDesktopApi = {
       .string()
       .parse(await invokeDebugger({ operation: 'source', sourceId: z.string().parse(sourceId) }));
   },
+  async searchDebuggerSources(query, limit) {
+    return z
+      .array(
+        z.object({
+          sourceId: z.string(),
+          name: z.string(),
+          url: z.string(),
+          original: z.boolean(),
+        }),
+      )
+      .parse(
+        await invokeDebugger({
+          operation: 'searchSources',
+          query: z.string().trim().min(1).max(1_000).parse(query),
+          limit: limit === undefined ? undefined : z.number().int().min(1).max(100).parse(limit),
+        }),
+      );
+  },
+  async getDebuggerSourceContext(sourceId, line, contextLines) {
+    return z
+      .object({
+        sourceId: z.string(),
+        name: z.string(),
+        url: z.string(),
+        original: z.boolean(),
+        requestedLine: z.number().int().positive(),
+        startLine: z.number().int().positive(),
+        endLine: z.number().int().positive(),
+        lines: z.array(z.object({ line: z.number().int().positive(), text: z.string() })),
+      })
+      .parse(
+        await invokeDebugger({
+          operation: 'sourceContext',
+          sourceId: z.string().min(1).max(100_000).parse(sourceId),
+          line: z.number().int().min(1).max(10_000_000).parse(line),
+          contextLines:
+            contextLines === undefined
+              ? undefined
+              : z.number().int().min(1).max(50).parse(contextLines),
+        }),
+      );
+  },
   async addDebuggerBreakpoint(input) {
     return debuggerStateSchema.parse(
       await invokeDebugger({
@@ -843,6 +887,7 @@ const api: PulseRNDesktopApi = {
             condition: z.string().max(10_000).optional(),
             hitCondition: z.number().int().positive().max(1_000_000).optional(),
             logMessage: z.string().max(10_000).optional(),
+            temporary: z.boolean().optional(),
           })
           .parse(input),
       }),
@@ -851,6 +896,11 @@ const api: PulseRNDesktopApi = {
   async removeDebuggerBreakpoint(id) {
     return debuggerStateSchema.parse(
       await invokeDebugger({ operation: 'removeBreakpoint', id: z.string().uuid().parse(id) }),
+    );
+  },
+  async removeTemporaryDebuggerBreakpoints() {
+    return debuggerStateSchema.parse(
+      await invokeDebugger({ operation: 'removeTemporaryBreakpoints' }),
     );
   },
   async setDebuggerBreakpointEnabled(id, enabled) {

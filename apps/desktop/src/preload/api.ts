@@ -2,6 +2,8 @@ import type { ConnectedDevice, DesktopSnapshot } from '../main/session-manager.j
 import type {
   DevToolEventCategory,
   DevToolEventEnvelope,
+  SourceContext,
+  SourceSearchResult,
   StorageOperation,
   StorageResult,
 } from '@pulse-rn/protocol';
@@ -212,6 +214,7 @@ export interface AppSettings {
   launchAtLogin: boolean;
   keepRunningInBackground: boolean;
   mcpEnabled: boolean;
+  mcpAccessMode: 'read-only' | 'debugger' | 'full';
 }
 
 export interface McpInfo {
@@ -294,6 +297,7 @@ export interface DebuggerBreakpoint extends DebuggerLocation {
   hitCount?: number;
   verified: boolean;
   error?: string;
+  temporary?: boolean;
 }
 
 export interface DebuggerRemoteValue {
@@ -425,6 +429,7 @@ export interface AddBreakpointInput extends DebuggerLocation {
   condition?: string;
   hitCondition?: number;
   logMessage?: string;
+  temporary?: boolean;
 }
 
 export interface PulseRNDesktopApi {
@@ -491,8 +496,15 @@ export interface PulseRNDesktopApi {
   connectDebugger(targetId: string): Promise<DebuggerState>;
   disconnectDebugger(): Promise<DebuggerState>;
   getDebuggerSource(sourceId: string): Promise<string>;
+  searchDebuggerSources(query: string, limit?: number): Promise<SourceSearchResult[]>;
+  getDebuggerSourceContext(
+    sourceId: string,
+    line: number,
+    contextLines?: number,
+  ): Promise<SourceContext>;
   addDebuggerBreakpoint(input: AddBreakpointInput): Promise<DebuggerState>;
   removeDebuggerBreakpoint(id: string): Promise<DebuggerState>;
+  removeTemporaryDebuggerBreakpoints(): Promise<DebuggerState>;
   setDebuggerBreakpointEnabled(id: string, enabled: boolean): Promise<DebuggerState>;
   debuggerCommand(
     command: 'pause' | 'resume' | 'stepOver' | 'stepInto' | 'stepOut',
