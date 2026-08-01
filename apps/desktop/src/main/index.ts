@@ -20,6 +20,7 @@ import { PairingStore } from './pairing-store.js';
 import { TlsCertificateStore } from './tls-certificate.js';
 import { UpdateManager, type DesktopUpdaterAdapter } from './update-manager.js';
 import { createCurlCommand, createSanitizedHar } from './network-export.js';
+import { McpBridge } from './mcp-bridge.js';
 import { networkEventPayloadSchema } from '@pulse-rn/protocol';
 
 const SNAPSHOT_CHANNEL = 'pulse-rn:snapshot';
@@ -31,6 +32,7 @@ const SETTINGS_CHANNEL = 'pulse-rn:settings';
 const DEBUGGER_CHANNEL = 'pulse-rn:debugger';
 const CONNECTION_CHANNEL = 'pulse-rn:connection';
 const UPDATE_CHANNEL = 'pulse-rn:update';
+const MCP_CHANNEL = 'pulse-rn:mcp';
 const DARK_APP_ICON = join(__dirname, '../../resources/pulse-rn-app-icon-dark.png');
 const LIGHT_APP_ICON = join(__dirname, '../../resources/pulse-rn-app-icon-light.png');
 const e2eUserDataDirectory = process.env['PULSE_RN_E2E_USER_DATA_DIR'];
@@ -179,6 +181,7 @@ let debuggerManager: DebuggerManager | undefined;
 let pairingStore: PairingStore | undefined;
 let tlsCertificateStore: TlsCertificateStore | undefined;
 let updateManager: UpdateManager | undefined;
+let mcpBridge: McpBridge | undefined;
 let automaticUpdateTimer: ReturnType<typeof setTimeout> | undefined;
 let isQuitting = false;
 let shutdownComplete = false;
@@ -208,6 +211,24 @@ function effectiveServerPort(settings: { devToolPort: number }): number {
     configuredServerPort <= 65_535
     ? configuredServerPort
     : settings.devToolPort;
+}
+
+function mcpInfo() {
+  const serverPath = app.isPackaged
+    ? join(process.resourcesPath, 'mcp', 'server.js')
+    : join(app.getAppPath(), '../../packages/mcp/dist/server.js');
+  return {
+    enabled: settingsStore?.get().mcpEnabled ?? false,
+    available: Boolean(mcpBridge),
+    command: process.execPath,
+    args: [serverPath],
+    env: { ELECTRON_RUN_AS_NODE: '1' as const },
+    clients: mcpBridge?.clientSnapshot() ?? [],
+  };
+}
+
+function publishMcpInfo(): void {
+  if (window && !window.isDestroyed()) window.webContents.send(MCP_CHANNEL, mcpInfo());
 }
 
 async function readTlsCredentialFile(path: string): Promise<Buffer> {
@@ -425,9 +446,29 @@ app.whenReady().then(async () => {
   applyAppIcon(initialSettings.theme);
   nativeTheme.on('updated', handleNativeThemeUpdated);
   database = new EventDatabase(join(app.getPath('userData'), 'pulse-rn.sqlite'));
+  mcpBridge = new McpBridge(
+    app.getPath('userData'),
+    {
+      database: () => {
+        if (!database) throw new Error('PulseRN database is not ready.');
+        return database;
+      },
+      debugger: () => {
+        if (!debuggerManager) throw new Error('PulseRN debugger is not ready.');
+        return debuggerManager;
+      },
+      sessions,
+      server: () => {
+        if (!server) throw new Error('PulseRN device server is not ready.');
+        return server;
+      },
+    },
+    publishMcpInfo,
+  );
   maintainDatabase(true);
   sessions.hydrate(database.recent());
   ipcMain.handle(SNAPSHOT_CHANNEL, () => sessions.snapshot());
+  ipcMain.handle(MCP_CHANNEL, () => mcpInfo());
   ipcMain.handle(EVENTS_CHANNEL, async (_event, value: unknown) => {
     if (!database) throw new Error('PulseRN database is not ready.');
     const input = eventRequestSchema.parse(value);
@@ -766,6 +807,15 @@ app.whenReady().then(async () => {
     if (value === undefined) return settingsStore.get();
     const previous = settingsStore.get();
     const settings = settingsStore.update(value);
+    if (settings.mcpEnabled !== previous.mcpEnabled) {
+      try {
+        if (settings.mcpEnabled) await mcpBridge?.start();
+        else await mcpBridge?.stop();
+      } catch (error) {
+        settingsStore.update({ mcpEnabled: previous.mcpEnabled });
+        throw error;
+      }
+    }
     const serverChanged =
       settings.allowLanConnections !== previous.allowLanConnections ||
       settings.devToolPort !== previous.devToolPort ||
@@ -796,6 +846,7 @@ app.whenReady().then(async () => {
     }
     maintainDatabase(true);
     if (window && !window.isDestroyed()) window.webContents.send(SETTINGS_CHANNEL, settings);
+    publishMcpInfo();
     return settings;
   });
   ipcMain.handle(CONNECTION_CHANNEL, async (_event, value?: unknown) => {
@@ -1084,6 +1135,7 @@ app.whenReady().then(async () => {
     }
   });
   await restartServer();
+  if (initialSettings.mcpEnabled) await mcpBridge.start();
   createWindow();
   if (initialSettings.checkForUpdatesAutomatically && updateManager.snapshot().enabled) {
     automaticUpdateTimer = setTimeout(() => void updateManager?.check(), 5_000);
@@ -1110,6 +1162,7 @@ app.on('before-quit', (event) => {
     ipcMain.removeHandler(DEBUGGER_CHANNEL);
     ipcMain.removeHandler(CONNECTION_CHANNEL);
     ipcMain.removeHandler(UPDATE_CHANNEL);
+    ipcMain.removeHandler(MCP_CHANNEL);
     if (automaticUpdateTimer) clearTimeout(automaticUpdateTimer);
     nativeTheme.removeListener('updated', handleNativeThemeUpdated);
     debuggerManager?.close();
@@ -1117,7 +1170,14 @@ app.on('before-quit', (event) => {
 
     const activeServer = server;
     server = undefined;
+    const activeMcpBridge = mcpBridge;
+    mcpBridge = undefined;
     shutdownPromise = (async () => {
+      try {
+        await activeMcpBridge?.stop();
+      } catch (error) {
+        console.warn('[PulseRN] MCP shutdown failed:', error);
+      }
       try {
         await activeServer?.close();
       } catch (error) {

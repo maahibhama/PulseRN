@@ -42,6 +42,7 @@ export const useDesktopStore = create<DesktopState>((set) => ({
     checkForUpdatesAutomatically: true,
     launchAtLogin: false,
     keepRunningInBackground: true,
+    mcpEnabled: false,
   },
   setSnapshot: (snapshot) => set(snapshot),
   setDevices: (devices) => set({ devices }),

@@ -8,7 +8,7 @@ import {
   storageOperationSchema,
   storageResultSchema,
 } from '@pulse-rn/protocol';
-import type { AppSettings, DebuggerState, PulseRNDesktopApi } from './api.js';
+import type { AppSettings, DebuggerState, McpInfo, PulseRNDesktopApi } from './api.js';
 
 const SNAPSHOT_CHANNEL = 'pulse-rn:snapshot';
 const DEVICES_CHANNEL = 'pulse-rn:devices';
@@ -19,6 +19,7 @@ const SETTINGS_CHANNEL = 'pulse-rn:settings';
 const DEBUGGER_CHANNEL = 'pulse-rn:debugger';
 const CONNECTION_CHANNEL = 'pulse-rn:connection';
 const UPDATE_CHANNEL = 'pulse-rn:update';
+const MCP_CHANNEL = 'pulse-rn:mcp';
 const connectedDeviceSchema = z.object({
   connectionId: z.string(),
   deviceId: z.string(),
@@ -212,6 +213,7 @@ const settingsSchema = z.object({
   checkForUpdatesAutomatically: z.boolean(),
   launchAtLogin: z.boolean(),
   keepRunningInBackground: z.boolean(),
+  mcpEnabled: z.boolean(),
 });
 const databaseMaintenanceSchema = z.object({
   integrity: z.enum(['ok', 'recovered']),
@@ -244,6 +246,23 @@ const networkExportResultSchema = z.object({
   entries: z.number().int().nonnegative(),
 });
 const settingsPatchSchema = settingsSchema.partial().strict();
+const mcpInfoSchema = z.object({
+  enabled: z.boolean(),
+  available: z.boolean(),
+  command: z.string().min(1).max(10_000),
+  args: z.array(z.string().max(10_000)).max(10),
+  env: z.object({
+    ELECTRON_RUN_AS_NODE: z.literal('1'),
+  }),
+  clients: z.array(
+    z.object({
+      name: z.string().min(1).max(128),
+      connectedAt: z.number().finite().nonnegative(),
+      lastSeenAt: z.number().finite().nonnegative(),
+      requestCount: z.number().int().nonnegative(),
+    }),
+  ),
+});
 const connectionInfoSchema = z.object({
   mode: z.enum(['loopback', 'lan']),
   port: z.number().int().min(1_024).max(65_535),
@@ -712,6 +731,17 @@ const api: PulseRNDesktopApi = {
     ipcRenderer.on(SETTINGS_CHANNEL, handler);
     return () => ipcRenderer.removeListener(SETTINGS_CHANNEL, handler);
   },
+  async getMcpInfo() {
+    return mcpInfoSchema.parse(await ipcRenderer.invoke(MCP_CHANNEL));
+  },
+  onMcpInfo(listener) {
+    const handler = (_event: Electron.IpcRendererEvent, value: unknown) => {
+      const result = mcpInfoSchema.safeParse(value);
+      if (result.success) listener(result.data as McpInfo);
+    };
+    ipcRenderer.on(MCP_CHANNEL, handler);
+    return () => ipcRenderer.removeListener(MCP_CHANNEL, handler);
+  },
   async getConnectionInfo() {
     return connectionInfoSchema.parse(
       await ipcRenderer.invoke(CONNECTION_CHANNEL, { operation: 'info' }),
@@ -902,9 +932,7 @@ const api: PulseRNDesktopApi = {
         action: z
           .enum(['highlight', 'hideHighlight', 'startPicking', 'stopPicking', 'pollPicked'])
           .parse(action),
-        componentId: componentId
-          ? z.string().min(1).max(256).parse(componentId)
-          : undefined,
+        componentId: componentId ? z.string().min(1).max(256).parse(componentId) : undefined,
       }),
     );
   },
