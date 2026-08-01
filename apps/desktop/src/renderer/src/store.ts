@@ -20,6 +20,8 @@ export const useDesktopStore = create<DesktopState>((set) => ({
     density: 'comfortable',
     timelineOrder: 'newest',
     metroPort: 8081,
+    eventRetentionDays: 30,
+    maxStoredEvents: 100_000,
     launchAtLogin: false,
     keepRunningInBackground: true,
   },

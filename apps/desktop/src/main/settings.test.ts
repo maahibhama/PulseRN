@@ -14,14 +14,25 @@ describe('SettingsStore', () => {
       theme: 'system',
       density: 'comfortable',
       metroPort: 8081,
+      eventRetentionDays: 30,
+      maxStoredEvents: 100_000,
     });
-    store.update({ theme: 'light', density: 'compact', launchAtLogin: true, metroPort: 8090 });
+    store.update({
+      theme: 'light',
+      density: 'compact',
+      launchAtLogin: true,
+      metroPort: 8090,
+      eventRetentionDays: 7,
+      maxStoredEvents: 50_000,
+    });
 
     expect(new SettingsStore(filePath).get()).toMatchObject({
       theme: 'light',
       density: 'compact',
       launchAtLogin: true,
       metroPort: 8090,
+      eventRetentionDays: 7,
+      maxStoredEvents: 50_000,
     });
     expect(JSON.parse(readFileSync(filePath, 'utf8'))).not.toHaveProperty('unknown');
   });
@@ -34,5 +45,7 @@ describe('SettingsStore', () => {
     expect(() => store.update({ unknown: true })).toThrow();
     expect(() => store.update({ metroPort: 0 })).toThrow();
     expect(() => store.update({ metroPort: 65_536 })).toThrow();
+    expect(() => store.update({ eventRetentionDays: 0 })).toThrow();
+    expect(() => store.update({ maxStoredEvents: 999 })).toThrow();
   });
 });

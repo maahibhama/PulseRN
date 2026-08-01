@@ -1,4 +1,5 @@
-import type { AppSettings } from '../../preload/api.js';
+import { useState } from 'react';
+import type { AppSettings, DatabaseMaintenanceReport } from '../../preload/api.js';
 import darkAppIcon from '../../../resources/pulse-rn-app-icon-dark.png';
 import lightAppIcon from '../../../resources/pulse-rn-app-icon-light.png';
 import darkLogo from '../../../resources/pulse-rn-dark.png';
@@ -38,6 +39,26 @@ function Toggle({
 }
 
 export function SettingsPanel({ resolvedTheme, settings, onChange }: SettingsPanelProps) {
+  const [maintenance, setMaintenance] = useState<DatabaseMaintenanceReport>();
+  const [maintenanceError, setMaintenanceError] = useState('');
+  const [maintaining, setMaintaining] = useState(false);
+
+  const runMaintenance = async (clear = false) => {
+    setMaintaining(true);
+    setMaintenanceError('');
+    try {
+      setMaintenance(
+        clear
+          ? await window.pulseRN.clearStoredEvents()
+          : await window.pulseRN.runDatabaseMaintenance(),
+      );
+    } catch (error) {
+      setMaintenanceError(error instanceof Error ? error.message : 'Database operation failed.');
+    } finally {
+      setMaintaining(false);
+    }
+  };
+
   return (
     <main className="timeline settings-panel">
       <div className="panel-header">
@@ -79,6 +100,74 @@ export function SettingsPanel({ resolvedTheme, settings, onChange }: SettingsPan
               }}
             />
           </label>
+        </section>
+
+        <section className="settings-card">
+          <header>
+            <strong>Event history</strong>
+            <small>Bounded local SQLite storage</small>
+          </header>
+          <label className="setting-row">
+            <span>
+              <strong>Retention period</strong>
+              <small>Events older than this are removed during background maintenance.</small>
+            </span>
+            <select
+              value={settings.eventRetentionDays}
+              onChange={(event) =>
+                void onChange({ eventRetentionDays: Number(event.target.value) })
+              }
+            >
+              <option value={1}>1 day</option>
+              <option value={7}>7 days</option>
+              <option value={30}>30 days</option>
+              <option value={90}>90 days</option>
+              <option value={365}>1 year</option>
+            </select>
+          </label>
+          <label className="setting-row">
+            <span>
+              <strong>Maximum stored events</strong>
+              <small>The oldest events are removed after this limit is reached.</small>
+            </span>
+            <select
+              value={settings.maxStoredEvents}
+              onChange={(event) => void onChange({ maxStoredEvents: Number(event.target.value) })}
+            >
+              <option value={10_000}>10,000</option>
+              <option value={50_000}>50,000</option>
+              <option value={100_000}>100,000</option>
+              <option value={250_000}>250,000</option>
+              <option value={1_000_000}>1,000,000</option>
+            </select>
+          </label>
+          <div className="setting-row database-actions">
+            <span>
+              <strong>Database maintenance</strong>
+              <small>
+                {maintenance
+                  ? `${maintenance.retainedEvents.toLocaleString()} retained · ${
+                      maintenance.removedExpired +
+                      maintenance.removedOverflow +
+                      maintenance.removedInvalid
+                    } removed`
+                  : 'Apply retention now and recover malformed stored records.'}
+              </small>
+              {maintenanceError && <small className="settings-error">{maintenanceError}</small>}
+            </span>
+            <div>
+              <button disabled={maintaining} onClick={() => void runMaintenance()}>
+                {maintaining ? 'Working…' : 'Run cleanup'}
+              </button>
+              <button
+                className="danger-button"
+                disabled={maintaining}
+                onClick={() => void runMaintenance(true)}
+              >
+                Delete history
+              </button>
+            </div>
+          </div>
         </section>
 
         <section className="settings-card">

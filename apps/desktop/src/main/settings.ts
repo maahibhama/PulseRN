@@ -7,6 +7,8 @@ export const appSettingsSchema = z.object({
   density: z.enum(['comfortable', 'compact']),
   timelineOrder: z.enum(['newest', 'oldest']),
   metroPort: z.number().int().min(1).max(65_535),
+  eventRetentionDays: z.number().int().min(1).max(365),
+  maxStoredEvents: z.number().int().min(1_000).max(1_000_000),
   launchAtLogin: z.boolean(),
   keepRunningInBackground: z.boolean(),
 });
@@ -18,6 +20,8 @@ const defaults: AppSettings = {
   density: 'comfortable',
   timelineOrder: 'newest',
   metroPort: 8081,
+  eventRetentionDays: 30,
+  maxStoredEvents: 100_000,
   launchAtLogin: false,
   keepRunningInBackground: true,
 };

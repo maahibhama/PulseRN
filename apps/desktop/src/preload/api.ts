@@ -14,6 +14,7 @@ export interface EventCursor {
 
 export interface EventQuery {
   category?: DevToolEventCategory;
+  categories?: DevToolEventCategory[];
   cursor?: EventCursor;
   deviceId?: string;
   limit?: number;
@@ -40,6 +41,15 @@ export interface StoredSession {
   eventCount: number;
 }
 
+export interface DatabaseMaintenanceReport {
+  integrity: 'ok' | 'recovered';
+  removedExpired: number;
+  removedOverflow: number;
+  removedInvalid: number;
+  retainedEvents: number;
+  completedAt: number;
+}
+
 export interface StorageRequestInput {
   connectionId: string;
   providerId: string;
@@ -53,6 +63,8 @@ export interface AppSettings {
   density: 'comfortable' | 'compact';
   timelineOrder: 'newest' | 'oldest';
   metroPort: number;
+  eventRetentionDays: number;
+  maxStoredEvents: number;
   launchAtLogin: boolean;
   keepRunningInBackground: boolean;
 }
@@ -145,6 +157,8 @@ export interface PulseRNDesktopApi {
   queryEvents(input?: EventQuery): Promise<EventPage>;
   getEvent(id: string): Promise<EventPage['events'][number] | undefined>;
   listSessions(): Promise<StoredSession[]>;
+  runDatabaseMaintenance(): Promise<DatabaseMaintenanceReport>;
+  clearStoredEvents(): Promise<DatabaseMaintenanceReport>;
   requestStorage(input: StorageRequestInput): Promise<StorageResult>;
   getSettings(): Promise<AppSettings>;
   updateSettings(patch: Partial<AppSettings>): Promise<AppSettings>;

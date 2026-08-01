@@ -1,4 +1,4 @@
-import type { DevToolEventEnvelope } from '@pulse-rn/protocol';
+import type { DevToolEventCategory, DevToolEventEnvelope } from '@pulse-rn/protocol';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ConsolePanel } from './ConsolePanel.js';
 import { DebuggerPanel } from './DebuggerPanel.js';
@@ -13,6 +13,7 @@ import { StoragePanel } from './StoragePanel.js';
 import darkAppIcon from '../../../resources/pulse-rn-app-icon-dark.png';
 import lightAppIcon from '../../../resources/pulse-rn-app-icon-light.png';
 import { deviceLabel, findSelectedEvent, useDesktopStore } from './store.js';
+import { useInspectorEvents } from './useInspectorEvents.js';
 
 type ViewName =
   | 'Timeline'
@@ -38,6 +39,15 @@ const navItems: { name: ViewName; icon: string; available: boolean }[] = [
   { name: 'Debugger', icon: '⏵', available: true },
   { name: 'Settings', icon: '⚙', available: true },
 ];
+
+const inspectorCategories: Partial<Record<ViewName, DevToolEventCategory[]>> = {
+  Console: ['console'],
+  Network: ['network'],
+  Redux: ['redux'],
+  Navigation: ['navigation'],
+  Performance: ['performance', 'network', 'redux', 'navigation'],
+  Errors: ['error'],
+};
 
 function formatTime(timestamp: number): string {
   return new Date(timestamp).toLocaleTimeString([], {
@@ -267,6 +277,18 @@ export function App() {
       ? selectedPagedEvent
       : findSelectedEvent(events, selectedEventId);
   const desktopApi = window.pulseRN;
+  const activeInspectorCategories = inspectorCategories[activeView];
+  const latestEvent = events.at(-1);
+  const inspectorPage = useInspectorEvents(
+    activeInspectorCategories,
+    latestEvent && activeInspectorCategories?.includes(latestEvent.category)
+      ? latestEvent.id
+      : undefined,
+  );
+  const selectInspectorEvent = (id: string) => {
+    setSelectedPagedEvent(inspectorPage.events.find((event) => event.id === id));
+    selectEvent(id);
+  };
 
   useEffect(() => {
     if (!desktopApi) return;
@@ -382,23 +404,43 @@ export function App() {
           }}
         />
       ) : activeView === 'Console' ? (
-        <ConsolePanel events={events} selectedEventId={selectedEventId} onSelect={selectEvent} />
+        <ConsolePanel
+          events={inspectorPage.events}
+          selectedEventId={selectedEventId}
+          onSelect={selectInspectorEvent}
+        />
       ) : activeView === 'Network' ? (
-        <NetworkPanel events={events} selectedEventId={selectedEventId} onSelect={selectEvent} />
+        <NetworkPanel
+          events={inspectorPage.events}
+          selectedEventId={selectedEventId}
+          onSelect={selectInspectorEvent}
+        />
       ) : activeView === 'Redux' ? (
-        <ReduxPanel events={events} selectedEventId={selectedEventId} onSelect={selectEvent} />
+        <ReduxPanel
+          events={inspectorPage.events}
+          selectedEventId={selectedEventId}
+          onSelect={selectInspectorEvent}
+        />
       ) : activeView === 'Navigation' ? (
-        <NavigationPanel events={events} selectedEventId={selectedEventId} onSelect={selectEvent} />
+        <NavigationPanel
+          events={inspectorPage.events}
+          selectedEventId={selectedEventId}
+          onSelect={selectInspectorEvent}
+        />
       ) : activeView === 'Performance' ? (
         <PerformancePanel
-          events={events}
+          events={inspectorPage.events}
           selectedEventId={selectedEventId}
-          onSelect={selectEvent}
+          onSelect={selectInspectorEvent}
         />
       ) : activeView === 'Storage' ? (
         <StoragePanel devices={devices} />
       ) : activeView === 'Errors' ? (
-        <ErrorsPanel events={events} selectedEventId={selectedEventId} onSelect={selectEvent} />
+        <ErrorsPanel
+          events={inspectorPage.events}
+          selectedEventId={selectedEventId}
+          onSelect={selectInspectorEvent}
+        />
       ) : activeView === 'Settings' ? (
         <SettingsPanel
           resolvedTheme={resolvedTheme}
@@ -407,6 +449,24 @@ export function App() {
         />
       ) : (
         <UpcomingPanel view={activeView} />
+      )}
+      {inspectorCategories[activeView] && (
+        <div className="inspector-pagination">
+          <span>
+            {inspectorPage.events.length} of {inspectorPage.total}
+          </span>
+          {inspectorPage.error && <span className="pagination-error">{inspectorPage.error}</span>}
+          <button
+            disabled={!inspectorPage.hasMore || inspectorPage.loading}
+            onClick={() => void inspectorPage.loadMore()}
+          >
+            {inspectorPage.loading
+              ? 'Loading…'
+              : inspectorPage.hasMore
+                ? 'Load older'
+                : 'All loaded'}
+          </button>
+        </div>
       )}
       {activeView !== 'Debugger' && <EventDetails event={selected} />}
     </div>

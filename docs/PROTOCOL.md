@@ -51,3 +51,6 @@ Limits in Phase 1:
 - Handshake timeout: 5 seconds
 
 Invalid JSON or schema-invalid data is ignored and logged by Electron main; it never reaches the renderer or crashes the server.
+
+Desktop persistence is outside the device protocol. Validated preload queries accept one category or
+a bounded category list, allowing every inspector to page its retained SQLite history independently.
