@@ -52,3 +52,6 @@ The desktop database is stored under Electron's platform-specific `userData` dir
 Electron currently labels its bundled `node:sqlite` API experimental and may print that warning on startup. The database is local and disposable during Phase 1; schema access remains isolated behind `EventDatabase` so the implementation can be replaced without changing the transport or renderer.
 
 For desktop installer builds and version-tag releases, see [RELEASING.md](RELEASING.md).
+
+The session archive contract and its trust boundary are documented in
+[SESSION-ARCHIVES.md](SESSION-ARCHIVES.md).

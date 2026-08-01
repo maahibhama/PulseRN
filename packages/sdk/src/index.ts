@@ -1,5 +1,7 @@
 import { DevToolClient } from './client.js';
 import type { CaptureErrorOptions, DevToolConfig, TrackEventInput } from './types.js';
+export { getOrCreatePulseRNDeviceId } from './identity.js';
+export type { PulseRNIdentityStorage } from './identity.js';
 
 let activeClient: DevToolClient | undefined;
 

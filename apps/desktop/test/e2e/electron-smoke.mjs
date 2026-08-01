@@ -207,6 +207,16 @@ try {
   );
 
   await cdp.evaluate(
+    "[...document.querySelectorAll('.nav')].find((button) => button.textContent.includes('Sessions'))?.click()",
+  );
+  await retry(
+    async () =>
+      (await cdp.evaluate("document.querySelector('.session-entry strong')?.textContent")) ===
+      'PulseRN E2E',
+    'Stored session browser',
+  );
+
+  await cdp.evaluate(
     "[...document.querySelectorAll('.nav')].find((button) => button.textContent.includes('Settings'))?.click()",
   );
   await retry(
@@ -220,6 +230,19 @@ try {
   );
   assert(settings.eventRetentionDays === 7, 'Retention settings did not cross preload.');
   assert(settings.maxStoredEvents === 50_000, 'Event limit did not cross preload.');
+  const connectionInfo = await cdp.evaluate('window.pulseRN.getConnectionInfo()');
+  assert(connectionInfo.mode === 'loopback', 'Loopback is not the default connection mode.');
+  assert(connectionInfo.port === serverPort, 'Effective debugger server port was not reported.');
+  assert(
+    connectionInfo.requiresAuth === false,
+    'Loopback unexpectedly requires LAN authentication.',
+  );
+  assert(connectionInfo.tls.enabled === false, 'TLS was unexpectedly enabled by default.');
+  assert(
+    connectionInfo.tls.configured === false,
+    'A fresh profile unexpectedly reported TLS credentials.',
+  );
+  assert(connectionInfo.accessToken === undefined, 'Connection info leaked the access token.');
   const maintenance = await cdp.evaluate('window.pulseRN.runDatabaseMaintenance()');
   assert(maintenance.retainedEvents === 600, 'Database maintenance lost retained events.');
 

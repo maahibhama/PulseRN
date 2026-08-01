@@ -30,7 +30,49 @@ if (__DEV__) {
 }
 ```
 
-Android Emulator maps the host loopback address to `10.0.2.2`. The iOS simulator can use `127.0.0.1`. Physical devices require a reachable LAN binding, which is intentionally disabled pending authenticated remote connections.
+Android Emulator maps the host loopback address to `10.0.2.2`. The iOS simulator can use
+`127.0.0.1`. For a physical device, enable authenticated LAN connections in PulseRN Settings and
+configure the address, port, and copied token:
+
+```ts
+ReactNativeDevTool.configure({
+  appName: 'MyApp',
+  host: '192.168.1.20',
+  port: 9090,
+  authToken: 'token-copied-from-pulsern',
+  secure: true,
+}).connect();
+```
+
+`secure: true` selects `wss://` and must match the TLS setting in the desktop app. Configure a PEM
+certificate and matching private key under **Settings → Device connections** first. The mobile
+device must trust the issuing certificate authority, and the certificate must include the configured
+hostname or IP in its subject alternative names. TLS does not replace `authToken` in LAN mode.
+
+Without TLS, LAN mode uses plain `ws://`. Keep it on a trusted development network, rotate the token
+after sharing it, and never commit a token or private key to source control. Loopback remains the
+default and does not require a token.
+
+## Persistent device identity
+
+By default, every configured client creates a fresh device ID. To group launches under one stable
+development device, persist an ID through an already-installed storage library:
+
+```ts
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getOrCreatePulseRNDeviceId, ReactNativeDevTool } from '@pulse-rn/sdk';
+
+const deviceId = await getOrCreatePulseRNDeviceId(AsyncStorage);
+
+ReactNativeDevTool.configure({
+  appName: 'MyApp',
+  deviceId,
+}).connect();
+```
+
+The helper has no native dependency of its own. It accepts any object with `getItem` and `setItem`,
+validates an existing ID, and creates one only when missing or malformed. A custom key can be supplied
+as the second argument.
 
 `allowInProduction` defaults to false. Leave it disabled. Events created offline remain in a
 bounded queue; the oldest event is dropped when the queue is full. PulseRN also pauses dequeueing

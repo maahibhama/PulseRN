@@ -9,6 +9,7 @@ import { NavigationPanel } from './NavigationPanel.js';
 import { PerformancePanel } from './PerformancePanel.js';
 import { ReduxPanel } from './ReduxPanel.js';
 import { SettingsPanel } from './SettingsPanel.js';
+import { SessionsPanel } from './SessionsPanel.js';
 import { StoragePanel } from './StoragePanel.js';
 import darkAppIcon from '../../../resources/pulse-rn-app-icon-dark.png';
 import lightAppIcon from '../../../resources/pulse-rn-app-icon-light.png';
@@ -25,6 +26,7 @@ type ViewName =
   | 'Storage'
   | 'Errors'
   | 'Debugger'
+  | 'Sessions'
   | 'Settings';
 
 const navItems: { name: ViewName; icon: string; available: boolean }[] = [
@@ -37,6 +39,7 @@ const navItems: { name: ViewName; icon: string; available: boolean }[] = [
   { name: 'Storage', icon: '▤', available: true },
   { name: 'Errors', icon: '△', available: true },
   { name: 'Debugger', icon: '⏵', available: true },
+  { name: 'Sessions', icon: '◫', available: true },
   { name: 'Settings', icon: '⚙', available: true },
 ];
 
@@ -387,7 +390,7 @@ export function App() {
         ))}
         <div className="sidebar-footer">
           <span className={devices.length ? 'status online' : 'status'} />
-          WebSocket :9090
+          {settings.allowLanConnections ? 'LAN · token' : 'Loopback'} :{settings.devToolPort}
         </div>
       </aside>
       {activeView === 'Debugger' ? (
@@ -447,6 +450,8 @@ export function App() {
           settings={settings}
           onChange={async (patch) => setSettings(await desktopApi.updateSettings(patch))}
         />
+      ) : activeView === 'Sessions' ? (
+        <SessionsPanel />
       ) : (
         <UpcomingPanel view={activeView} />
       )}

@@ -6,6 +6,14 @@ Clients first send `client-hello` with supported versions, stable IDs, app metad
 metadata. The server responds with `server-hello` and optional capabilities. Event batches are
 rejected until negotiation succeeds.
 
+Authenticated LAN mode also requires `client-hello.authToken` to match the desktop's generated
+access token. A missing or invalid token receives a rejected `server-hello` and policy close before
+the device session is created. Loopback mode does not require a token.
+
+The JSON messages and negotiation are identical over `ws://` and `wss://`. TLS is a transport-layer
+desktop preference and adds no protocol field. SDK clients select `wss://` with `secure: true`; LAN
+clients still send the access token.
+
 Desktops advertising the `client-health` capability accept bounded `client-health` reports with
 queue depth, categorized drops, sent counts, reconnect attempts, native WebSocket buffer size, and
 approximate clock offset. New SDKs do not send these reports to older desktops that omit the

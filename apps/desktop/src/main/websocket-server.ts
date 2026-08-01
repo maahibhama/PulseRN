@@ -1,4 +1,6 @@
 import { createId } from '@pulse-rn/shared';
+import { timingSafeEqual } from 'node:crypto';
+import { createServer, type Server as HttpsServer } from 'node:https';
 import {
   decodeJson,
   negotiateProtocolVersion,
@@ -20,8 +22,18 @@ interface Callbacks {
   onInvalidMessage(error: string): void;
 }
 
+export function accessTokensMatch(expected: string, received?: string): boolean {
+  if (!received) return false;
+  const expectedBytes = Buffer.from(expected);
+  const receivedBytes = Buffer.from(received);
+  return (
+    expectedBytes.length === receivedBytes.length && timingSafeEqual(expectedBytes, receivedBytes)
+  );
+}
+
 export class DevToolWebSocketServer {
   private server?: WebSocketServer;
+  private httpsServer?: HttpsServer;
   private readonly sockets = new Map<string, WebSocket>();
   private readonly lastHealthAt = new Map<string, number>();
   private readonly pendingStorage = new Map<
@@ -38,20 +50,25 @@ export class DevToolWebSocketServer {
     private readonly port: number,
     private readonly callbacks: Callbacks,
     private readonly host = '127.0.0.1',
+    private readonly authToken?: string,
+    private readonly tls?: { cert: Buffer; key: Buffer },
   ) {}
 
   start(): Promise<void> {
     return new Promise((resolve, reject) => {
+      const httpsServer = this.tls ? createServer(this.tls) : undefined;
+      this.httpsServer = httpsServer;
       const server = new WebSocketServer({
-        host: this.host,
-        port: this.port,
+        ...(httpsServer ? { server: httpsServer } : { host: this.host, port: this.port }),
         maxPayload: 2 * 1024 * 1024,
         perMessageDeflate: false,
       });
       this.server = server;
-      server.once('listening', () => resolve());
-      server.once('error', reject);
+      const listeningServer = httpsServer ?? server;
+      listeningServer.once('listening', () => resolve());
+      listeningServer.once('error', reject);
       server.on('connection', (socket) => this.handleConnection(socket));
+      if (httpsServer) httpsServer.listen(this.port, this.host);
     });
   }
 
@@ -59,8 +76,19 @@ export class DevToolWebSocketServer {
     return new Promise((resolve) => {
       if (!this.server) return resolve();
       for (const client of this.server.clients) client.close(1001, 'Server shutting down');
-      this.server.close(() => resolve());
+      this.server.close(() => {
+        if (!this.httpsServer) return resolve();
+        this.httpsServer.close(() => resolve());
+      });
     });
+  }
+
+  address(): { address: string; port: number } {
+    const address = this.httpsServer?.address() ?? this.server?.address();
+    if (!address || typeof address === 'string') {
+      throw new Error('PulseRN WebSocket server is not listening.');
+    }
+    return { address: address.address, port: address.port };
   }
 
   requestStorage(
@@ -111,6 +139,17 @@ export class DevToolWebSocketServer {
         const message = result.data;
         if (!negotiated) {
           if (message.kind !== 'client-hello') return socket.close(1008, 'Handshake required');
+          if (this.authToken && !accessTokensMatch(this.authToken, message.authToken)) {
+            socket.send(
+              JSON.stringify({
+                kind: 'server-hello',
+                accepted: false,
+                reason: 'Authentication failed',
+                serverTime: Date.now(),
+              }),
+            );
+            return socket.close(1008, 'Authentication failed');
+          }
           const protocolVersion = negotiateProtocolVersion(message.supportedProtocolVersions);
           if (!protocolVersion) {
             socket.send(

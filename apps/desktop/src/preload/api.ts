@@ -50,6 +50,13 @@ export interface DatabaseMaintenanceReport {
   completedAt: number;
 }
 
+export interface SessionArchiveResult {
+  canceled: boolean;
+  filePath?: string;
+  sessions: number;
+  events: number;
+}
+
 export interface StorageRequestInput {
   connectionId: string;
   providerId: string;
@@ -63,10 +70,30 @@ export interface AppSettings {
   density: 'comfortable' | 'compact';
   timelineOrder: 'newest' | 'oldest';
   metroPort: number;
+  devToolPort: number;
+  allowLanConnections: boolean;
+  tlsEnabled: boolean;
   eventRetentionDays: number;
   maxStoredEvents: number;
   launchAtLogin: boolean;
   keepRunningInBackground: boolean;
+}
+
+export interface ConnectionInfo {
+  mode: 'loopback' | 'lan';
+  port: number;
+  requiresAuth: boolean;
+  addresses: string[];
+  accessToken?: string;
+  tls: {
+    enabled: boolean;
+    configured: boolean;
+    fingerprint256?: string;
+    subject?: string;
+    issuer?: string;
+    validFrom?: string;
+    validTo?: string;
+  };
 }
 
 export interface DebuggerTarget {
@@ -157,12 +184,20 @@ export interface PulseRNDesktopApi {
   queryEvents(input?: EventQuery): Promise<EventPage>;
   getEvent(id: string): Promise<EventPage['events'][number] | undefined>;
   listSessions(): Promise<StoredSession[]>;
+  exportSessions(sessionIds?: string[]): Promise<SessionArchiveResult>;
+  importSessions(): Promise<SessionArchiveResult>;
   runDatabaseMaintenance(): Promise<DatabaseMaintenanceReport>;
   clearStoredEvents(): Promise<DatabaseMaintenanceReport>;
   requestStorage(input: StorageRequestInput): Promise<StorageResult>;
   getSettings(): Promise<AppSettings>;
   updateSettings(patch: Partial<AppSettings>): Promise<AppSettings>;
   onSettings(listener: (settings: AppSettings) => void): () => void;
+  getConnectionInfo(): Promise<ConnectionInfo>;
+  revealConnectionToken(): Promise<ConnectionInfo>;
+  rotateConnectionToken(): Promise<ConnectionInfo>;
+  installTlsCertificate(): Promise<ConnectionInfo>;
+  disableTls(): Promise<ConnectionInfo>;
+  onConnectionInfo(listener: (info: ConnectionInfo) => void): () => void;
   getDebuggerState(): Promise<DebuggerState>;
   onDebuggerState(listener: (state: DebuggerState) => void): () => void;
   discoverDebuggerTargets(): Promise<DebuggerState>;

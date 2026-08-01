@@ -8,17 +8,18 @@
 
 PulseRN is an open-source desktop debugging foundation for React Native. Its central idea is a unified, chronological timeline that will correlate app interactions, navigation, Redux, network, rendering, performance, and errors.
 
-> Status: Phase 10 complete. The inspectors, scalable persistence, transport hardening, sustained-load checks, and Electron acceptance coverage are working.
+> Status: Phase 13 complete. The inspectors, scalable persistence, session portability, authenticated LAN access, optional TLS transport, sustained-load checks, and Electron acceptance coverage are working.
 
 ## What works today
 
 - Electron desktop app with a sandboxed renderer and narrow preload bridge
-- Loopback-only WebSocket server on port `9090`
+- Loopback-default WebSocket server with opt-in token-authenticated LAN binding and optional TLS
 - Versioned JSON protocol with Zod validation and negotiation
 - React Native SDK with development-build protection, reconnection, batching, sequencing, bounded offline buffering, socket backpressure protection, transport health diagnostics, payload limits, and field redaction
 - Multiple connected-device tracking
 - SQLite event persistence with configurable age/count retention and recovery cleanup
 - Cursor-paginated unified timeline and category inspectors with bounded timeline virtualization
+- Versioned, validated session archive import/export through native file dialogs
 - Console interception for log, info, warn, error, and debug
 - Console filtering, search, pause, clear, payload expansion, copy, source, and stack inspection
 - Fetch and XMLHttpRequest inspection with optional Axios interceptors
@@ -32,6 +33,7 @@ PulseRN is an open-source desktop debugging foundation for React Native. Its cen
 - Persistent desktop settings for system/light/dark themes, interface density, timeline ordering, launch at login, and macOS background behavior
 - Compact, rounded light and dark application icons that follow the selected theme, including live macOS system-theme changes
 - Expo development-build and bare React Native Community CLI examples covering Console, Network, Redux, Navigation, Performance, AsyncStorage, MMKV, and Errors
+- Optional persistent SDK device identity for stable device history across app launches
 
 ## Screenshots
 
@@ -135,13 +137,20 @@ pnpm --filter @pulse-rn/example-react-native dev
 If native dependencies change, rebuild the development app with the `ios` or `android` command
 instead of only restarting Metro.
 
-Use `10.0.2.2` for the Android emulator, `127.0.0.1` for the iOS simulator, and the desktop machine's LAN address for a physical device:
+Use `10.0.2.2` for the Android emulator and `127.0.0.1` for the iOS simulator. For a physical device,
+enable authenticated LAN connections in desktop Settings, copy the displayed address and token, then run:
 
 ```bash
-EXPO_PUBLIC_PULSE_RN_HOST=192.168.1.20 pnpm --filter @pulse-rn/example-react-native dev
+EXPO_PUBLIC_PULSE_RN_HOST=192.168.1.20 \
+EXPO_PUBLIC_PULSE_RN_TOKEN=<copied-token> \
+EXPO_PUBLIC_PULSE_RN_SECURE=true \
+pnpm --filter @pulse-rn/example-react-native dev
 ```
 
-The server deliberately binds to loopback in Phase 1. To use a physical device, the desktop host binding must first be made configurable with authentication; see [SECURITY.md](docs/SECURITY.md).
+Set `EXPO_PUBLIC_PULSE_RN_SECURE=true` only after configuring TLS in desktop Settings. The device
+must trust the certificate authority and the certificate must cover the selected host or IP. Without
+TLS, LAN traffic uses plain `ws://` and must stay on a trusted development network. See
+[SECURITY.md](docs/SECURITY.md).
 
 ## Verify
 
@@ -187,8 +196,8 @@ if (__DEV__) {
 }
 ```
 
-See [SDK integration](docs/SDK-INTEGRATION.md), [architecture](docs/ARCHITECTURE.md), and the
-[roadmap](docs/ROADMAP.md). Source code, issues, and contributions live in the
+See [SDK integration](docs/SDK-INTEGRATION.md), [session archives](docs/SESSION-ARCHIVES.md),
+[architecture](docs/ARCHITECTURE.md), and the [roadmap](docs/ROADMAP.md). Source code, issues, and contributions live in the
 [GitHub repository](https://github.com/maahibhama/PulseRN); downloadable desktop builds are
 published through [GitHub Releases](https://github.com/maahibhama/PulseRN/releases).
 
@@ -200,12 +209,20 @@ Open **Settings** in the Electron sidebar to configure:
 - Comfortable or compact interface density
 - Newest-first or oldest-first timeline ordering
 - Local Metro discovery port for the Hermes debugger
+- Debugger server port, authenticated LAN access, access-token rotation, and TLS certificate
+  configuration
 - Event retention period, maximum stored events, maintenance, and history deletion
 - Launch at login on packaged macOS builds
 - Whether closing the window keeps PulseRN running in the background
 
 Appearance changes apply immediately to the debugger, header branding, window icon, and macOS Dock
 icon. With **System** selected, PulseRN follows macOS automatically.
+
+## Session archives
+
+Open **Sessions** to browse retained runs, export one session or all stored sessions, and import a
+`.pulsern-session.json` archive. PulseRN validates the versioned archive in Electron main before
+writing any data. Imports are duplicate-safe and remain subject to the configured retention limits.
 
 ## JavaScript line debugger
 
@@ -216,10 +233,10 @@ controls, keyboard shortcuts, examples, and current limitations.
 
 ## Known limitations
 
-- The transport only accepts validated JSON and has no authentication UI.
+- TLS requires a user-supplied certificate and private key; PulseRN does not create or install a
+  trusted certificate authority on mobile devices.
 - Live updates keep a bounded 2,000-event projection in memory; inspectors page older retained history from SQLite.
 - The Expo example uses prebuild; the Community CLI example includes committed native iOS and Android projects.
-- Session export/import is not implemented yet.
 - Console fields, network headers, URL query parameters, and structured request/response fields are redacted before transmission.
 - Performance FPS, event-loop, and SDK app-start metrics are JavaScript-derived approximations, not native CPU or UI-thread profiling.
 

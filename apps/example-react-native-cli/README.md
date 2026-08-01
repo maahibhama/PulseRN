@@ -57,5 +57,11 @@ adb reverse tcp:9090 tcp:9090
 adb reverse tcp:8081 tcp:8081
 ```
 
-For a physical iOS device, replace the `host` constant near the top of
-`App.tsx` with the development machine's LAN address.
+For a physical iOS device, replace the `host` constant near the top of `App.tsx` with the
+development machine's LAN address and temporarily set `authToken` to the token copied from PulseRN
+Settings. Never commit that token.
+
+For encrypted LAN transport, configure a trusted certificate in PulseRN desktop Settings and set
+the `secure` constant in `App.tsx` to `true`. The device must trust the certificate authority and
+the certificate must cover the configured host or IP address. LAN access still requires the copied
+PulseRN access token.
