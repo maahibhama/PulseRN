@@ -1,5 +1,6 @@
-import { isAbsolute, join } from 'node:path';
-import { readFile, stat, writeFile } from 'node:fs/promises';
+import { basename, isAbsolute, join } from 'node:path';
+import { readFile, stat, writeFile, mkdir, copyFile, unlink } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
 import { networkInterfaces } from 'node:os';
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme } from 'electron';
 import electronUpdater from 'electron-updater';
@@ -23,6 +24,7 @@ import { createCurlCommand, createSanitizedHar } from './network-export.js';
 import { McpBridge } from './mcp-bridge.js';
 import { DiagnosticService } from './diagnostic-service.js';
 import { networkEventPayloadSchema } from '@pulse-rn/protocol';
+import { AppearanceStore, themeDefinitionSchema, type FontDefinition } from './appearance.js';
 
 const SNAPSHOT_CHANNEL = 'pulse-rn:snapshot';
 const DEVICES_CHANNEL = 'pulse-rn:devices';
@@ -30,6 +32,7 @@ const EVENTS_CHANNEL = 'pulse-rn:events';
 const STORAGE_CHANNEL = 'pulse-rn:storage';
 const STORAGE_LOCAL_CHANNEL = 'pulse-rn:storage-local';
 const SETTINGS_CHANNEL = 'pulse-rn:settings';
+const APPEARANCE_CHANNEL = 'pulse-rn:appearance';
 const DEBUGGER_CHANNEL = 'pulse-rn:debugger';
 const CONNECTION_CHANNEL = 'pulse-rn:connection';
 const UPDATE_CHANNEL = 'pulse-rn:update';
@@ -178,6 +181,7 @@ let database: EventDatabase | undefined;
 let server: DevToolWebSocketServer | undefined;
 let window: BrowserWindow | undefined;
 let settingsStore: SettingsStore | undefined;
+let appearanceStore: AppearanceStore | undefined;
 let debuggerManager: DebuggerManager | undefined;
 let pairingStore: PairingStore | undefined;
 let tlsCertificateStore: TlsCertificateStore | undefined;
@@ -362,8 +366,17 @@ function applyAppIcon(theme: 'system' | 'dark' | 'light'): void {
   if (window && !window.isDestroyed()) window.setIcon(icon);
 }
 
+function publishAppearance(): void {
+  if (!appearanceStore) return;
+  const state = appearanceStore.get();
+  const resolved = appearanceStore.resolved(nativeTheme.shouldUseDarkColors);
+  nativeTheme.themeSource = state.mode === 'system' ? 'system' : resolved.colorScheme;
+  applyAppIcon(state.mode === 'system' ? 'system' : resolved.colorScheme);
+  if (window && !window.isDestroyed()) window.webContents.send(APPEARANCE_CHANNEL, state);
+}
+
 function handleNativeThemeUpdated(): void {
-  if (settingsStore?.get().theme === 'system') applyAppIcon('system');
+  publishAppearance();
 }
 
 function publish(): void {
@@ -398,6 +411,9 @@ function createWindow(): void {
     }
   });
   window.once('ready-to-show', () => window?.show());
+  window.webContents.session.setPermissionRequestHandler((_webContents, permission, callback) => {
+    callback(String(permission) === 'local-fonts');
+  });
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   if (process.env['ELECTRON_RENDERER_URL']) {
     void window.loadURL(process.env['ELECTRON_RENDERER_URL']);
@@ -408,6 +424,10 @@ function createWindow(): void {
 
 app.whenReady().then(async () => {
   settingsStore = new SettingsStore(join(app.getPath('userData'), 'settings.json'));
+  appearanceStore = new AppearanceStore(
+    join(app.getPath('userData'), 'appearance.json'),
+    settingsStore.get().theme,
+  );
   pairingStore = new PairingStore(join(app.getPath('userData'), 'trusted-devices.json'));
   tlsCertificateStore = new TlsCertificateStore(
     join(app.getPath('userData'), 'tls', 'certificate.pem'),
@@ -443,9 +463,12 @@ app.whenReady().then(async () => {
       allowLanConnections: false,
     });
   }
-  nativeTheme.themeSource = initialSettings.theme;
+  const initialAppearance = appearanceStore.get();
+  const initialResolvedTheme = appearanceStore.resolved(nativeTheme.shouldUseDarkColors);
+  nativeTheme.themeSource =
+    initialAppearance.mode === 'system' ? 'system' : initialResolvedTheme.colorScheme;
   if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: initialSettings.launchAtLogin });
-  applyAppIcon(initialSettings.theme);
+  applyAppIcon(initialAppearance.mode === 'system' ? 'system' : initialResolvedTheme.colorScheme);
   nativeTheme.on('updated', handleNativeThemeUpdated);
   database = new EventDatabase(join(app.getPath('userData'), 'pulse-rn.sqlite'));
   diagnosticService = new DiagnosticService(database, sessions);
@@ -841,9 +864,8 @@ app.whenReady().then(async () => {
         throw error;
       }
     }
-    nativeTheme.themeSource = settings.theme;
+    publishAppearance();
     updateManager?.setChannel(settings.updateChannel);
-    applyAppIcon(settings.theme);
     if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: settings.launchAtLogin });
     if (
       settings.checkForUpdatesAutomatically &&
@@ -856,6 +878,121 @@ app.whenReady().then(async () => {
     if (window && !window.isDestroyed()) window.webContents.send(SETTINGS_CHANNEL, settings);
     publishMcpInfo();
     return settings;
+  });
+  ipcMain.handle(APPEARANCE_CHANNEL, async (_event, value: unknown) => {
+    if (!appearanceStore) throw new Error('PulseRN appearance is not ready.');
+    const input = z
+      .object({
+        operation: z.string(),
+        patch: z.unknown().optional(),
+        theme: z.unknown().optional(),
+        id: z.string().max(256).optional(),
+        font: z.unknown().optional(),
+      })
+      .strict()
+      .parse(value);
+    let state;
+    if (input.operation === 'state') return appearanceStore.get();
+    if (input.operation === 'selection') state = appearanceStore.updateSelection(input.patch);
+    else if (input.operation === 'theme-save') state = appearanceStore.saveTheme(input.theme);
+    else if (input.operation === 'theme-duplicate')
+      state = appearanceStore.duplicateTheme(input.id!);
+    else if (input.operation === 'theme-delete') state = appearanceStore.deleteTheme(input.id!);
+    else if (input.operation === 'theme-export') {
+      const theme = appearanceStore.get().themes.find((entry) => entry.id === input.id);
+      if (!theme) throw new Error('Theme not found.');
+      const result = await dialog.showSaveDialog({
+        title: 'Export PulseRN theme',
+        defaultPath: `${theme.name.replace(/[^a-z0-9]+/gi, '-')}.pulsern-theme.json`,
+        filters: [{ name: 'PulseRN Theme', extensions: ['json'] }],
+      });
+      if (result.canceled || !result.filePath) return { canceled: true };
+      const fonts = appearanceStore
+        .get()
+        .fonts.filter((font) => font.id === theme.uiFontId || font.id === theme.codeFontId)
+        .map(({ family, style, weight, source }) => ({ family, style, weight, source }));
+      await writeFile(
+        result.filePath,
+        `${JSON.stringify({ format: 'pulsern-theme', version: 1, theme: { ...theme, builtin: false }, fonts }, null, 2)}\n`,
+        { mode: 0o600 },
+      );
+      return { canceled: false, filePath: result.filePath };
+    } else if (input.operation === 'theme-import') {
+      const result = await dialog.showOpenDialog({
+        title: 'Import PulseRN theme',
+        properties: ['openFile'],
+        filters: [{ name: 'PulseRN Theme', extensions: ['json'] }],
+      });
+      if (result.canceled || !result.filePaths[0]) return appearanceStore.get();
+      const data = z
+        .object({ format: z.literal('pulsern-theme'), version: z.literal(1), theme: z.unknown() })
+        .parse(JSON.parse(await readFile(result.filePaths[0], 'utf8')));
+      const parsed = themeDefinitionSchema.omit({ builtin: true }).parse(data.theme);
+      state = appearanceStore.saveTheme({ ...parsed, id: `theme-${randomUUID()}` });
+    } else if (input.operation === 'font-system') {
+      const font = z
+        .object({
+          family: z.string().min(1).max(256),
+          style: z.string().max(64),
+          weight: z.number().int().min(100).max(900),
+        })
+        .parse(input.font);
+      state = appearanceStore.addFont({
+        ...font,
+        id: `system-${createHash('sha256').update(`${font.family}:${font.style}:${font.weight}`).digest('hex').slice(0, 16)}`,
+        source: 'system',
+      });
+    } else if (input.operation === 'font-import') {
+      const result = await dialog.showOpenDialog({
+        title: 'Import font',
+        properties: ['openFile'],
+        filters: [{ name: 'Fonts', extensions: ['ttf', 'otf', 'woff', 'woff2'] }],
+      });
+      if (result.canceled || !result.filePaths[0]) return appearanceStore.get();
+      const sourcePath = result.filePaths[0];
+      const bytes = await readFile(sourcePath);
+      if (bytes.byteLength > 20 * 1024 * 1024) throw new Error('Font exceeds the 20 MiB limit.');
+      const extension = sourcePath.split('.').at(-1)?.toLowerCase();
+      const formats = { ttf: 'truetype', otf: 'opentype', woff: 'woff', woff2: 'woff2' } as const;
+      const format = formats[extension as keyof typeof formats];
+      if (!format) throw new Error('Unsupported font format.');
+      const valid =
+        format === 'woff'
+          ? bytes.subarray(0, 4).toString() === 'wOFF'
+          : format === 'woff2'
+            ? bytes.subarray(0, 4).toString() === 'wOF2'
+            : format === 'opentype'
+              ? bytes.subarray(0, 4).toString() === 'OTTO'
+              : bytes.readUInt32BE(0) === 0x00010000;
+      if (!valid) throw new Error('The selected file is not a valid font.');
+      const hash = createHash('sha256').update(bytes).digest('hex');
+      const fileName = `${hash}.${extension}`;
+      const fontsDirectory = join(app.getPath('userData'), 'fonts');
+      await mkdir(fontsDirectory, { recursive: true, mode: 0o700 });
+      await copyFile(sourcePath, join(fontsDirectory, fileName));
+      const family = basename(sourcePath).replace(/\.(ttf|otf|woff2?)$/i, '');
+      state = appearanceStore.addFont({
+        id: `font-${hash.slice(0, 20)}`,
+        family,
+        style: 'normal',
+        weight: 400,
+        source: 'imported',
+        fileName,
+        format,
+      });
+    } else if (input.operation === 'font-load') {
+      const font = appearanceStore.get().fonts.find((entry) => entry.id === input.id);
+      if (!font?.fileName || font.source !== 'imported')
+        throw new Error('Imported font not found.');
+      return new Uint8Array(await readFile(join(app.getPath('userData'), 'fonts', font.fileName)));
+    } else if (input.operation === 'font-delete') {
+      const font = appearanceStore.get().fonts.find((entry) => entry.id === input.id);
+      state = appearanceStore.removeFont(input.id!);
+      if (font?.fileName)
+        await unlink(join(app.getPath('userData'), 'fonts', font.fileName)).catch(() => undefined);
+    } else throw new Error('Unsupported appearance operation.');
+    publishAppearance();
+    return state;
   });
   ipcMain.handle(CONNECTION_CHANNEL, async (_event, value?: unknown) => {
     if (!pairingStore) throw new Error('PulseRN pairing store is not ready.');
@@ -1186,6 +1323,7 @@ app.on('before-quit', (event) => {
     ipcMain.removeHandler(EVENTS_CHANNEL);
     ipcMain.removeHandler(STORAGE_CHANNEL);
     ipcMain.removeHandler(SETTINGS_CHANNEL);
+    ipcMain.removeHandler(APPEARANCE_CHANNEL);
     ipcMain.removeHandler(DEBUGGER_CHANNEL);
     ipcMain.removeHandler(CONNECTION_CHANNEL);
     ipcMain.removeHandler(UPDATE_CHANNEL);
