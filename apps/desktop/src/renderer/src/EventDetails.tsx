@@ -4,6 +4,7 @@ import { NetworkEventDetails } from './NetworkEventDetails.js';
 import { NavigationEventDetails } from './NavigationEventDetails.js';
 import { PerformanceEventDetails } from './PerformanceEventDetails.js';
 import { ReduxEventDetails } from './ReduxEventDetails.js';
+import { AnimationWorkletEventDetails } from './AnimationWorkletEventDetails.js';
 
 interface EventDetailsProps {
   event?: DevToolEventEnvelope;
@@ -82,6 +83,8 @@ export function EventDetails({ event, onSelect }: EventDetailsProps) {
             <NavigationEventDetails event={event} onSelect={onSelect} />
           ) : event.category === 'performance' ? (
             <PerformanceEventDetails event={event} />
+          ) : event.category === 'animation' || event.category === 'worklet' ? (
+            <AnimationWorkletEventDetails event={event} />
           ) : event.category === 'error' ? (
             <ErrorEventDetails event={event} />
           ) : (

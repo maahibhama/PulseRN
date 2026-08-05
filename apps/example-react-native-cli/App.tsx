@@ -1,11 +1,21 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
+  createAnimationWorkletProfiler,
   createDevToolMiddleware,
   createNavigationTracker,
   createAsyncStorageProvider,
   createMMKVStorageProvider,
   ReactNativeDevTool,
 } from '@pulse-rn/sdk';
+import Animated, {
+  Easing,
+  useAnimatedReaction,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
+import { scheduleOnRN, scheduleOnUI } from 'react-native-worklets';
 import { useEffect, useState } from 'react';
 import {
   Platform,
@@ -33,6 +43,11 @@ const reconnectToken: string | undefined = undefined;
 // Set to true when PulseRN desktop TLS is enabled and this device trusts its certificate.
 const secure = false;
 const mmkv = createMMKV({ id: 'pulse-rn-cli-example' });
+const animationProfiler = createAnimationWorkletProfiler(ReactNativeDevTool, {
+  isDevelopment: __DEV__,
+  sampleIntervalMs: 100,
+  maxSamplesPerAnimation: 20,
+});
 
 const navigationTracker = createNavigationTracker({
   client: ReactNativeDevTool,
@@ -148,10 +163,18 @@ function App() {
         redux: true,
         navigation: true,
         performance: true,
+        animation: true,
+        worklet: true,
         storage: true,
         error: true,
       },
-      sampling: { performance: 1, console: 1, network: 1 },
+      sampling: {
+        performance: 1,
+        animation: 1,
+        worklet: 1,
+        console: 1,
+        network: 1,
+      },
     });
     const unregisterAsyncStorage = client.registerStorageProvider(
       createAsyncStorageProvider(AsyncStorage),
@@ -199,6 +222,15 @@ function App() {
         index: 0,
         routes: [{ key: 'cli-home', name: 'Home', path: '/' }],
       },
+    });
+    animationProfiler.runtime.capability('available');
+    animationProfiler.runtime.created({
+      id: 'ui-runtime',
+      name: 'Reanimated UI',
+      kind: 'ui',
+      mode: 'legacy',
+      eventLoopEnabled: true,
+      animationQueuePollingRate: 16,
     });
 
     return () => {
@@ -269,6 +301,39 @@ function HomeScreen({ onOpenDetails }: { onOpenDetails: () => void }) {
   const [networkSent, setNetworkSent] = useState(0);
   const [reduxCount, setReduxCount] = useState(demoStore.getState().count);
   const [debuggerResult, setDebuggerResult] = useState('Not run');
+  const [animationResult, setAnimationResult] = useState('Not run');
+  const animatedProgress = useSharedValue(0);
+  const activeAnimationId = useSharedValue('');
+  const lastReportedBucket = useSharedValue(-1);
+  const animatedBoxStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: animatedProgress.value * 190 },
+      { rotate: `${animatedProgress.value * 360}deg` },
+    ],
+    opacity: 0.45 + animatedProgress.value * 0.55,
+  }));
+
+  const reportAnimationSample = (id: string, value: number) => {
+    animationProfiler.animation.sample(id, value, Date.now(), value);
+  };
+
+  useAnimatedReaction(
+    () => Math.round(animatedProgress.value * 10),
+    (bucket, previousBucket) => {
+      if (
+        activeAnimationId.value &&
+        bucket !== previousBucket &&
+        bucket !== lastReportedBucket.value
+      ) {
+        lastReportedBucket.value = bucket;
+        scheduleOnRN(
+          reportAnimationSample,
+          activeAnimationId.value,
+          animatedProgress.value,
+        );
+      }
+    },
+  );
 
   useEffect(() => {
     ReactNativeDevTool.performance.startScreen('Home');
@@ -371,6 +436,136 @@ function HomeScreen({ onOpenDetails }: { onOpenDetails: () => void }) {
     setDebuggerResult(result);
   };
 
+  const finishAnimationDemo = (
+    id: string,
+    finished: boolean | undefined,
+    finalValue: number,
+  ) => {
+    animationProfiler.animation.phase(
+      id,
+      finished ? 'completed' : 'cancelled',
+      {
+        value: finalValue,
+        completionRuntime: 'react-native',
+      },
+    );
+    setAnimationResult(finished ? 'Completed on UI runtime' : 'Cancelled');
+  };
+
+  const runAnimationDemo = () => {
+    const returning = animatedProgress.value > 0.5;
+    const target = returning ? 0 : 1;
+    const type = returning ? 'spring' : 'timing';
+    const correlationId = `cli-animation-demo:${Date.now()}`;
+    const id = animationProfiler.animation.create({
+      type,
+      component: 'HomeScreen.AnimationDemo',
+      viewTag: 'pulse-cli-demo-box',
+      properties: ['transform.translateX', 'transform.rotate', 'opacity'],
+      initialValue: animatedProgress.value,
+      targetValue: target,
+      configuration: returning
+        ? { damping: 14, stiffness: 130, mass: 1 }
+        : { duration: 850, easing: 'inOut(cubic)' },
+      source: { file: 'App.tsx', line: 470 },
+      runtimeId: 'ui-runtime',
+      correlationId,
+    });
+    activeAnimationId.value = id;
+    lastReportedBucket.value = -1;
+    animationProfiler.animation.phase(id, 'scheduled');
+    animationProfiler.animation.phase(id, 'started');
+    setAnimationResult(`${type} running…`);
+    const complete = (finished?: boolean) => {
+      'worklet';
+      scheduleOnRN(finishAnimationDemo, id, finished, target);
+    };
+    animatedProgress.value = returning
+      ? withSpring(target, { damping: 14, stiffness: 130, mass: 1 }, complete)
+      : withTiming(
+          target,
+          { duration: 850, easing: Easing.inOut(Easing.cubic) },
+          complete,
+        );
+  };
+
+  const reportWorkletDemo = (
+    workletId: string,
+    enqueuedAt: number,
+    startedAt: number,
+    endedAt: number,
+    checksum: number,
+  ) => {
+    ReactNativeDevTool.track({
+      category: 'worklet',
+      type: 'worklet.completed',
+      correlationId: workletId,
+      payload: {
+        schemaVersion: 1,
+        operation: 'completed',
+        timestamp: endedAt,
+        runtimeId: 'ui-runtime',
+        runtimeName: 'Reanimated UI',
+        runtimeKind: 'ui',
+        workletId,
+        workletName: 'cliExampleUiWorklet',
+        originRuntime: 'react-native',
+        destinationRuntime: 'ui',
+        enqueuedAt,
+        startedAt,
+        endedAt,
+        queueWaitMs: Math.max(0, startedAt - enqueuedAt),
+        durationMs: Math.max(0, endedAt - startedAt),
+        metrics: { checksum },
+      },
+    });
+    setAnimationResult(
+      `Worklet completed in ${(endedAt - startedAt).toFixed(2)} ms`,
+    );
+  };
+
+  const runWorkletDemo = () => {
+    const workletId = `cli-worklet-demo:${Date.now()}`;
+    const enqueuedAt = Date.now();
+    ReactNativeDevTool.track({
+      category: 'worklet',
+      type: 'worklet.scheduled',
+      correlationId: workletId,
+      payload: {
+        schemaVersion: 1,
+        operation: 'scheduled',
+        timestamp: enqueuedAt,
+        runtimeId: 'ui-runtime',
+        runtimeName: 'Reanimated UI',
+        runtimeKind: 'ui',
+        workletId,
+        workletName: 'cliExampleUiWorklet',
+        originRuntime: 'react-native',
+        destinationRuntime: 'ui',
+        enqueuedAt,
+        source: { file: 'App.tsx', line: 546 },
+      },
+    });
+    setAnimationResult('UI worklet queued…');
+    scheduleOnUI(() => {
+      'worklet';
+      const startedAt = Date.now();
+      let checksum = 0;
+      for (let index = 0; index < 25_000; index += 1) {
+        checksum = (checksum + index) % 97;
+      }
+      const endedAt = Date.now();
+      scheduleOnRN(
+        reportWorkletDemo,
+        workletId,
+        enqueuedAt,
+        startedAt,
+        endedAt,
+        checksum,
+      );
+    });
+  };
+
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.container}>
@@ -403,6 +598,20 @@ function HomeScreen({ onOpenDetails }: { onOpenDetails: () => void }) {
           onPress={runPerformanceDemo}
           color="#8a5c27"
         />
+        <View style={styles.animationTrack}>
+          <Animated.View style={[styles.animationBox, animatedBoxStyle]} />
+        </View>
+        <DemoButton
+          label="Run Reanimated timing / spring"
+          onPress={runAnimationDemo}
+          color="#7046a8"
+        />
+        <DemoButton
+          label="Run UI worklet demo"
+          onPress={runWorkletDemo}
+          color="#247c78"
+        />
+        <Text style={styles.counter}>Animations: {animationResult}</Text>
         <DemoButton
           label="Capture error-boundary demo"
           onPress={captureErrorDemo}
@@ -498,6 +707,20 @@ const styles = StyleSheet.create({
   },
   buttonText: { color: '#ffffff', fontSize: 15, fontWeight: '700' },
   counter: { color: '#687085', marginTop: 10, textAlign: 'center' },
+  animationTrack: {
+    backgroundColor: '#171b24',
+    borderRadius: 12,
+    height: 60,
+    marginTop: 16,
+    overflow: 'hidden',
+    padding: 8,
+  },
+  animationBox: {
+    backgroundColor: '#9b82ff',
+    borderRadius: 8,
+    height: 44,
+    width: 44,
+  },
   details: { flex: 1, justifyContent: 'center', padding: 28 },
   detailsEyebrow: { color: '#70bdf5' },
   detailsBody: {

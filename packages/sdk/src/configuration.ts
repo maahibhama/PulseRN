@@ -8,6 +8,8 @@ const CATEGORIES: DevToolEventCategory[] = [
   'redux',
   'navigation',
   'performance',
+  'animation',
+  'worklet',
   'storage',
   'error',
   'device',

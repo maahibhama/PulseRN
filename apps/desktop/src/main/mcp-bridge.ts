@@ -420,6 +420,20 @@ export class McpBridge {
         return database.query(
           this.eventQuery(args, { category: 'performance', order: 'newest', limit: 200 }),
         );
+      case 'pulsern_inspect_animations_worklets': {
+        const query = this.eventQuery(args, { order: 'newest', limit: 200 });
+        const limit = query.limit ?? 200;
+        const animation = database.query({ ...query, category: 'animation', limit });
+        const worklet = database.query({ ...query, category: 'worklet', limit });
+        return {
+          events: [...animation.events, ...worklet.events]
+            .sort(
+              (left, right) => right.timestamp - left.timestamp || right.sequence - left.sequence,
+            )
+            .slice(0, limit),
+          total: animation.total + worklet.total,
+        };
+      }
       case 'pulsern_get_connection_health':
         z.object({}).strict().parse(args);
         return this.dependencies.sessions.snapshot().devices;

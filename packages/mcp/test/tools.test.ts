@@ -16,5 +16,6 @@ describe('PulseRN MCP tool catalog', () => {
     expect(names.has('pulsern_query_events')).toBe(true);
     expect(names.has('pulsern_evaluate')).toBe(true);
     expect(names.has('pulsern_set_storage')).toBe(true);
+    expect(names.has('pulsern_inspect_animations_worklets')).toBe(true);
   });
 });
