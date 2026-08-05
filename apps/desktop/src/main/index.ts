@@ -24,7 +24,7 @@ import { createCurlCommand, createSanitizedHar } from './network-export.js';
 import { McpBridge } from './mcp-bridge.js';
 import { DiagnosticService } from './diagnostic-service.js';
 import { networkEventPayloadSchema } from '@pulse-rn/protocol';
-import { AppearanceStore, themeDefinitionSchema, type FontDefinition } from './appearance.js';
+import { AppearanceStore, themeDefinitionSchema } from './appearance.js';
 
 const SNAPSHOT_CHANNEL = 'pulse-rn:snapshot';
 const DEVICES_CHANNEL = 'pulse-rn:devices';

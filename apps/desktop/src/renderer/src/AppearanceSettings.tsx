@@ -78,7 +78,16 @@ export function AppearanceSettings({
   const save = () =>
     draft &&
     void run(async () => {
-      const { builtin: _builtin, ...theme } = draft;
+      const theme: Omit<ThemeDefinition, 'builtin'> = {
+        schemaVersion: draft.schemaVersion,
+        id: draft.id,
+        name: draft.name,
+        colorScheme: draft.colorScheme,
+        colors: draft.colors,
+        gradient: draft.gradient,
+        uiFontId: draft.uiFontId,
+        codeFontId: draft.codeFontId,
+      };
       const state = await window.pulseRN.saveTheme(theme);
       setDraft(state.themes.find((entry) => entry.id === draft.id));
       return state;
