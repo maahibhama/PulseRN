@@ -9,9 +9,14 @@
   --success: #42d392;
   --text: #cbd1dc;
   --warning: #dbb760;
+  --selection: #2b2348;
+  --code-background: #0d1016;
+  --accent-gradient: linear-gradient(135deg, #7b5cff, #3fb8d7);
+  --font-ui: Inter, ui-sans-serif, system-ui, sans-serif;
+  --font-code: ui-monospace, monospace;
   color: #e7ebf3;
   background: #0b0d12;
-  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-ui);
 }
 * {
   box-sizing: border-box;
@@ -25,6 +30,238 @@ body {
 button {
   color: inherit;
   font: inherit;
+}
+pre,
+code,
+.event time,
+.debugger-panel,
+.console-entry {
+  font-family: var(--font-code);
+}
+.nav.active {
+  box-shadow: inset 3px 0 var(--accent);
+}
+.settings-hero,
+.mcp-hero {
+  background-image: radial-gradient(
+    circle at 72% 0%,
+    color-mix(in srgb, var(--accent) 12%, transparent),
+    transparent 36%
+  );
+}
+.appearance-settings {
+  grid-column: 1 / -1;
+}
+.appearance-mode,
+.appearance-actions,
+.system-font-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.appearance-mode label,
+.theme-editor > label,
+.gradient-editor label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.appearance-mode label span,
+.theme-editor label span {
+  color: var(--muted);
+  font-size: 9px;
+}
+.appearance-settings :where(select, input[type='text'], input[type='number']) {
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--panel-soft);
+  color: var(--text);
+  padding: 6px 8px;
+}
+.theme-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+  padding: 12px 14px;
+}
+.theme-card {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--panel-soft);
+  color: var(--text);
+  overflow: hidden;
+}
+.theme-card.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.theme-select {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  grid-template-columns: 34px 1fr;
+  gap: 2px 9px;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  padding: 9px;
+  text-align: left;
+}
+.theme-select i {
+  grid-row: 1 / 4;
+  width: 34px;
+  height: 34px;
+  border-radius: 7px;
+}
+.theme-select small {
+  color: var(--muted);
+  font-size: 8px;
+}
+.theme-card-action {
+  width: 62px;
+  border: 0;
+  border-left: 1px solid var(--border);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--accent);
+  font-size: 8px;
+  padding: 6px;
+}
+.theme-card-action:hover {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.system-font-add input {
+  min-width: 240px;
+  flex: 1;
+}
+.local-font-browser {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px;
+  max-height: 220px;
+  overflow: auto;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.local-font-browser button {
+  display: grid;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--panel-soft);
+  color: var(--text);
+  padding: 8px;
+  text-align: left;
+}
+.local-font-browser small {
+  color: var(--muted);
+  font-size: 8px;
+}
+.theme-editor {
+  margin: 12px 14px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--background);
+}
+.theme-editor > header,
+.theme-editor > footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.theme-editor > header div {
+  display: grid;
+}
+.theme-colors {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 6px;
+  margin: 10px 0;
+}
+.theme-colors label,
+.gradient-editor label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+}
+.theme-colors input[type='color'],
+.gradient-editor input[type='color'] {
+  width: 28px;
+  height: 24px;
+  border: 0;
+  background: transparent;
+}
+.theme-colors code {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 8px;
+}
+.gradient-editor {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.contrast-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 10px;
+}
+.contrast-status span {
+  border-radius: 999px;
+  padding: 4px 7px;
+  font-size: 8px;
+}
+.contrast-status .pass {
+  background: color-mix(in srgb, var(--success) 18%, transparent);
+  color: var(--success);
+}
+.contrast-status .fail {
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+  color: var(--danger);
+}
+.theme-preview {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+.theme-preview button {
+  width: max-content;
+  border: 0;
+  border-radius: 5px;
+  color: white;
+  padding: 7px 10px;
+}
+.font-list {
+  display: grid;
+  gap: 6px;
+  padding: 10px 14px;
+}
+.font-list > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+}
+.font-list span {
+  display: grid;
+}
+.font-list small {
+  color: var(--muted);
 }
 .startup-error {
   display: grid;
@@ -3590,6 +3827,177 @@ button.redux-tree-row {
   }
 }
 
+/* Renderer-wide semantic theme layer. Keep this last so custom themes override legacy palettes. */
+:root,
+body {
+  color: var(--text);
+  background: var(--background);
+  font-family: var(--font-ui);
+}
+:root .shell,
+:root .timeline,
+:root .settings-panel,
+:root .debugger-panel,
+:root .mcp-panel,
+:root .connection-center {
+  color: var(--text);
+  background-color: var(--background);
+}
+:root .topbar,
+:root .sidebar,
+:root .details,
+:root .panel-header,
+:root .settings-card,
+:root .settings-card > header,
+:root .setting-row,
+:root .source-browser,
+:root .debugger-sidebar,
+:root .debugger-toolbar,
+:root .debugger-bottom-drawer,
+:root .component-tree-panel,
+:root .component-details,
+:root .storage-editor,
+:root .animation-worklets-panel .inspector-controls {
+  color: var(--text);
+  border-color: var(--border);
+  background-color: var(--panel);
+}
+:root .settings-card,
+:root .theme-editor,
+:root .theme-preview,
+:root .event,
+:root .console-entry,
+:root .network-entry,
+:root .error-entry,
+:root .performance-entry {
+  border-color: var(--border);
+}
+:root .event:hover,
+:root .event.selected,
+:root .console-entry:hover,
+:root .console-entry.selected,
+:root .error-entry:hover,
+:root .error-entry.selected,
+:root .nav:hover {
+  background-color: var(--panel-soft);
+}
+:root .nav {
+  color: var(--muted);
+}
+:root .nav.active {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 16%, var(--panel));
+  box-shadow: inset 3px 0 var(--accent);
+}
+:root
+  :where(
+    .actions button,
+    .appearance-actions button,
+    .system-font-add button,
+    .theme-editor button,
+    .font-list button,
+    .connection-actions button,
+    .timeline-filters button,
+    .timeline-saved-filters button,
+    .storage-toolbar button,
+    .debugger-toolbar button,
+    .copy-detail
+  ) {
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--panel-soft);
+  color: var(--text);
+}
+:root
+  :where(
+    .actions button,
+    .appearance-actions button,
+    .system-font-add button,
+    .theme-editor button,
+    .font-list button,
+    .connection-actions button,
+    .timeline-filters button,
+    .timeline-saved-filters button,
+    .storage-toolbar button,
+    .debugger-toolbar button
+  ):hover:not(:disabled) {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel-soft));
+}
+:root button:disabled {
+  color: var(--muted);
+  opacity: 0.55;
+}
+:root :where(input[type='text'], input[type='search'], input[type='number'], textarea, select) {
+  color-scheme: inherit;
+  border-color: var(--border);
+  background-color: var(--panel-soft);
+  color: var(--text);
+}
+:root :where(input, textarea)::placeholder {
+  color: var(--muted);
+  opacity: 0.8;
+}
+:root .theme-card,
+:root .theme-select,
+:root .local-font-browser button,
+:root .font-list > div,
+:root .theme-colors label,
+:root .gradient-editor label {
+  color: var(--text);
+  border-color: var(--border);
+  background-color: var(--panel-soft);
+}
+:root .theme-card-action {
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel-soft));
+  color: var(--accent);
+}
+:root .appearance-mode,
+:root .appearance-actions,
+:root .system-font-add,
+:root .local-font-browser {
+  border-color: var(--border);
+  background: var(--panel);
+}
+:root .settings-hero,
+:root .mcp-hero {
+  background-color: var(--panel);
+  background-image: radial-gradient(
+    circle at 72% 0%,
+    color-mix(in srgb, var(--accent) 14%, transparent),
+    transparent 38%
+  );
+}
+:root .pulse,
+:root a,
+:root .source-link {
+  color: var(--accent);
+}
+:root .phase-pill,
+:root .device-pill,
+:root .runtime-lanes > div,
+:root .animation-summary > div,
+:root .frame-health-grid > div {
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--panel-soft);
+}
+:root .detail-content pre,
+:root .debugger-console-output,
+:root .component-value-table code {
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--code-background);
+  font-family: var(--font-code);
+}
+:root .theme-editor > footer button:first-child,
+:root .primary-action {
+  border-color: transparent;
+  background: var(--accent-gradient);
+  color: #ffffff;
+}
+
 .settings-hero {
   display: flex;
   align-items: center;
@@ -4259,4 +4667,134 @@ button.redux-tree-row {
   .animation-result-count {
     display: none;
   }
+}
+
+/* Theme tokens are the final authority, including for custom light themes. */
+:root[data-theme],
+:root[data-theme] body,
+:root[data-theme] .shell,
+:root[data-theme] .timeline,
+:root[data-theme] .settings-panel,
+:root[data-theme] .debugger-panel,
+:root[data-theme] .mcp-panel,
+:root[data-theme] .connection-center {
+  color: var(--text);
+  background-color: var(--background);
+}
+:root[data-theme] .topbar,
+:root[data-theme] .sidebar,
+:root[data-theme] .details,
+:root[data-theme] .panel-header,
+:root[data-theme] .settings-card,
+:root[data-theme] .settings-card > header,
+:root[data-theme] .setting-row,
+:root[data-theme] .source-browser,
+:root[data-theme] .debugger-sidebar,
+:root[data-theme] .debugger-toolbar,
+:root[data-theme] .debugger-bottom-drawer,
+:root[data-theme] .component-tree-panel,
+:root[data-theme] .component-details,
+:root[data-theme] .storage-editor,
+:root[data-theme] .animation-worklets-panel .inspector-controls {
+  color: var(--text);
+  border-color: var(--border);
+  background-color: var(--panel);
+}
+:root[data-theme] .settings-card,
+:root[data-theme] .theme-editor,
+:root[data-theme] .theme-preview,
+:root[data-theme] .event,
+:root[data-theme] .console-entry,
+:root[data-theme] .network-entry,
+:root[data-theme] .error-entry,
+:root[data-theme] .performance-entry {
+  border-color: var(--border);
+}
+:root[data-theme] :where(.settings-hero h1, .settings-card strong, .setting-row strong) {
+  color: var(--text);
+}
+:root[data-theme]
+  :where(
+    .settings-hero p,
+    .settings-card small,
+    .setting-row small,
+    .appearance-mode span,
+    .theme-editor label span
+  ) {
+  color: var(--muted);
+}
+:root[data-theme] .nav {
+  color: var(--muted);
+}
+:root[data-theme] .nav.active {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 16%, var(--panel));
+  box-shadow: inset 3px 0 var(--accent);
+}
+:root[data-theme]
+  :where(
+    .actions button,
+    .appearance-actions button,
+    .system-font-add button,
+    .theme-editor button,
+    .font-list button,
+    .connection-actions button,
+    .timeline-filters button,
+    .timeline-saved-filters button,
+    .storage-toolbar button,
+    .debugger-toolbar button,
+    .copy-detail
+  ) {
+  border-color: var(--border);
+  background: var(--panel-soft);
+  color: var(--text);
+}
+:root[data-theme]
+  :where(input[type='text'], input[type='search'], input[type='number'], textarea, select) {
+  color-scheme: inherit;
+  border-color: var(--border);
+  background-color: var(--panel-soft);
+  color: var(--text);
+}
+:root[data-theme] .theme-card,
+:root[data-theme] .theme-select,
+:root[data-theme] .local-font-browser button,
+:root[data-theme] .font-list > div,
+:root[data-theme] .theme-colors label,
+:root[data-theme] .gradient-editor label {
+  color: var(--text);
+  border-color: var(--border);
+  background-color: var(--panel-soft);
+}
+:root[data-theme] .theme-card-action {
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel-soft));
+  color: var(--accent);
+}
+:root[data-theme] .appearance-mode,
+:root[data-theme] .appearance-actions,
+:root[data-theme] .system-font-add,
+:root[data-theme] .local-font-browser {
+  border-color: var(--border);
+  background: var(--panel);
+}
+:root[data-theme] .settings-hero,
+:root[data-theme] .mcp-hero {
+  background-color: var(--panel);
+  background-image: radial-gradient(
+    circle at 72% 0%,
+    color-mix(in srgb, var(--accent) 14%, transparent),
+    transparent 38%
+  );
+}
+:root[data-theme] :where(.pulse, a, .source-link) {
+  color: var(--accent);
+}
+:root[data-theme] .detail-content pre,
+:root[data-theme] .debugger-console-output,
+:root[data-theme] .component-value-table code {
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--code-background);
+  font-family: var(--font-code);
 }

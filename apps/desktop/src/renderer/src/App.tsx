@@ -23,6 +23,7 @@ import {
   useInspectorEvents,
 } from './useInspectorEvents.js';
 import type {
+  AppearanceState,
   EventAnnotation,
   EventBookmark,
   EventQuery,
@@ -680,6 +681,7 @@ export function App() {
   const [systemTheme, setSystemTheme] = useState<'dark' | 'light'>(() =>
     window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
   );
+  const [appearance, setAppearance] = useState<AppearanceState>();
   const selected =
     selectedPagedEvent?.id === selectedEventId
       ? selectedPagedEvent
@@ -716,6 +718,12 @@ export function App() {
 
   useEffect(() => {
     if (!desktopApi) return;
+    void desktopApi.getAppearance().then(setAppearance);
+    return desktopApi.onAppearance(setAppearance);
+  }, [desktopApi]);
+
+  useEffect(() => {
+    if (!desktopApi) return;
     void desktopApi.getUpdateState().then((state) => setAppVersion(state.currentVersion));
   }, [desktopApi]);
 
@@ -726,7 +734,18 @@ export function App() {
     return () => media.removeEventListener('change', update);
   }, []);
 
-  const resolvedTheme = settings.theme === 'system' ? systemTheme : settings.theme;
+  const resolvedThemeDefinition = appearance?.themes.find((theme) => {
+    const id =
+      appearance.mode === 'fixed'
+        ? appearance.fixedThemeId
+        : systemTheme === 'dark'
+          ? appearance.darkThemeId
+          : appearance.lightThemeId;
+    return theme.id === id;
+  });
+  const resolvedTheme =
+    resolvedThemeDefinition?.colorScheme ??
+    (settings.theme === 'system' ? systemTheme : settings.theme);
   const queuedEvents = devices.reduce(
     (total, device) => total + (device.health?.queuedEvents ?? 0),
     0,
@@ -746,7 +765,61 @@ export function App() {
     document.documentElement.dataset['theme'] = resolvedTheme;
     document.documentElement.dataset['density'] = settings.density;
     document.documentElement.dataset['motion'] = settings.motion;
-  }, [resolvedTheme, settings.density, settings.motion]);
+    if (resolvedThemeDefinition) {
+      const root = document.documentElement.style;
+      root.colorScheme = resolvedThemeDefinition.colorScheme;
+      for (const [name, value] of Object.entries(resolvedThemeDefinition.colors)) {
+        root.setProperty(
+          `--${name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`,
+          value,
+        );
+      }
+      const gradient = resolvedThemeDefinition.gradient;
+      root.setProperty(
+        '--accent-gradient',
+        gradient.enabled
+          ? `linear-gradient(${gradient.angle}deg, ${gradient.stops
+              .map((stop) => `${stop.color} ${stop.position}%`)
+              .join(', ')})`
+          : resolvedThemeDefinition.colors.accent,
+      );
+      const uiFont = appearance?.fonts.find((font) => font.id === resolvedThemeDefinition.uiFontId);
+      const codeFont = appearance?.fonts.find(
+        (font) => font.id === resolvedThemeDefinition.codeFontId,
+      );
+      root.setProperty(
+        '--font-ui',
+        uiFont
+          ? `"${uiFont.family}", ui-sans-serif, system-ui`
+          : 'Inter, ui-sans-serif, system-ui, sans-serif',
+      );
+      root.setProperty(
+        '--font-code',
+        codeFont ? `"${codeFont.family}", ui-monospace, monospace` : 'ui-monospace, monospace',
+      );
+      for (const font of [uiFont, codeFont]) {
+        if (font?.source !== 'imported') continue;
+        void desktopApi
+          ?.loadFont(font.id)
+          .then(async (bytes) => {
+            const face = new FontFace(font.family, bytes.buffer as ArrayBuffer, {
+              style: font.style,
+              weight: String(font.weight),
+            });
+            await face.load();
+            document.fonts.add(face);
+          })
+          .catch(() => undefined);
+      }
+    }
+  }, [
+    appearance,
+    desktopApi,
+    resolvedTheme,
+    resolvedThemeDefinition,
+    settings.density,
+    settings.motion,
+  ]);
 
   if (!desktopApi) {
     return (
@@ -806,7 +879,14 @@ export function App() {
         </div>
       </aside>
       {activeView === 'Debugger' ? (
-        <DebuggerPanel theme={resolvedTheme} />
+        <DebuggerPanel
+          theme={resolvedTheme}
+          appearanceTheme={resolvedThemeDefinition}
+          codeFontFamily={
+            appearance?.fonts.find((font) => font.id === resolvedThemeDefinition?.codeFontId)
+              ?.family
+          }
+        />
       ) : activeView === 'Connections' ? (
         <ConnectionCenter
           devices={devices}
@@ -881,6 +961,8 @@ export function App() {
         />
       ) : activeView === 'Settings' ? (
         <SettingsPanel
+          appearance={appearance}
+          onAppearanceChange={setAppearance}
           deviceCount={devices.length}
           eventCount={events.length}
           resolvedTheme={resolvedTheme}

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type {
   AppSettings,
+  AppearanceState,
   ConnectionInfo,
   DatabaseMaintenanceReport,
   DebuggerState,
@@ -10,6 +11,7 @@ import darkAppIcon from '../../../resources/pulse-rn-app-icon-dark.png';
 import lightAppIcon from '../../../resources/pulse-rn-app-icon-light.png';
 import darkLogo from '../../../resources/pulse-rn-dark.png';
 import lightLogo from '../../../resources/pulse-rn-light.png';
+import { AppearanceSettings } from './AppearanceSettings.js';
 
 interface SettingsPanelProps {
   deviceCount: number;
@@ -17,6 +19,8 @@ interface SettingsPanelProps {
   resolvedTheme: 'dark' | 'light';
   settings: AppSettings;
   onChange(patch: Partial<AppSettings>): Promise<void>;
+  appearance?: AppearanceState;
+  onAppearanceChange(state: AppearanceState): void;
 }
 
 function Toggle({
@@ -52,6 +56,8 @@ export function SettingsPanel({
   resolvedTheme,
   settings,
   onChange,
+  appearance,
+  onAppearanceChange,
 }: SettingsPanelProps) {
   const [maintenance, setMaintenance] = useState<DatabaseMaintenanceReport>();
   const [maintenanceError, setMaintenanceError] = useState('');
@@ -578,27 +584,12 @@ export function SettingsPanel({
           </p>
         </section>
 
+        <AppearanceSettings appearance={appearance} onChange={onAppearanceChange} />
         <section className="settings-card">
           <header>
-            <strong>Appearance</strong>
+            <strong>Layout &amp; motion</strong>
             <small>Changes apply immediately</small>
           </header>
-          <label className="setting-row">
-            <span>
-              <strong>Color theme</strong>
-              <small>Follow macOS or force a light or dark appearance.</small>
-            </span>
-            <select
-              value={settings.theme}
-              onChange={(event) =>
-                void onChange({ theme: event.target.value as AppSettings['theme'] })
-              }
-            >
-              <option value="system">System</option>
-              <option value="dark">Dark</option>
-              <option value="light">Light</option>
-            </select>
-          </label>
           <label className="setting-row">
             <span>
               <strong>Interface density</strong>

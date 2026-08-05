@@ -217,6 +217,53 @@ export interface AppSettings {
   mcpAccessMode: 'read-only' | 'debugger' | 'full';
 }
 
+export interface ThemeDefinition {
+  schemaVersion: 1;
+  id: string;
+  name: string;
+  colorScheme: 'dark' | 'light';
+  builtin: boolean;
+  colors: {
+    accent: string;
+    background: string;
+    panel: string;
+    panelSoft: string;
+    border: string;
+    text: string;
+    muted: string;
+    success: string;
+    warning: string;
+    danger: string;
+    selection: string;
+    codeBackground: string;
+  };
+  gradient: {
+    enabled: boolean;
+    angle: number;
+    stops: { color: string; position: number }[];
+  };
+  uiFontId?: string;
+  codeFontId?: string;
+}
+export interface FontDefinition {
+  id: string;
+  family: string;
+  style: string;
+  weight: number;
+  source: 'system' | 'imported';
+  fileName?: string;
+  format?: 'truetype' | 'opentype' | 'woff' | 'woff2';
+}
+export interface AppearanceState {
+  schemaVersion: 1;
+  mode: 'system' | 'fixed';
+  fixedThemeId: string;
+  lightThemeId: string;
+  darkThemeId: string;
+  themes: ThemeDefinition[];
+  fonts: FontDefinition[];
+}
+
 export interface McpInfo {
   enabled: boolean;
   available: boolean;
@@ -477,6 +524,20 @@ export interface PulseRNDesktopApi {
   getSettings(): Promise<AppSettings>;
   updateSettings(patch: Partial<AppSettings>): Promise<AppSettings>;
   onSettings(listener: (settings: AppSettings) => void): () => void;
+  getAppearance(): Promise<AppearanceState>;
+  updateAppearanceSelection(
+    patch: Partial<Pick<AppearanceState, 'mode' | 'fixedThemeId' | 'lightThemeId' | 'darkThemeId'>>,
+  ): Promise<AppearanceState>;
+  saveTheme(theme: Omit<ThemeDefinition, 'builtin'>): Promise<AppearanceState>;
+  duplicateTheme(id: string): Promise<AppearanceState>;
+  deleteTheme(id: string): Promise<AppearanceState>;
+  importTheme(): Promise<AppearanceState>;
+  exportTheme(id: string): Promise<{ canceled: boolean; filePath?: string }>;
+  importFont(): Promise<AppearanceState>;
+  registerSystemFont(font: Omit<FontDefinition, 'id' | 'source'>): Promise<AppearanceState>;
+  deleteFont(id: string): Promise<AppearanceState>;
+  loadFont(id: string): Promise<Uint8Array>;
+  onAppearance(listener: (appearance: AppearanceState) => void): () => void;
   getMcpInfo(): Promise<McpInfo>;
   onMcpInfo(listener: (info: McpInfo) => void): () => void;
   getConnectionInfo(): Promise<ConnectionInfo>;

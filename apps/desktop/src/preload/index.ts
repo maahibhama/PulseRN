@@ -16,6 +16,7 @@ const EVENTS_CHANNEL = 'pulse-rn:events';
 const STORAGE_CHANNEL = 'pulse-rn:storage';
 const STORAGE_LOCAL_CHANNEL = 'pulse-rn:storage-local';
 const SETTINGS_CHANNEL = 'pulse-rn:settings';
+const APPEARANCE_CHANNEL = 'pulse-rn:appearance';
 const DEBUGGER_CHANNEL = 'pulse-rn:debugger';
 const CONNECTION_CHANNEL = 'pulse-rn:connection';
 const UPDATE_CHANNEL = 'pulse-rn:update';
@@ -247,6 +248,53 @@ const networkExportResultSchema = z.object({
   entries: z.number().int().nonnegative(),
 });
 const settingsPatchSchema = settingsSchema.partial().strict();
+const appearanceColorSchema = z.string().regex(/^#[0-9a-f]{6}([0-9a-f]{2})?$/i);
+const themeSchema = z.object({
+  schemaVersion: z.literal(1),
+  id: z.string(),
+  name: z.string(),
+  colorScheme: z.enum(['dark', 'light']),
+  builtin: z.boolean(),
+  colors: z.object({
+    accent: appearanceColorSchema,
+    background: appearanceColorSchema,
+    panel: appearanceColorSchema,
+    panelSoft: appearanceColorSchema,
+    border: appearanceColorSchema,
+    text: appearanceColorSchema,
+    muted: appearanceColorSchema,
+    success: appearanceColorSchema,
+    warning: appearanceColorSchema,
+    danger: appearanceColorSchema,
+    selection: appearanceColorSchema,
+    codeBackground: appearanceColorSchema,
+  }),
+  gradient: z.object({
+    enabled: z.boolean(),
+    angle: z.number(),
+    stops: z.array(z.object({ color: appearanceColorSchema, position: z.number() })),
+  }),
+  uiFontId: z.string().optional(),
+  codeFontId: z.string().optional(),
+});
+const fontSchema = z.object({
+  id: z.string(),
+  family: z.string(),
+  style: z.string(),
+  weight: z.number(),
+  source: z.enum(['system', 'imported']),
+  fileName: z.string().optional(),
+  format: z.enum(['truetype', 'opentype', 'woff', 'woff2']).optional(),
+});
+const appearanceSchema = z.object({
+  schemaVersion: z.literal(1),
+  mode: z.enum(['system', 'fixed']),
+  fixedThemeId: z.string(),
+  lightThemeId: z.string(),
+  darkThemeId: z.string(),
+  themes: z.array(themeSchema),
+  fonts: z.array(fontSchema),
+});
 const mcpInfoSchema = z.object({
   enabled: z.boolean(),
   available: z.boolean(),
@@ -732,6 +780,71 @@ const api: PulseRNDesktopApi = {
     };
     ipcRenderer.on(SETTINGS_CHANNEL, handler);
     return () => ipcRenderer.removeListener(SETTINGS_CHANNEL, handler);
+  },
+  async getAppearance() {
+    return appearanceSchema.parse(
+      await ipcRenderer.invoke(APPEARANCE_CHANNEL, { operation: 'state' }),
+    );
+  },
+  async updateAppearanceSelection(patch) {
+    return appearanceSchema.parse(
+      await ipcRenderer.invoke(APPEARANCE_CHANNEL, { operation: 'selection', patch }),
+    );
+  },
+  async saveTheme(theme) {
+    return appearanceSchema.parse(
+      await ipcRenderer.invoke(APPEARANCE_CHANNEL, { operation: 'theme-save', theme }),
+    );
+  },
+  async duplicateTheme(id) {
+    return appearanceSchema.parse(
+      await ipcRenderer.invoke(APPEARANCE_CHANNEL, { operation: 'theme-duplicate', id }),
+    );
+  },
+  async deleteTheme(id) {
+    return appearanceSchema.parse(
+      await ipcRenderer.invoke(APPEARANCE_CHANNEL, { operation: 'theme-delete', id }),
+    );
+  },
+  async importTheme() {
+    return appearanceSchema.parse(
+      await ipcRenderer.invoke(APPEARANCE_CHANNEL, { operation: 'theme-import' }),
+    );
+  },
+  async exportTheme(id) {
+    return z
+      .object({ canceled: z.boolean(), filePath: z.string().optional() })
+      .parse(await ipcRenderer.invoke(APPEARANCE_CHANNEL, { operation: 'theme-export', id }));
+  },
+  async importFont() {
+    return appearanceSchema.parse(
+      await ipcRenderer.invoke(APPEARANCE_CHANNEL, { operation: 'font-import' }),
+    );
+  },
+  async registerSystemFont(font) {
+    return appearanceSchema.parse(
+      await ipcRenderer.invoke(APPEARANCE_CHANNEL, { operation: 'font-system', font }),
+    );
+  },
+  async deleteFont(id) {
+    return appearanceSchema.parse(
+      await ipcRenderer.invoke(APPEARANCE_CHANNEL, { operation: 'font-delete', id }),
+    );
+  },
+  async loadFont(id) {
+    const value: unknown = await ipcRenderer.invoke(APPEARANCE_CHANNEL, {
+      operation: 'font-load',
+      id,
+    });
+    return z.instanceof(Uint8Array).parse(value);
+  },
+  onAppearance(listener) {
+    const handler = (_event: Electron.IpcRendererEvent, value: unknown) => {
+      const result = appearanceSchema.safeParse(value);
+      if (result.success) listener(result.data);
+    };
+    ipcRenderer.on(APPEARANCE_CHANNEL, handler);
+    return () => ipcRenderer.removeListener(APPEARANCE_CHANNEL, handler);
   },
   async getMcpInfo() {
     return mcpInfoSchema.parse(await ipcRenderer.invoke(MCP_CHANNEL));

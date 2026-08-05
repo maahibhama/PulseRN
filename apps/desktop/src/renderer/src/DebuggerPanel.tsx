@@ -6,6 +6,7 @@ import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
 import 'monaco-editor/esm/vs/language/typescript/monaco.contribution';
 import TypeScriptWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker';
 import type {
+  ThemeDefinition,
   DebuggerEvaluation,
   DebuggerProperty,
   DebuggerRemoteValue,
@@ -130,7 +131,15 @@ const emptyComponentSnapshot: ReactComponentSnapshot = {
   capabilities: { highlight: false, pick: false },
 };
 
-export function DebuggerPanel({ theme }: { theme: 'dark' | 'light' }) {
+export function DebuggerPanel({
+  theme,
+  appearanceTheme,
+  codeFontFamily,
+}: {
+  theme: 'dark' | 'light';
+  appearanceTheme?: ThemeDefinition;
+  codeFontFamily?: string;
+}) {
   const api = window.pulseRN;
   const [state, setState] = useState(initialState);
   const [sourceId, setSourceId] = useState<string>();
@@ -162,6 +171,26 @@ export function DebuggerPanel({ theme }: { theme: 'dark' | 'light' }) {
   const [busy, setBusy] = useState(false);
   const editorRef = useRef<MonacoTypes.editor.IStandaloneCodeEditor | undefined>(undefined);
   const monacoRef = useRef<Monaco | undefined>(undefined);
+  const editorThemeName = appearanceTheme
+    ? `pulsern-${appearanceTheme.id}`
+    : theme === 'dark'
+      ? 'vs-dark'
+      : 'light';
+  useEffect(() => {
+    if (!appearanceTheme || !monacoRef.current) return;
+    monacoRef.current.editor.defineTheme(editorThemeName, {
+      base: appearanceTheme.colorScheme === 'dark' ? 'vs-dark' : 'vs',
+      inherit: true,
+      rules: [],
+      colors: {
+        'editor.background': appearanceTheme.colors.codeBackground,
+        'editor.foreground': appearanceTheme.colors.text,
+        'editor.selectionBackground': appearanceTheme.colors.selection,
+        'editorLineNumber.foreground': appearanceTheme.colors.muted,
+      },
+    });
+    monacoRef.current.editor.setTheme(editorThemeName);
+  }, [appearanceTheme, editorThemeName]);
   const sourceSearchRef = useRef<HTMLInputElement | null>(null);
   const toggleBreakpointRef = useRef<
     (line: number, mode: 'plain' | 'condition' | 'hit' | 'log') => Promise<void>
@@ -792,12 +821,13 @@ export function DebuggerPanel({ theme }: { theme: 'dark' | 'light' }) {
                   glyphMargin: true,
                   minimap: { enabled: false },
                   fontSize: 12,
+                  fontFamily: codeFontFamily,
                   lineNumbersMinChars: 3,
                   scrollBeyondLastLine: false,
                   automaticLayout: true,
                 }}
                 path={selectedSource?.url}
-                theme={theme === 'dark' ? 'vs-dark' : 'light'}
+                theme={editorThemeName}
                 value={sourceText}
               />
             </section>
