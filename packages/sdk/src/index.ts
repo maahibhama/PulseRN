@@ -69,6 +69,22 @@ export { installAxiosInterceptor } from './axios-instrumentation.js';
 export type { AxiosInstanceLike } from './axios-instrumentation.js';
 export { serializeConsoleValue } from './serialization.js';
 export { PerformanceMonitor } from './performance-monitor.js';
+export {
+  calculateFrameStatistics,
+  createAnimationWorkletProfiler,
+  detectAnimationWorkletCapabilities,
+} from './animation-worklets.js';
+export type {
+  AnimationDescriptor,
+  AnimationWorkletOptions,
+  AnimationWorkletCapabilities,
+  AnimationWorkletTrackTarget,
+  FrameStatistics,
+  SourceLocation,
+  WorkletDescriptor,
+  WorkletRuntimeDescriptor,
+} from './animation-worklets.js';
+export type { AnimationPhase, AnimationType, RuntimeKind } from './protocol-types.js';
 export { installErrorInterceptor, toCapturedError } from './error-instrumentation.js';
 export { createAsyncStorageProvider, createMMKVStorageProvider } from './storage-provider.js';
 export type { AsyncStorageLike, MMKVLike, StorageProvider } from './storage-provider.js';

@@ -2,14 +2,24 @@ import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Text } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
+  createAnimationWorkletProfiler,
   createAsyncStorageProvider,
   createDevToolMiddleware,
   createMMKVStorageProvider,
   ReactNativeDevTool,
 } from '@pulse-rn/sdk';
+import Animated, {
+  Easing,
+  useAnimatedReaction,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
+import { scheduleOnRN, scheduleOnUI } from 'react-native-worklets';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createMMKV } from 'react-native-mmkv';
 import { applyMiddleware, createStore } from 'redux';
@@ -25,6 +35,11 @@ const pairingCode = process.env.EXPO_PUBLIC_PULSE_RN_PAIRING_CODE;
 const reconnectToken = process.env.EXPO_PUBLIC_PULSE_RN_RECONNECT_TOKEN;
 const secure = process.env.EXPO_PUBLIC_PULSE_RN_SECURE === 'true';
 const mmkv = createMMKV({ id: 'pulse-rn-example' });
+const animationProfiler = createAnimationWorkletProfiler(ReactNativeDevTool, {
+  isDevelopment: __DEV__,
+  sampleIntervalMs: 100,
+  maxSamplesPerAnimation: 20,
+});
 
 interface DemoState {
   count: number;
@@ -73,6 +88,35 @@ export default function HomeScreen() {
   const [networkSent, setNetworkSent] = useState(0);
   const [reduxCount, setReduxCount] = useState(demoStore.getState().count);
   const [debuggerResult, setDebuggerResult] = useState('Not run');
+  const [animationResult, setAnimationResult] = useState('Not run');
+  const animatedProgress = useSharedValue(0);
+  const activeAnimationId = useSharedValue('');
+  const lastReportedBucket = useSharedValue(-1);
+  const animatedBoxStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: animatedProgress.value * 190 },
+      { rotate: `${animatedProgress.value * 360}deg` },
+    ],
+    opacity: 0.45 + animatedProgress.value * 0.55,
+  }));
+
+  const reportAnimationSample = (id: string, value: number) => {
+    animationProfiler.animation.sample(id, value, Date.now(), value);
+  };
+
+  useAnimatedReaction(
+    () => Math.round(animatedProgress.value * 10),
+    (bucket, previousBucket) => {
+      if (
+        activeAnimationId.value &&
+        bucket !== previousBucket &&
+        bucket !== lastReportedBucket.value
+      ) {
+        lastReportedBucket.value = bucket;
+        scheduleOnRN(reportAnimationSample, activeAnimationId.value, animatedProgress.value);
+      }
+    },
+  );
 
   useEffect(() => {
     if (!__DEV__) return;
@@ -121,10 +165,12 @@ export default function HomeScreen() {
         redux: true,
         navigation: true,
         performance: true,
+        animation: true,
+        worklet: true,
         storage: true,
         error: true,
       },
-      sampling: { performance: 1, console: 1, network: 1 },
+      sampling: { performance: 1, animation: 1, worklet: 1, console: 1, network: 1 },
     });
     const unregisterStorage = client.registerStorageProvider(
       createAsyncStorageProvider(AsyncStorage),
@@ -161,6 +207,15 @@ export default function HomeScreen() {
     navigationTracker.track({
       lifecycle: 'ready',
       route: { key: 'expo:/', name: 'Home', path: '/' },
+    });
+    animationProfiler.runtime.capability('available');
+    animationProfiler.runtime.created({
+      id: 'ui-runtime',
+      name: 'Reanimated UI',
+      kind: 'ui',
+      mode: 'legacy',
+      eventLoopEnabled: true,
+      animationQueuePollingRate: 16,
     });
     const unsubscribe = demoStore.subscribe(() => setReduxCount(demoStore.getState().count));
     return () => {
@@ -254,6 +309,113 @@ export default function HomeScreen() {
     setDebuggerResult(result);
   };
 
+  const finishAnimationDemo = (id: string, finished: boolean | undefined, finalValue: number) => {
+    animationProfiler.animation.phase(id, finished ? 'completed' : 'cancelled', {
+      value: finalValue,
+      completionRuntime: 'react-native',
+    });
+    setAnimationResult(finished ? 'Completed on UI runtime' : 'Cancelled');
+  };
+
+  const runAnimationDemo = () => {
+    const returning = animatedProgress.value > 0.5;
+    const target = returning ? 0 : 1;
+    const type = returning ? 'spring' : 'timing';
+    const correlationId = `animation-demo:${Date.now()}`;
+    const id = animationProfiler.animation.create({
+      type,
+      component: 'HomeScreen.AnimationDemo',
+      viewTag: 'pulse-demo-box',
+      properties: ['transform.translateX', 'transform.rotate', 'opacity'],
+      initialValue: animatedProgress.value,
+      targetValue: target,
+      configuration: returning
+        ? { damping: 14, stiffness: 130, mass: 1 }
+        : { duration: 850, easing: 'inOut(cubic)' },
+      source: { file: 'app/index.tsx', line: 335 },
+      runtimeId: 'ui-runtime',
+      correlationId,
+    });
+    activeAnimationId.value = id;
+    lastReportedBucket.value = -1;
+    animationProfiler.animation.phase(id, 'scheduled');
+    animationProfiler.animation.phase(id, 'started');
+    setAnimationResult(`${type} running…`);
+    const complete = (finished?: boolean) => {
+      'worklet';
+      scheduleOnRN(finishAnimationDemo, id, finished, target);
+    };
+    animatedProgress.value = returning
+      ? withSpring(target, { damping: 14, stiffness: 130, mass: 1 }, complete)
+      : withTiming(target, { duration: 850, easing: Easing.inOut(Easing.cubic) }, complete);
+  };
+
+  const runWorkletDemo = () => {
+    const workletId = `worklet-demo:${Date.now()}`;
+    const enqueuedAt = Date.now();
+    ReactNativeDevTool.track({
+      category: 'worklet',
+      type: 'worklet.scheduled',
+      correlationId: workletId,
+      payload: {
+        schemaVersion: 1,
+        operation: 'scheduled',
+        timestamp: enqueuedAt,
+        runtimeId: 'ui-runtime',
+        runtimeName: 'Reanimated UI',
+        runtimeKind: 'ui',
+        workletId,
+        workletName: 'exampleUiWorklet',
+        originRuntime: 'react-native',
+        destinationRuntime: 'ui',
+        enqueuedAt,
+        source: { file: 'app/index.tsx', line: 372 },
+      },
+    });
+    setAnimationResult('UI worklet queued…');
+    scheduleOnUI(() => {
+      'worklet';
+      const startedAt = Date.now();
+      let checksum = 0;
+      for (let index = 0; index < 25_000; index += 1) checksum = (checksum + index) % 97;
+      const endedAt = Date.now();
+      scheduleOnRN(reportWorkletDemo, workletId, enqueuedAt, startedAt, endedAt, checksum);
+    });
+  };
+
+  const reportWorkletDemo = (
+    workletId: string,
+    enqueuedAt: number,
+    startedAt: number,
+    endedAt: number,
+    checksum: number,
+  ) => {
+    ReactNativeDevTool.track({
+      category: 'worklet',
+      type: 'worklet.completed',
+      correlationId: workletId,
+      payload: {
+        schemaVersion: 1,
+        operation: 'completed',
+        timestamp: endedAt,
+        runtimeId: 'ui-runtime',
+        runtimeName: 'Reanimated UI',
+        runtimeKind: 'ui',
+        workletId,
+        workletName: 'exampleUiWorklet',
+        originRuntime: 'react-native',
+        destinationRuntime: 'ui',
+        enqueuedAt,
+        startedAt,
+        endedAt,
+        queueWaitMs: Math.max(0, startedAt - enqueuedAt),
+        durationMs: Math.max(0, endedAt - startedAt),
+        metrics: { checksum },
+      },
+    });
+    setAnimationResult(`Worklet completed in ${(endedAt - startedAt).toFixed(2)} ms`);
+  };
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="light" />
@@ -279,6 +441,16 @@ export default function HomeScreen() {
         <Pressable style={[styles.button, styles.performanceButton]} onPress={runPerformanceDemo}>
           <Text style={styles.buttonText}>Run performance demo</Text>
         </Pressable>
+        <View style={styles.animationTrack}>
+          <Animated.View style={[styles.animationBox, animatedBoxStyle]} />
+        </View>
+        <Pressable style={[styles.button, styles.animationButton]} onPress={runAnimationDemo}>
+          <Text style={styles.buttonText}>Run Reanimated timing / spring</Text>
+        </Pressable>
+        <Pressable style={[styles.button, styles.workletButton]} onPress={runWorkletDemo}>
+          <Text style={styles.buttonText}>Run UI worklet demo</Text>
+        </Pressable>
+        <Text style={styles.counter}>Animations: {animationResult}</Text>
         <Pressable style={[styles.button, styles.errorButton]} onPress={captureErrorDemo}>
           <Text style={styles.buttonText}>Capture error-boundary demo</Text>
         </Pressable>
@@ -310,6 +482,22 @@ const styles = StyleSheet.create({
   reduxButton: { backgroundColor: '#5e46b5', marginTop: 24 },
   navigationButton: { backgroundColor: '#326d91', marginTop: 24 },
   performanceButton: { backgroundColor: '#8a5c27', marginTop: 24 },
+  animationButton: { backgroundColor: '#7046a8', marginTop: 16 },
+  workletButton: { backgroundColor: '#247c78', marginTop: 16 },
+  animationTrack: {
+    backgroundColor: '#171b24',
+    borderRadius: 12,
+    height: 60,
+    marginTop: 24,
+    overflow: 'hidden',
+    padding: 8,
+  },
+  animationBox: {
+    backgroundColor: '#9b82ff',
+    borderRadius: 8,
+    height: 44,
+    width: 44,
+  },
   errorButton: { backgroundColor: '#8f3344', marginTop: 24 },
   debuggerButton: { backgroundColor: '#4656b5', marginTop: 24 },
   debuggerExceptionButton: { backgroundColor: '#6f354c', marginTop: 24 },

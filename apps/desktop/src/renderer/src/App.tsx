@@ -9,6 +9,7 @@ import { NetworkPanel } from './NetworkPanel.js';
 import { McpPanel } from './McpPanel.js';
 import { NavigationPanel } from './NavigationPanel.js';
 import { PerformancePanel } from './PerformancePanel.js';
+import { AnimationsWorkletsPanel } from './AnimationsWorkletsPanel.js';
 import { ReduxPanel } from './ReduxPanel.js';
 import { SettingsPanel } from './SettingsPanel.js';
 import { SessionsPanel } from './SessionsPanel.js';
@@ -37,6 +38,7 @@ type ViewName =
   | 'Redux'
   | 'Navigation'
   | 'Performance'
+  | 'Animations'
   | 'Storage'
   | 'Errors'
   | 'Debugger'
@@ -52,6 +54,7 @@ const navItems: { name: ViewName; icon: string; available: boolean }[] = [
   { name: 'Redux', icon: '◇', available: true },
   { name: 'Navigation', icon: '→', available: true },
   { name: 'Performance', icon: '⌁', available: true },
+  { name: 'Animations', icon: '◌', available: true },
   { name: 'Storage', icon: '▤', available: true },
   { name: 'Errors', icon: '△', available: true },
   { name: 'Debugger', icon: '⏵', available: true },
@@ -66,6 +69,7 @@ const inspectorCategories: Partial<Record<ViewName, DevToolEventCategory[]>> = {
   Redux: ['redux'],
   Navigation: ['navigation'],
   Performance: ['performance', 'network', 'redux', 'navigation'],
+  Animations: ['animation', 'worklet', 'interaction', 'error'],
   Errors: ['error'],
 };
 
@@ -860,6 +864,12 @@ export function App() {
           onSelect={selectInspectorEvent}
           thresholds={settings}
           onThresholdChange={async (patch) => setSettings(await desktopApi.updateSettings(patch))}
+        />
+      ) : activeView === 'Animations' ? (
+        <AnimationsWorkletsPanel
+          events={inspectorPage.events}
+          selectedEventId={selectedEventId}
+          onSelect={selectInspectorEvent}
         />
       ) : activeView === 'Storage' ? (
         <StoragePanel devices={devices} />

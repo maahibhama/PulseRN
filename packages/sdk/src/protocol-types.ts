@@ -9,6 +9,8 @@ export type DevToolEventCategory =
   | 'redux'
   | 'navigation'
   | 'performance'
+  | 'animation'
+  | 'worklet'
   | 'storage'
   | 'error'
   | 'device'
@@ -185,6 +187,20 @@ export interface PerformanceEventPayload extends JsonObject {
     reason?: string;
   };
 }
+
+export type RuntimeKind = 'react-native' | 'ui' | 'worker';
+export type AnimationType =
+  | 'timing'
+  | 'spring'
+  | 'decay'
+  | 'keyframe'
+  | 'entering'
+  | 'exiting'
+  | 'layout'
+  | 'shared-transition'
+  | 'custom';
+export type AnimationPhase =
+  'created' | 'scheduled' | 'started' | 'running' | 'completed' | 'cancelled' | 'failed';
 
 export type StorageOperation = 'providers' | 'list' | 'get' | 'set' | 'delete' | 'restore';
 

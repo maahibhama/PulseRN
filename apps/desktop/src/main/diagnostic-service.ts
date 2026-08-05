@@ -5,6 +5,8 @@ import {
   networkEventPayloadSchema,
   networkLifecycleEventPayloadSchema,
   performanceEventPayloadSchema,
+  animationEventPayloadSchema,
+  workletEventPayloadSchema,
   reduxEventPayloadSchema,
   type DevToolEventEnvelope,
   type DiagnosticEvidence,
@@ -55,6 +57,16 @@ function evidenceSummary(event: DevToolEventEnvelope): string | undefined {
     const parsed = performanceEventPayloadSchema.safeParse(event.payload);
     return parsed.success
       ? `${parsed.data.name}: ${parsed.data.value} ${parsed.data.unit}`
+      : undefined;
+  }
+  if (event.category === 'animation') {
+    const parsed = animationEventPayloadSchema.safeParse(event.payload);
+    return parsed.success ? `${parsed.data.animationType} ${parsed.data.phase}` : undefined;
+  }
+  if (event.category === 'worklet') {
+    const parsed = workletEventPayloadSchema.safeParse(event.payload);
+    return parsed.success
+      ? `${parsed.data.workletName ?? parsed.data.runtimeName ?? parsed.data.runtimeId} ${parsed.data.operation}`
       : undefined;
   }
   return undefined;
@@ -146,9 +158,15 @@ export class DiagnosticService {
             candidate.id !== event.id &&
             candidate.timestamp <= event.timestamp &&
             event.timestamp - candidate.timestamp <= TIME_WINDOW_MS &&
-            ['network', 'redux', 'navigation', 'performance', 'console'].includes(
-              candidate.category,
-            ),
+            [
+              'network',
+              'redux',
+              'navigation',
+              'performance',
+              'animation',
+              'worklet',
+              'console',
+            ].includes(candidate.category),
         )
         .slice(-50);
       const relations = relatedCandidates
@@ -226,6 +244,47 @@ export class DiagnosticService {
             primaryEventId: event.id,
             timestamp: event.timestamp,
             confidence: parsed.data.approximate ? 0.8 : 1,
+            relations,
+          });
+        }
+      }
+      if (event.category === 'animation') {
+        const parsed = animationEventPayloadSchema.safeParse(event.payload);
+        if (
+          parsed.success &&
+          (parsed.data.phase === 'failed' ||
+            (parsed.data.frame?.lateFrames ?? 0) > 0 ||
+            (parsed.data.frame &&
+              parsed.data.frame.observedFrames < parsed.data.frame.expectedFrames))
+        ) {
+          findings.push({
+            id: findingId('animation_anomaly', event.id),
+            kind: 'animation_anomaly',
+            severity: parsed.data.phase === 'failed' ? 'error' : 'warning',
+            summary: `${parsed.data.animationType} animation ${parsed.data.phase}; ${parsed.data.frame?.lateFrames ?? 0} late frames`,
+            primaryEventId: event.id,
+            timestamp: event.timestamp,
+            confidence: 0.95,
+            relations,
+          });
+        }
+      }
+      if (event.category === 'worklet') {
+        const parsed = workletEventPayloadSchema.safeParse(event.payload);
+        if (
+          parsed.success &&
+          (parsed.data.operation === 'failed' ||
+            (parsed.data.queueWaitMs ?? 0) > 16 ||
+            (parsed.data.durationMs ?? 0) > 16)
+        ) {
+          findings.push({
+            id: findingId('worklet_anomaly', event.id),
+            kind: 'worklet_anomaly',
+            severity: parsed.data.operation === 'failed' ? 'error' : 'warning',
+            summary: `${parsed.data.workletName ?? parsed.data.runtimeId}: ${parsed.data.operation}, ${parsed.data.queueWaitMs ?? 0} ms queued, ${parsed.data.durationMs ?? 0} ms executing`,
+            primaryEventId: event.id,
+            timestamp: event.timestamp,
+            confidence: 0.95,
             relations,
           });
         }

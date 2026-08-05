@@ -144,6 +144,15 @@ export const PULSERN_MCP_TOOLS: readonly PulseRNTool[] = [
     inputSchema: objectSchema({ sessionId: string(), limit: integer(1, 200) }),
   },
   {
+    name: 'pulsern_inspect_animations_worklets',
+    description: 'Inspect bounded, read-only animation and worklet profiling events.',
+    inputSchema: objectSchema({
+      sessionId: string(),
+      correlationId: string(),
+      limit: integer(1, 200),
+    }),
+  },
+  {
     name: 'pulsern_get_connection_health',
     description: 'Get live connected device and transport health snapshots.',
     inputSchema: objectSchema(),

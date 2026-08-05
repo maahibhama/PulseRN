@@ -9,6 +9,8 @@ export const eventCategorySchema = z.enum([
   'redux',
   'navigation',
   'performance',
+  'animation',
+  'worklet',
   'storage',
   'error',
   'device',
@@ -245,6 +247,111 @@ export const performanceEventPayloadSchema = z.object({
 });
 export type PerformanceEventPayload = z.infer<typeof performanceEventPayloadSchema>;
 
+export const runtimeKindSchema = z.enum(['react-native', 'ui', 'worker']);
+export const sourceLocationSchema = z.object({
+  file: z.string().max(20_000),
+  line: z.number().int().positive(),
+  column: z.number().int().nonnegative().optional(),
+});
+const boundedPreview = z.union([z.string().max(4_096), z.number().finite(), z.boolean(), z.null()]);
+export const animationEventPayloadSchema = z.object({
+  schemaVersion: z.literal(1),
+  animationId: identifier,
+  animationType: z.enum([
+    'timing',
+    'spring',
+    'decay',
+    'keyframe',
+    'entering',
+    'exiting',
+    'layout',
+    'shared-transition',
+    'custom',
+  ]),
+  phase: z.enum(['created', 'scheduled', 'started', 'running', 'completed', 'cancelled', 'failed']),
+  timestamp: z.number().finite().nonnegative(),
+  component: z.string().max(4_096).optional(),
+  viewTag: z.string().max(1_024).optional(),
+  properties: z.array(z.string().max(1_024)).max(100).optional(),
+  initialValue: boundedPreview.optional(),
+  targetValue: boundedPreview.optional(),
+  sampledValue: boundedPreview.optional(),
+  progress: z.number().finite().min(0).max(1).optional(),
+  configuration: z.record(jsonValue).optional(),
+  source: sourceLocationSchema.optional(),
+  runtimeId: identifier.optional(),
+  workletId: identifier.optional(),
+  triggerEventId: identifier.optional(),
+  frame: z
+    .object({
+      expectedFrames: z.number().int().nonnegative(),
+      observedFrames: z.number().int().nonnegative(),
+      lateFrames: z.number().int().nonnegative(),
+      effectiveFps: z.number().finite().nonnegative(),
+      longestFrameMs: z.number().finite().nonnegative(),
+      timeToFirstFrameMs: z.number().finite().nonnegative().optional(),
+      refreshRateHz: z.number().finite().positive().optional(),
+    })
+    .optional(),
+  durationMs: z.number().finite().nonnegative().optional(),
+  completionRuntime: runtimeKindSchema.optional(),
+  warning: z.string().max(10_000).optional(),
+  error: z
+    .object({
+      name: z.string().max(1_024),
+      message: z.string().max(100_000),
+      stack: z.string().max(200_000).optional(),
+    })
+    .optional(),
+});
+export type AnimationEventPayload = z.infer<typeof animationEventPayloadSchema>;
+
+export const workletEventPayloadSchema = z.object({
+  schemaVersion: z.literal(1),
+  operation: z.enum([
+    'capability',
+    'runtime-created',
+    'runtime-disposed',
+    'scheduled',
+    'started',
+    'completed',
+    'failed',
+    'metrics',
+  ]),
+  timestamp: z.number().finite().nonnegative(),
+  runtimeId: identifier,
+  runtimeName: z.string().max(1_024).optional(),
+  runtimeKind: runtimeKindSchema,
+  workletId: identifier.optional(),
+  workletName: z.string().max(4_096).optional(),
+  originRuntime: runtimeKindSchema.optional(),
+  destinationRuntime: runtimeKindSchema.optional(),
+  source: sourceLocationSchema.optional(),
+  enqueuedAt: z.number().finite().nonnegative().optional(),
+  startedAt: z.number().finite().nonnegative().optional(),
+  endedAt: z.number().finite().nonnegative().optional(),
+  queueWaitMs: z.number().finite().nonnegative().optional(),
+  durationMs: z.number().finite().nonnegative().optional(),
+  queueDepth: z.number().int().nonnegative().optional(),
+  argumentPreviews: z.array(boundedPreview).max(20).optional(),
+  serializationBytes: z.number().int().nonnegative().optional(),
+  mode: z.enum(['bundle', 'legacy', 'unknown']).optional(),
+  eventLoopEnabled: z.boolean().optional(),
+  animationQueuePollingRate: z.number().finite().positive().optional(),
+  droppedTelemetry: z.number().int().nonnegative().optional(),
+  metrics: z.record(z.number().finite().nonnegative()).optional(),
+  status: z.enum(['available', 'unsupported', 'missing']).optional(),
+  reason: z.string().max(10_000).optional(),
+  error: z
+    .object({
+      name: z.string().max(1_024),
+      message: z.string().max(100_000),
+      stack: z.string().max(200_000).optional(),
+    })
+    .optional(),
+});
+export type WorkletEventPayload = z.infer<typeof workletEventPayloadSchema>;
+
 export const storageOperationSchema = z.enum([
   'providers',
   'list',
@@ -352,11 +459,15 @@ export const eventEnvelopeSchema = z
               ? navigationEventPayloadSchema
               : event.category === 'performance'
                 ? performanceEventPayloadSchema
-                : event.category === 'storage'
-                  ? storageEventPayloadSchema
-                  : event.category === 'error'
-                    ? errorEventPayloadSchema
-                    : undefined;
+                : event.category === 'animation'
+                  ? animationEventPayloadSchema
+                  : event.category === 'worklet'
+                    ? workletEventPayloadSchema
+                    : event.category === 'storage'
+                      ? storageEventPayloadSchema
+                      : event.category === 'error'
+                        ? errorEventPayloadSchema
+                        : undefined;
     if (payloadSchema && !payloadSchema.safeParse(event.payload).success) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -377,6 +488,8 @@ export type DiagnosticFindingKind =
   | 'redux_preceding_failure'
   | 'navigation_preceding_failure'
   | 'performance_anomaly'
+  | 'animation_anomaly'
+  | 'worklet_anomaly'
   | 'transport_degradation';
 
 export type DiagnosticSeverity = 'info' | 'warning' | 'error' | 'critical';
