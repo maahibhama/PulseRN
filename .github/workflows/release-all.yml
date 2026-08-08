@@ -1,0 +1,110 @@
+name: Release all
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version for CLI, SDK, and desktop (for example 1.0.7)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: release-all
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '22'
+  PNPM_VERSION: '10.14.0'
+  RELEASE_VERSION: ${{ inputs.version }}
+
+jobs:
+  prepare-and-dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate version
+        shell: bash
+        run: |
+          if [[ ! "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Invalid release version: $RELEASE_VERSION"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Ensure release does not already exist
+        shell: bash
+        run: |
+          for tag in "v$RELEASE_VERSION" "cli-v$RELEASE_VERSION" "sdk-v$RELEASE_VERSION"; do
+            if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+              echo "::error::Release tag already exists: $tag"
+              exit 1
+            fi
+          done
+
+      - name: Update every product version
+        run: |
+          node scripts/set-release-version.mjs "$RELEASE_VERSION"
+          pnpm install --lockfile-only
+
+      - name: Validate coordinated versions
+        shell: bash
+        run: |
+          test "$(node -p "require('./package.json').version")" = "$RELEASE_VERSION"
+          test "$(node -p "require('./apps/desktop/package.json').version")" = "$RELEASE_VERSION"
+          test "$(node -p "require('./packages/cli/package.json').version")" = "$RELEASE_VERSION"
+          test "$(node -p "require('./packages/sdk/package.json').version")" = "$RELEASE_VERSION"
+          grep -F "const VERSION = '$RELEASE_VERSION';" packages/cli/src/server.ts
+          grep -F "const SDK_VERSION = '$RELEASE_VERSION';" packages/sdk/src/client.ts
+          grep -F "version \"$RELEASE_VERSION\"" Casks/pulsern.rb
+          grep -F "cli-v$RELEASE_VERSION/pulsern-$RELEASE_VERSION.tgz" Formula/pulsern-cli.rb
+
+      - name: Commit and push version bump
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            package.json \
+            apps/desktop/package.json \
+            packages/cli/package.json \
+            packages/cli/src/server.ts \
+            packages/sdk/package.json \
+            packages/sdk/src/client.ts \
+            Casks/pulsern.rb \
+            Formula/pulsern-cli.rb \
+            pnpm-lock.yaml
+          if git diff --cached --quiet; then
+            echo "::error::Version $RELEASE_VERSION is already prepared; no release commit was created."
+            exit 1
+          fi
+          git commit -m "chore(release): prepare $RELEASE_VERSION"
+          git push origin "HEAD:${{ github.event.repository.default_branch }}"
+
+      - name: Start CLI, SDK, and desktop releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          branch="${{ github.event.repository.default_branch }}"
+          gh workflow run release-cli.yml --ref "$branch" -f "tag=cli-v$RELEASE_VERSION"
+          gh workflow run release-sdk.yml --ref "$branch" -f "tag=sdk-v$RELEASE_VERSION"
+          gh workflow run release.yml --ref "$branch" -f "tag=v$RELEASE_VERSION"
+
+          echo "## PulseRN $RELEASE_VERSION" >> "$GITHUB_STEP_SUMMARY"
+          echo "Dispatched CLI, SDK, and desktop release workflows." >> "$GITHUB_STEP_SUMMARY"
