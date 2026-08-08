@@ -96,7 +96,8 @@ jobs:
           if [[ "$GITHUB_REF_NAME" == *-* ]]; then
             dist_tag=next
           fi
-          npm publish "release-cli/pulsern-$version.tgz" \
+          test -f "release-cli/pulsern-$version.tgz"
+          npm publish "./release-cli/pulsern-$version.tgz" \
             --access public \
             --provenance \
             --tag "$dist_tag"
