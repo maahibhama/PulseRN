@@ -93,6 +93,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Build desktop and workspace dependencies
+        env:
+          PULSERN_POSTHOG_KEY: ${{ secrets.PULSERN_POSTHOG_KEY }}
+          PULSERN_POSTHOG_HOST: ${{ vars.PULSERN_POSTHOG_HOST }}
         run: pnpm exec turbo run build --filter=@pulse-rn/desktop...
       - name: Package Apple Silicon and Intel DMGs
         env:
@@ -165,6 +168,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Build desktop and workspace dependencies
+        env:
+          PULSERN_POSTHOG_KEY: ${{ secrets.PULSERN_POSTHOG_KEY }}
+          PULSERN_POSTHOG_HOST: ${{ vars.PULSERN_POSTHOG_HOST }}
         run: pnpm exec turbo run build --filter=@pulse-rn/desktop...
       - name: Package NSIS installer
         shell: bash
@@ -231,6 +237,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Build desktop and workspace dependencies
+        env:
+          PULSERN_POSTHOG_KEY: ${{ secrets.PULSERN_POSTHOG_KEY }}
+          PULSERN_POSTHOG_HOST: ${{ vars.PULSERN_POSTHOG_HOST }}
         run: pnpm exec turbo run build --filter=@pulse-rn/desktop...
       - name: Package AppImage and Debian installer
         run: pnpm --filter @pulse-rn/desktop exec electron-builder --linux AppImage deb --x64 --publish never

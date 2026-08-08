@@ -39,6 +39,8 @@ export const useDesktopStore = create<DesktopState>((set) => ({
     updateChannel: 'stable',
     motion: 'system',
     onboardingDismissed: false,
+    anonymousUsageAnalytics: false,
+    analyticsConsentDecided: false,
     checkForUpdatesAutomatically: true,
     launchAtLogin: false,
     keepRunningInBackground: true,

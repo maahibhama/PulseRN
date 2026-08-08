@@ -222,6 +222,8 @@ const settingsSchema = z.object({
   updateChannel: z.enum(['stable', 'beta']),
   motion: z.enum(['system', 'reduced', 'full']),
   onboardingDismissed: z.boolean(),
+  anonymousUsageAnalytics: z.boolean(),
+  analyticsConsentDecided: z.boolean(),
   checkForUpdatesAutomatically: z.boolean(),
   launchAtLogin: z.boolean(),
   keepRunningInBackground: z.boolean(),
@@ -679,6 +681,10 @@ const api: PulseRNDesktopApi = {
       operation: 'sessions',
     });
     return z.array(storedSessionSchema).parse(value);
+  },
+  async createDemoSession() {
+    const value: unknown = await ipcRenderer.invoke(EVENTS_CHANNEL, { operation: 'demo' });
+    return storedSessionSchema.parse(value);
   },
   async renameSession(sessionId, displayName) {
     const value: unknown = await ipcRenderer.invoke(EVENTS_CHANNEL, {

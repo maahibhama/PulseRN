@@ -118,6 +118,7 @@ export function createWebPulseRNClient(): PulseRNDesktopApi {
     getNetworkCurl: (eventId) => call('getNetworkCurl', [eventId]),
     exportNetworkHar: (sessionId) => call('exportNetworkHar', [sessionId]),
     listSessions: () => call('listSessions'),
+    createDemoSession: () => call('createDemoSession'),
     renameSession: (sessionId, displayName) => call('renameSession', [sessionId, displayName]),
     deleteSession: (sessionId) =>
       confirmMutation('Permanently delete this stored session and all of its events?')

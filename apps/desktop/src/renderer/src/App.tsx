@@ -78,6 +78,18 @@ const inspectorCategories: Partial<Record<ViewName, DevToolEventCategory[]>> = {
   Errors: ['error'],
 };
 
+const demoPrompts: Partial<Record<ViewName, string>> = {
+  Timeline: 'Follow the shared correlation from Checkout navigation through the final error.',
+  Console: 'Reproduce this by logging inside the instrumented development app.',
+  'Native Logs': 'Reproduce this with the native platform logger in the connected app process.',
+  Network: 'Reproduce this with fetch, XMLHttpRequest, or the optional Axios integration.',
+  Redux: 'Reproduce this by installing the PulseRN Redux middleware in a development store.',
+  Navigation: 'Reproduce this with the React Navigation, Expo Router, or manual tracker.',
+  Performance: 'Reproduce this with screen timing or a custom performance measure.',
+  Storage: 'Reproduce this by registering an AsyncStorage or MMKV provider.',
+  Errors: 'Reproduce this with a handled error, global error, rejection, or error boundary.',
+};
+
 function formatTime(timestamp: number): string {
   return new Date(timestamp).toLocaleTimeString([], {
     hour12: false,
@@ -682,6 +694,7 @@ export function App() {
   const [reopenedSession, setReopenedSession] = useState<StoredSession>();
   const [selectedPagedEvent, setSelectedPagedEvent] = useState<DevToolEventEnvelope>();
   const [appVersion, setAppVersion] = useState('—');
+  const [demoLoading, setDemoLoading] = useState(false);
   const [systemTheme, setSystemTheme] = useState<'dark' | 'light'>(() =>
     window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
   );
@@ -758,6 +771,16 @@ export function App() {
     (total, device) => total + (device.health?.droppedEvents ?? 0),
     0,
   );
+  const openDemo = async () => {
+    setDemoLoading(true);
+    try {
+      const session = await desktopApi.createDemoSession();
+      setReopenedSession(session);
+      setActiveView('Timeline');
+    } finally {
+      setDemoLoading(false);
+    }
+  };
   const healthReports = devices.filter((device) => device.health !== undefined).length;
   const connectionTitle =
     devices.length === 0
@@ -861,6 +884,11 @@ export function App() {
             </small>
           )}
         </button>
+        {devices.length === 0 && (
+          <button className="demo-button" disabled={demoLoading} onClick={() => void openDemo()}>
+            {demoLoading ? 'Loading demo…' : 'Explore demo'}
+          </button>
+        )}
         <div className="phase-pill">v{appVersion}</div>
       </header>
       <aside className="sidebar">
@@ -882,6 +910,12 @@ export function App() {
           {settings.allowLanConnections ? 'LAN · token' : 'Loopback'} :{settings.devToolPort}
         </div>
       </aside>
+      {reopenedSession?.sessionId.startsWith('pulsern-demo-') && demoPrompts[activeView] && (
+        <div className="demo-tour-note">
+          <strong>Offline demo</strong>
+          <span>{demoPrompts[activeView]}</span>
+        </div>
+      )}
       {activeView === 'Debugger' ? (
         <DebuggerPanel
           theme={resolvedTheme}

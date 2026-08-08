@@ -4,6 +4,10 @@ import { defineConfig, externalizeDepsPlugin } from 'electron-vite';
 
 export default defineConfig({
   main: {
+    define: {
+      'process.env.PULSERN_POSTHOG_KEY': JSON.stringify(process.env['PULSERN_POSTHOG_KEY'] ?? ''),
+      'process.env.PULSERN_POSTHOG_HOST': JSON.stringify(process.env['PULSERN_POSTHOG_HOST'] ?? ''),
+    },
     plugins: [
       externalizeDepsPlugin({
         exclude: [

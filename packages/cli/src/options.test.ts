@@ -34,6 +34,8 @@ describe('parseOptions', () => {
         './state',
         '--no-open',
         '--reset-browser-token',
+        '--telemetry',
+        'on',
       ]),
     ).toMatchObject({
       port: 3100,
@@ -43,11 +45,13 @@ describe('parseOptions', () => {
       host: '0.0.0.0',
       open: false,
       resetBrowserToken: true,
+      telemetry: true,
     });
   });
 
   it('rejects invalid ports and unknown options', () => {
     expect(() => parseOptions(['--port', '0'])).toThrow(/between 1 and 65535/);
     expect(() => parseOptions(['--unknown'])).toThrow(/Unknown option/);
+    expect(() => parseOptions(['--telemetry', 'maybe'])).toThrow(/must be on or off/);
   });
 });

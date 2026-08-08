@@ -3,17 +3,54 @@
 [![npm version](https://img.shields.io/npm/v/@pulse-rn/sdk.svg)](https://www.npmjs.com/package/@pulse-rn/sdk)
 [![GitHub release](https://img.shields.io/github/v/release/maahibhama/PulseRN?label=desktop)](https://github.com/maahibhama/PulseRN/releases)
 [![license](https://img.shields.io/github/license/maahibhama/PulseRN)](LICENSE)
+[![React Native](https://img.shields.io/badge/React%20Native-0.76%2B-61dafb)](docs/COMPATIBILITY.md)
+[![macOS · Windows · Linux](https://img.shields.io/badge/desktop-macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-7b5cff)](docs/INSTALLATION.md)
 
 [Website and documentation](https://maahibhama.github.io/PulseRN-Site/)
 
-PulseRN is an open-source React Native debugger available as a cross-platform desktop application
-and a Node-powered browser interface. It brings JavaScript, native platform, network, navigation,
-Redux, storage, performance, and error activity into one chronological debugging timeline.
+**See JavaScript, native logs, network, Redux, navigation, storage, performance, and errors together
+on one React Native debugging timeline.**
+
+PulseRN is a local-first, open-source debugger available as a cross-platform desktop application and
+a Node-powered browser interface. It complements React Native DevTools with correlated, persistent
+history across the rest of the application debugging workflow.
+
+```bash
+npx @maahibhama/pulsern
+npm install --save-dev @pulse-rn/sdk
+```
+
+[Five-minute quick start](docs/QUICKSTART.md) · [Download desktop](https://github.com/maahibhama/PulseRN/releases/latest) · [Explore the offline demo](docs/QUICKSTART.md#explore-before-integrating)
 
 > Status: PulseRN provides a production-ready local debugger, React Native SDK, browser CLI,
 > native iOS Simulator and Android Emulator log capture, secure device pairing, native Hermes
 > debugging, persistent sessions, cross-platform packaging, signed-release support, checksums, SPDX
 > SBOMs, GitHub provenance, and coordinated CLI, SDK, and desktop release automation.
+
+## Why developers use PulseRN
+
+- Follow one failure across navigation, Redux, console, network, performance, native logs, and errors.
+- Keep local, searchable session history and export a reproducible `.pulsern` archive.
+- Inspect AsyncStorage and MMKV with explicit, audited, reversible development-only mutations.
+- Capture the connected app process from iOS Simulator or Android Emulator without switching log tools.
+- Give trusted MCP clients structured, authenticated access to local debugging context.
+
+## PulseRN and other tools
+
+| Workflow                                    | PulseRN    | React Native DevTools    | Reactotron              |
+| ------------------------------------------- | ---------- | ------------------------ | ----------------------- |
+| JavaScript sources and breakpoints          | Yes        | Yes                      | Limited                 |
+| Unified persisted event timeline            | Yes        | No                       | Partial                 |
+| Connected-process iOS/Android native logs   | Yes        | Use Xcode/Android Studio | No                      |
+| Network, Redux, navigation, storage, errors | Correlated | Partial                  | Plugin/config dependent |
+| Local session archive and MCP access        | Yes        | No                       | No                      |
+
+Use React Native DevTools for its first-class component, source, and breakpoint workflow. Use
+PulseRN when a bug crosses multiple application and native systems. Capabilities can change; see
+[compatibility](docs/COMPATIBILITY.md) and each tool's current documentation.
+
+<details>
+<summary><strong>Complete capability list</strong></summary>
 
 ## What works today
 
@@ -61,6 +98,8 @@ Redux, storage, performance, and error activity into one chronological debugging
 - Expo development-build and bare React Native Community CLI examples covering Console, Network, Redux, Navigation, Performance, AsyncStorage, MMKV, and Errors
 - Optional persistent SDK device identity for stable device history across app launches
 - One-version GitHub Actions release coordination for the CLI, SDK, and macOS, Windows, and Linux desktop applications
+
+</details>
 
 ## Screenshots
 

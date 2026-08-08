@@ -33,6 +33,7 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
+      - run: node --test scripts/release-channel.test.mjs
       - run: pnpm build
       - run: xvfb-run -a node apps/desktop/test/e2e/electron-smoke.mjs
       - run: pnpm release:verify:sdk

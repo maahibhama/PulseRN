@@ -319,13 +319,39 @@ code,
   margin-right: 8px;
 }
 .device-pill,
-.phase-pill {
+.phase-pill,
+.demo-button {
   color: #a9b0c0;
   border: 1px solid #2b3140;
   background: #171b24;
   border-radius: 7px;
   padding: 8px 11px;
   font-size: 12px;
+}
+.demo-tour-note {
+  position: fixed;
+  z-index: 7;
+  top: 64px;
+  left: 202px;
+  right: calc(32vw + 12px);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--panel) 92%, var(--accent));
+  color: var(--muted);
+  font-size: 10px;
+}
+.demo-tour-note strong {
+  color: var(--accent);
+}
+.demo-button {
+  cursor: pointer;
+  color: #f4f1ff;
+  border-color: #6f55df;
+  background: #4935a6;
 }
 .device-pill {
   min-width: 205px;

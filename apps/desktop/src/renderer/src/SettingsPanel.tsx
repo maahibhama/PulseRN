@@ -231,6 +231,41 @@ export function SettingsPanel({
           </div>
         </section>
 
+        {!settings.analyticsConsentDecided && (
+          <section className="settings-card onboarding-card" aria-labelledby="analytics-title">
+            <header>
+              <strong id="analytics-title">Help improve PulseRN?</strong>
+              <small>Optional and disabled until you choose</small>
+            </header>
+            <p className="settings-note">
+              Share anonymous activation and reliability events. PulseRN never sends logs, requests,
+              Redux or storage values, source paths, app identifiers, or MCP prompts.
+            </p>
+            <div className="connection-actions">
+              <button
+                onClick={() =>
+                  void onChange({
+                    anonymousUsageAnalytics: true,
+                    analyticsConsentDecided: true,
+                  })
+                }
+              >
+                Allow anonymous usage analytics
+              </button>
+              <button
+                onClick={() =>
+                  void onChange({
+                    anonymousUsageAnalytics: false,
+                    analyticsConsentDecided: true,
+                  })
+                }
+              >
+                No thanks
+              </button>
+            </div>
+          </section>
+        )}
+
         {!settings.onboardingDismissed && (
           <section className="settings-card onboarding-card" aria-labelledby="onboarding-title">
             <header>
@@ -583,6 +618,27 @@ export function SettingsPanel({
             PulseRN keeps captured data local by default. Pairing credentials are never included in
             events, exports, or diagnostics.
           </p>
+          <Toggle
+            checked={settings.anonymousUsageAnalytics}
+            description="Send only allowlisted activation and reliability events. Debugging data is never included."
+            label="Anonymous usage analytics"
+            onChange={(anonymousUsageAnalytics) =>
+              void onChange({ anonymousUsageAnalytics, analyticsConsentDecided: true })
+            }
+          />
+          <div className="connection-actions">
+            <button
+              disabled={!settings.anonymousUsageAnalytics}
+              onClick={() =>
+                void onChange({
+                  anonymousUsageAnalytics: false,
+                  analyticsConsentDecided: true,
+                })
+              }
+            >
+              Delete analytics identifier and turn off
+            </button>
+          </div>
         </section>
 
         <AppearanceSettings appearance={appearance} onChange={onAppearanceChange} />

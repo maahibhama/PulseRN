@@ -1,33 +1,29 @@
 # Roadmap
 
-- **Phase 1 — Foundation (complete):** monorepo, secure Electron shell, protocol, WebSocket transport, SDK, sessions, SQLite, example, initial UI.
-- **Phase 2 — Console (complete):** safe console interception, serialization, stacks, filtering, search, pause, clear, payload expansion, and copy.
-- **Phase 3 — Network (complete):** fetch/XHR/Axios instrumentation, redaction, binary exclusion, truncation, timing, filtering, failure highlighting, and inspector tabs.
-- **Phase 4 — Redux (complete):** Redux/RTK middleware, action/state/diff capture, timing, redaction, filters, multiple stores.
-- **Phase 5 — Navigation (complete):** React Navigation integration, lifecycle events, nested route resolution, timing, redacted parameters, manual API.
-- **Phase 6 — Performance (complete):** approximate JS FPS/lag/stalls, startup and screen timing, optional JS heap samples, custom marks, correlated dashboards.
-- **Phase 7 — Storage (complete):** AsyncStorage/provider discovery, key read/search/refresh, JSON redaction, confirmed mutations, extensible provider API.
-- **Phase 8 — Errors (complete):** global errors, rejection/error-boundary capture, stacks, active-screen attribution, network/SDK failures, and the previous 20 timeline events.
-- **Phase 9 — JavaScript debugger (complete):** Hermes target discovery through Metro, original sources and source maps, breakpoints, pause/resume, line stepping, call stacks, scopes, watches, expression evaluation, and exception pausing.
-- **Phase 10 — Scalable foundation (complete):** ordered transactional SQLite migrations with explicit history, persisted device/session/retention metadata, integrity backup and recovery reporting, forward/backward cursor queries, 2,000-event renderer windows, virtualization across every event inspector, transport health and backpressure diagnostics, a 100,000-event performance profile, and Electron acceptance coverage.
-- **Phase 11 — Connections, sessions, and secure pairing (complete):** connection center diagnostics, persisted session lifecycle controls, one-time LAN pairing with bounded expiry and retries, hashed reconnect credentials, per-device revocation, host/origin validation, TLS integration, trust state, and disconnect history.
-- **Phase 12 — Unified timeline (complete):** indexed database filters, saved views, bookmarks, annotations, keyboard navigation, Follow Latest, parent/correlation links, renderer-only clearing, confirmed permanent deletion, and compressed checksummed transactional archives.
-- **Phase 13 — Console (complete):** consecutive repeat collapsing with session boundaries and timestamp ranges, lazy structured arguments, multiline message/stack search, source grouping and links, level presets, redaction/truncation indicators, configurable SDK capture and renderer display limits, and console-specific transport drop diagnostics.
-- **Phase 14 — Network (complete):** backward-compatible lifecycle events, in-flight progress and redirects, waterfall timing with explicit accuracy, initiators and request correlations, lazy payload/header/query views, sanitized cURL/HAR export, binary exclusion, redaction, and bounded per-body/request/session capture.
-- **Phase 15 — Redux (complete):** bounded lazy action/state trees, searchable diffs and changed-path summaries, state-size warnings, circular/oversized state handling, per-store categories and action allow/deny policies, and optional route/request/error/performance correlations while remaining read-only.
-- **Phase 16 — Navigation (complete):** normalized React Navigation, Expo Router, and manual history; complete route paths; flat nested ownership trees with stable navigator IDs; screen-duration charts; parameter diffs; grouped actions; duplicate/incomplete/ancestry warnings; retained integration metadata; and request/Redux/performance/console/error correlation links.
-- **Phase 17 — Performance (complete):** bounded virtualized time-series inspection with selectable ranges, configurable JS FPS/stall/slow-screen/network/memory-growth thresholds, matching-session baselines, SDK sampling interval/loss/capture-rate visibility, explicit JavaScript/runtime provenance, and honest unavailable capability reporting without fake native metrics.
-- **Phase 18 — Storage (complete):** provider capability reporting, 100-key cursor pagination, lazy value loading, type-aware validation, read-only persisted snapshots and comparison, confirmed mutations, opaque SDK-held single-session backups, one-use undo, persisted local audit metadata, and explicitly selected export that excludes sensitive, redacted, binary, or unavailable values.
-- **Phase 19 — Errors (complete):** normalized stable fingerprints, occurrence grouping, first/last seen and affected-version tracking, cross-version regression state, JavaScript and React component-frame parsing with application/internal and source status, route/request/Redux/console/performance correlations, application/SDK/debugger/connection/desktop classification, and re-redacted Markdown/JSON issue reports without automatic upload.
-- **Phase 20 — JavaScript debugger (complete):** resilient loopback Metro discovery, optional CDP capability negotiation, actionable 401/conflicting-debugger diagnostics, bounded reload reconnects, restored verified TypeScript breakpoints, hierarchical quick-open sources, dependency blackboxing, lazy searchable scopes with object previews and inline paused values, plus conditional, hit-count, log, verified, and pending breakpoints for one active Hermes runtime.
-- **Phase 21 — Settings, accessibility, and onboarding (complete):** validated Appearance, Connections, Capture, Privacy, Storage, Debugger, and Updates preferences; persisted performance, pairing, redaction, budget, diagnostics, channel, and motion controls; a live first-run SDK/port/device/Metro/Hermes/event checklist; keyboard focus and navigation semantics; reduced-motion handling; theme coverage; and installed-version branding.
-- **Phase 22 — SDK and integration experience (complete):** safely persisted device/session identities with explicit lifecycle boundaries, strict typed configuration validation, connection subscriptions and diagnostic summaries, category policies, deterministic sampling, bounded payload/capture queues, typed dropped-event callbacks, lazy root-only optional integrations, ESM/CommonJS/TypeScript and React Native entry validation, isolated Expo/CLI tarball consumers, and deterministic inspector labs for both example applications.
-- **Phase 23 — Distribution and open-source readiness (implementation complete; native release acceptance pending):** credential-gated Apple signing/notarization and Windows Authenticode, explicitly unsigned preview fallback, stable/beta version and rollback protection, approved download/install recovery, ARM64/x64 macOS and Windows artifacts plus Linux x64 packages, checksums, SPDX SBOM, architecture report, GitHub provenance attestations, Homebrew and direct-install guidance, issue templates, support/security/compatibility/changelog policy, contributor package validation, and current desktop/example screenshots. Final acceptance requires the tag-driven native macOS, Windows, and Linux release jobs to pass for one release candidate.
-- **Phase 24 — Chrome-like debugger workbench (implementation complete; device acceptance pending):** selected-frame variable hovering, bounded live REPL with multiline input and scope completion, lazy nested remote values, safer getter handling, call-stack/variables/watch/breakpoint panes, changed inline paused values, persistent local workbench preferences, and explicit remote-object cleanup.
-- **Phase 25 — React component inspector (implementation complete; device acceptance pending):** local read-only Fiber-root discovery through the active Hermes connection, searchable hierarchical component view, props/class-state/hooks/style/accessibility inspection, native-tag and render-duration metadata, and original-source navigation.
-- **Phase 26 — React component profiler foundation (implementation complete; device acceptance pending):** point-in-time ranked render costs, bounded live timing capture, peak/sample summaries, and explicit JavaScript-only provenance without fake native metrics.
-- **Phase 27 — Interactive component inspection (implementation complete; device acceptance pending):** stable renderer/path component identities, successive-snapshot props/state/hooks change markers, observed render counts, owner navigation, capability-gated native host highlighting, and React Native device element picking with safe read-only fallback.
+PulseRN plans work by user-visible maturity rather than internal implementation phases.
 
-Phases 1–22 are accepted. Phases 23–27 are implemented and await their native release/device
-acceptance gates. React mutation controls remain deferred until a versioned React DevTools backend
-bridge can provide them without depending on unstable host-view internals.
+## Available
+
+- Local desktop and browser debugger with secure SDK transport and persistent sessions.
+- Unified console, network, Redux, navigation, performance, storage, error, animation, and worklet inspection.
+- iOS Simulator and Android Emulator connected-process native logs.
+- Hermes sources, breakpoints, scopes, watches, evaluation, and React component inspection.
+- Session archives, saved filters, bookmarks, annotations, correlations, and MCP access.
+- macOS, Windows, and Linux packaging plus npm and Homebrew distribution.
+
+## Beta
+
+- React component profiling, render-change tracking, element picking, and native highlighting.
+- Signed automatic updates, subject to platform signing credentials and release verification.
+- Anonymous opt-in activation metrics used only to improve onboarding and reliability.
+
+## Planned
+
+- Broader real-device native-log support after a secure, reliable device-target design.
+- Deeper component profiling validated against current React Native renderers.
+- Additional integrations selected from repeated user interviews and public Discussions.
+- React mutation controls only when a versioned React DevTools backend can avoid unstable internals.
+
+Priorities are reviewed from reproducible issues, activation failures, and community feedback. See
+[Known limitations](KNOWN-LIMITATIONS.md) for current boundaries and open a Discussion for substantial
+proposals.

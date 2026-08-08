@@ -2,10 +2,26 @@
   "name": "@maahibhama/pulsern",
   "version": "1.0.6",
   "description": "Run the PulseRN React Native debugger in a local web browser.",
+  "keywords": [
+    "react-native",
+    "react-native-debugger",
+    "expo-debugger",
+    "developer-tools",
+    "network-inspector",
+    "redux-devtools",
+    "native-logs",
+    "hermes",
+    "mcp"
+  ],
+  "homepage": "https://maahibhama.github.io/PulseRN-Site/",
+  "bugs": {
+    "url": "https://github.com/maahibhama/PulseRN/issues"
+  },
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/maahibhama/PulseRN.git"
+    "url": "https://github.com/maahibhama/PulseRN.git",
+    "directory": "packages/cli"
   },
   "type": "module",
   "bin": {
