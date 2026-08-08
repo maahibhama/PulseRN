@@ -2,7 +2,7 @@ class PulsernCli < Formula
   desc "Run the PulseRN React Native debugger in a local web browser"
   homepage "https://github.com/maahibhama/PulseRN"
   url "https://github.com/maahibhama/PulseRN/releases/download/cli-v1.0.6/pulsern-1.0.6.tgz"
-  sha256 "d40af1bc262a0b1fe7bd4e975b997f74acd149533012a0419161e93db854d6bd"
+  sha256 "d3f7b7287a4350c85bb3b410ad585bbdccf1e13be7b221fe5669ea49167b802a"
   license "MIT"
 
   depends_on "node"
