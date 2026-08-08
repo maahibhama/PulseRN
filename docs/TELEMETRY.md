@@ -8,6 +8,10 @@ The analytics provider is PostHog. Release builds enable delivery only when a pu
 `PULSERN_POSTHOG_KEY` is configured. Disabling analytics deletes the random local installation
 identifier. Captured debugging events remain local regardless of analytics consent.
 
+Desktop release builds embed the public project key from the `PULSERN_POSTHOG_KEY` Actions secret
+and optional `PULSERN_POSTHOG_HOST` repository variable. The CLI reads the same names at runtime.
+When the key is absent, consent can still be recorded locally but no analytics request is sent.
+
 ## Allowlisted events
 
 - `install_started`, `onboarding_opened`, `demo_opened`, `sdk_instructions_copied`

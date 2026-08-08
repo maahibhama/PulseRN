@@ -70,7 +70,7 @@ export class AnalyticsClient {
       return false;
     }
     const response = await this.fetch(
-      `${this.options.host ?? 'https://us.i.posthog.com'}/capture/`,
+      `${this.options.host || 'https://us.i.posthog.com'}/capture/`,
       {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
