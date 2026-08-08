@@ -12,6 +12,7 @@ import { PerformancePanel } from './PerformancePanel.js';
 import { AnimationsWorkletsPanel } from './AnimationsWorkletsPanel.js';
 import { ReduxPanel } from './ReduxPanel.js';
 import { SettingsPanel } from './SettingsPanel.js';
+import { NativeLogsPanel } from './NativeLogsPanel.js';
 import { SessionsPanel } from './SessionsPanel.js';
 import { StoragePanel } from './StoragePanel.js';
 import darkAppIcon from '../../../resources/pulse-rn-app-icon-dark.png';
@@ -35,6 +36,7 @@ type ViewName =
   | 'Timeline'
   | 'Connections'
   | 'Console'
+  | 'Native Logs'
   | 'Network'
   | 'Redux'
   | 'Navigation'
@@ -51,6 +53,7 @@ const navItems: { name: ViewName; icon: string; available: boolean }[] = [
   { name: 'Timeline', icon: '⌁', available: true },
   { name: 'Connections', icon: '◉', available: true },
   { name: 'Console', icon: '>_', available: true },
+  { name: 'Native Logs', icon: '▦', available: true },
   { name: 'Network', icon: '⇄', available: true },
   { name: 'Redux', icon: '◇', available: true },
   { name: 'Navigation', icon: '→', available: true },
@@ -66,6 +69,7 @@ const navItems: { name: ViewName; icon: string; available: boolean }[] = [
 
 const inspectorCategories: Partial<Record<ViewName, DevToolEventCategory[]>> = {
   Console: ['console'],
+  'Native Logs': ['native-log'],
   Network: ['network'],
   Redux: ['redux'],
   Navigation: ['navigation'],
@@ -922,6 +926,12 @@ export function App() {
         <NetworkPanel
           events={inspectorPage.events}
           sessionId={reopenedSession?.sessionId}
+          selectedEventId={selectedEventId}
+          onSelect={selectInspectorEvent}
+        />
+      ) : activeView === 'Native Logs' ? (
+        <NativeLogsPanel
+          events={inspectorPage.events}
           selectedEventId={selectedEventId}
           onSelect={selectInspectorEvent}
         />

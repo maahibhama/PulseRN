@@ -41,7 +41,7 @@ import type {
 } from './types.js';
 import { pulseRNEventCategories, validatePulseRNConfig } from './configuration.js';
 
-const SDK_VERSION = '1.0.4';
+const SDK_VERSION = '1.0.5';
 const CONNECTING = 0;
 const OPEN = 1;
 type RegisteredStorageProvider = StorageProvider & {
@@ -608,6 +608,9 @@ export class DevToolClient {
           ? { platformVersion: this.config.device.platformVersion }
           : {}),
         ...(this.config.device?.model ? { model: this.config.device.model } : {}),
+        ...(this.config.device?.nativeTargetId
+          ? { nativeTargetId: this.config.device.nativeTargetId }
+          : {}),
         appName: this.config.appName,
         ...(this.config.appVersion ? { appVersion: this.config.appVersion } : {}),
         sdkVersion: SDK_VERSION,

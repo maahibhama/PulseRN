@@ -5,6 +5,7 @@ export const SUPPORTED_PROTOCOL_VERSIONS = [PROTOCOL_VERSION] as const;
 
 export const eventCategorySchema = z.enum([
   'console',
+  'native-log',
   'network',
   'redux',
   'navigation',
@@ -46,6 +47,22 @@ export const consoleLogPayloadSchema = z.object({
     .optional(),
 });
 export type ConsoleLogPayload = z.infer<typeof consoleLogPayloadSchema>;
+
+export const nativeLogLevelSchema = z.enum(['verbose', 'debug', 'info', 'warn', 'error', 'fatal']);
+export type NativeLogLevel = z.infer<typeof nativeLogLevelSchema>;
+export const nativeLogPayloadSchema = z.object({
+  platform: z.enum(['ios', 'android']),
+  level: nativeLogLevelSchema,
+  message: z.string().max(100_000),
+  loggedAt: z.number().finite().nonnegative(),
+  pid: z.number().int().positive(),
+  process: z.string().max(1_024),
+  tag: z.string().max(1_024).optional(),
+  subsystem: z.string().max(1_024).optional(),
+  category: z.string().max(1_024).optional(),
+  truncated: z.boolean().optional(),
+});
+export type NativeLogPayload = z.infer<typeof nativeLogPayloadSchema>;
 
 export const networkHeadersSchema = z.record(z.string().max(100_000));
 export const networkBodySchema = z.object({
@@ -451,23 +468,25 @@ export const eventEnvelopeSchema = z
     const payloadSchema =
       event.category === 'console'
         ? consoleLogPayloadSchema
-        : event.category === 'network'
-          ? z.union([networkEventPayloadSchema, networkLifecycleEventPayloadSchema])
-          : event.category === 'redux'
-            ? reduxEventPayloadSchema
-            : event.category === 'navigation'
-              ? navigationEventPayloadSchema
-              : event.category === 'performance'
-                ? performanceEventPayloadSchema
-                : event.category === 'animation'
-                  ? animationEventPayloadSchema
-                  : event.category === 'worklet'
-                    ? workletEventPayloadSchema
-                    : event.category === 'storage'
-                      ? storageEventPayloadSchema
-                      : event.category === 'error'
-                        ? errorEventPayloadSchema
-                        : undefined;
+        : event.category === 'native-log'
+          ? nativeLogPayloadSchema
+          : event.category === 'network'
+            ? z.union([networkEventPayloadSchema, networkLifecycleEventPayloadSchema])
+            : event.category === 'redux'
+              ? reduxEventPayloadSchema
+              : event.category === 'navigation'
+                ? navigationEventPayloadSchema
+                : event.category === 'performance'
+                  ? performanceEventPayloadSchema
+                  : event.category === 'animation'
+                    ? animationEventPayloadSchema
+                    : event.category === 'worklet'
+                      ? workletEventPayloadSchema
+                      : event.category === 'storage'
+                        ? storageEventPayloadSchema
+                        : event.category === 'error'
+                          ? errorEventPayloadSchema
+                          : undefined;
     if (payloadSchema && !payloadSchema.safeParse(event.payload).success) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -601,6 +620,7 @@ export const deviceInfoSchema = z.object({
   appName: identifier,
   appVersion: z.string().max(128).optional(),
   sdkVersion: identifier,
+  nativeTargetId: z.string().trim().min(1).max(256).optional(),
 });
 export type DeviceInfo = z.infer<typeof deviceInfoSchema>;
 

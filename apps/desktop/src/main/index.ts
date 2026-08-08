@@ -25,6 +25,7 @@ import { McpBridge } from './mcp-bridge.js';
 import { DiagnosticService } from './diagnostic-service.js';
 import { networkEventPayloadSchema } from '@pulse-rn/protocol';
 import { AppearanceStore, themeDefinitionSchema } from './appearance.js';
+import { NativeLogManager } from './native-log-manager.js';
 
 const SNAPSHOT_CHANNEL = 'pulse-rn:snapshot';
 const DEVICES_CHANNEL = 'pulse-rn:devices';
@@ -37,6 +38,7 @@ const DEBUGGER_CHANNEL = 'pulse-rn:debugger';
 const CONNECTION_CHANNEL = 'pulse-rn:connection';
 const UPDATE_CHANNEL = 'pulse-rn:update';
 const MCP_CHANNEL = 'pulse-rn:mcp';
+const NATIVE_LOGS_CHANNEL = 'pulse-rn:native-logs';
 const DARK_APP_ICON = join(__dirname, '../../resources/pulse-rn-app-icon-dark.png');
 const LIGHT_APP_ICON = join(__dirname, '../../resources/pulse-rn-app-icon-light.png');
 const e2eUserDataDirectory = process.env['PULSE_RN_E2E_USER_DATA_DIR'];
@@ -188,6 +190,7 @@ let tlsCertificateStore: TlsCertificateStore | undefined;
 let updateManager: UpdateManager | undefined;
 let mcpBridge: McpBridge | undefined;
 let diagnosticService: DiagnosticService | undefined;
+let nativeLogManager: NativeLogManager | undefined;
 let automaticUpdateTimer: ReturnType<typeof setTimeout> | undefined;
 let isQuitting = false;
 let shutdownComplete = false;
@@ -302,9 +305,11 @@ async function restartServer(settings = settingsStore?.get()): Promise<void> {
       onConnected(device) {
         database?.recordSession(device);
         sessions.connect(device);
+        nativeLogManager?.start(device);
         publish();
       },
       onDisconnected(connectionId, info) {
+        nativeLogManager?.stop(connectionId);
         const disconnected = sessions.disconnect(connectionId);
         if (disconnected) database?.endSession(disconnected.sessionId, info);
         publish();
@@ -471,6 +476,17 @@ app.whenReady().then(async () => {
   applyAppIcon(initialAppearance.mode === 'system' ? 'system' : initialResolvedTheme.colorScheme);
   nativeTheme.on('updated', handleNativeThemeUpdated);
   database = new EventDatabase(join(app.getPath('userData'), 'pulse-rn.sqlite'));
+  nativeLogManager = new NativeLogManager(
+    (events) => {
+      database?.insertMany(events);
+      maintainDatabase();
+      sessions.append(events);
+      publish();
+    },
+    (statuses) => {
+      if (window && !window.isDestroyed()) window.webContents.send(NATIVE_LOGS_CHANNEL, statuses);
+    },
+  );
   diagnosticService = new DiagnosticService(database, sessions);
   mcpBridge = new McpBridge(
     app.getPath('userData'),
@@ -499,6 +515,7 @@ app.whenReady().then(async () => {
   maintainDatabase(true);
   sessions.hydrate(database.recent());
   ipcMain.handle(SNAPSHOT_CHANNEL, () => sessions.snapshot());
+  ipcMain.handle(NATIVE_LOGS_CHANNEL, () => nativeLogManager?.snapshot() ?? []);
   ipcMain.handle(MCP_CHANNEL, () => mcpInfo());
   ipcMain.handle(EVENTS_CHANNEL, async (_event, value: unknown) => {
     if (!database) throw new Error('PulseRN database is not ready.');
@@ -1328,10 +1345,13 @@ app.on('before-quit', (event) => {
     ipcMain.removeHandler(CONNECTION_CHANNEL);
     ipcMain.removeHandler(UPDATE_CHANNEL);
     ipcMain.removeHandler(MCP_CHANNEL);
+    ipcMain.removeHandler(NATIVE_LOGS_CHANNEL);
     if (automaticUpdateTimer) clearTimeout(automaticUpdateTimer);
     nativeTheme.removeListener('updated', handleNativeThemeUpdated);
     debuggerManager?.close();
     debuggerManager = undefined;
+    nativeLogManager?.close();
+    nativeLogManager = undefined;
 
     const activeServer = server;
     server = undefined;

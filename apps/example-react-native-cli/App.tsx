@@ -123,7 +123,13 @@ function App() {
       ...(reconnectToken ? { reconnectToken } : {}),
       appName: 'PulseRN CLI Example',
       environment: 'development',
-      appId: 'dev.pulsern.cli-example',
+      // Native Logs resolves the running process from this platform package/bundle ID.
+      appId:
+        Platform.OS === 'ios'
+          ? 'org.reactjs.native.example.PulseRNCLIExample'
+          : Platform.OS === 'android'
+            ? 'com.pulserncliexample'
+            : 'dev.pulsern.cli-example',
       appVersion: '0.1.0',
       device: {
         name: `${Platform.OS} CLI example`,

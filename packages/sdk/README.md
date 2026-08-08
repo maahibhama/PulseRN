@@ -29,6 +29,7 @@ the application uses the corresponding provider.
 All public APIs are available from one import path:
 
 ```ts
+import { Platform } from 'react-native';
 import {
   createAsyncStorageProvider,
   createDevToolMiddleware,
@@ -47,6 +48,13 @@ const client = ReactNativeDevTool.configure({
   host: '127.0.0.1',
   port: 9090,
   appName: 'MyApp',
+  // Must match the native package/bundle ID for Native Logs.
+  appId: 'com.example.myapp',
+  device: {
+    platform: Platform.OS,
+    // Optional unless multiple virtual devices are running:
+    // nativeTargetId: 'emulator-5554', // or an iOS Simulator UDID
+  },
   environment: 'development',
   enableConsole: true,
   maxConsoleEventsPerMinute: 6_000,
@@ -66,6 +74,11 @@ const client = ReactNativeDevTool.configure({
 
 client.connect();
 ```
+
+The PulseRN desktop app automatically captures app-process logs from Android Emulator and iOS
+Simulator while the SDK is connected. If exactly one matching virtual device is booted,
+`nativeTargetId` may be omitted. Find Android serials with `adb devices` and Simulator UDIDs with
+`xcrun simctl list devices booted`.
 
 PulseRN is intended for development builds. Production connections stay disabled unless explicitly
 enabled with `allowInProduction`.
