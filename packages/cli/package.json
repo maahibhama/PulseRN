@@ -19,7 +19,7 @@
     "build": "vite build --config vite.config.ts && esbuild src/server.ts --bundle --platform=node --format=esm --target=node20 --external:ws --outfile=dist/server.js --banner:js='#!/usr/bin/env node' && esbuild ../../packages/mcp/src/server.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/mcp-server.js --banner:js='#!/usr/bin/env node' && chmod +x dist/server.js dist/mcp-server.js",
     "lint": "eslint src vite.config.ts",
     "test": "vitest run --config vitest.config.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "pnpm --filter @pulse-rn/protocol build && pnpm --filter @pulse-rn/mcp build && pnpm --filter @pulse-rn/api-contract build && tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "ws": "^8.18.3"
