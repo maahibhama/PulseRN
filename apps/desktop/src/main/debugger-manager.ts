@@ -296,6 +296,7 @@ export class DebuggerManager {
     private readonly filePath: string,
     private readonly getMetroPort: () => number,
     private readonly onState: (state: DebuggerState) => void,
+    private readonly getMetroHost: () => string = () => '127.0.0.1',
   ) {
     this.data = this.readData();
     this.state = {
@@ -322,7 +323,7 @@ export class DebuggerManager {
 
   async discover(): Promise<DebuggerState> {
     this.patch({ status: 'discovering', error: undefined });
-    const base = `http://127.0.0.1:${this.getMetroPort()}`;
+    const base = `http://${this.getMetroHost()}:${this.getMetroPort()}`;
     try {
       let response = await fetch(`${base}/json/list`, { signal: AbortSignal.timeout(5_000) });
       if (!response.ok) {
@@ -336,7 +337,10 @@ export class DebuggerManager {
         const parsed = targetSchema.safeParse(value);
         if (!parsed.success) continue;
         const socketUrl = new URL(parsed.data.webSocketDebuggerUrl);
-        if (!isLoopback(socketUrl.hostname) || !['ws:', 'wss:'].includes(socketUrl.protocol)) {
+        if (
+          (!isLoopback(socketUrl.hostname) && socketUrl.hostname !== this.getMetroHost()) ||
+          !['ws:', 'wss:'].includes(socketUrl.protocol)
+        ) {
           continue;
         }
         this.targetUrls.set(parsed.data.id, socketUrl.toString());
@@ -1136,7 +1140,10 @@ export class DebuggerManager {
         ? Buffer.from(payload, 'base64').toString('utf8')
         : decodeURIComponent(payload);
     }
-    const resolved = new URL(mapUrl, script.url || `http://127.0.0.1:${this.getMetroPort()}/`);
+    const resolved = new URL(
+      mapUrl,
+      script.url || `http://${this.getMetroHost()}:${this.getMetroPort()}/`,
+    );
     if (!isLoopback(resolved.hostname)) throw new Error('Source map host is not loopback.');
     return this.fetchBoundedText(resolved, 'Source map');
   }

@@ -1,0 +1,36 @@
+{
+  "name": "@maahibhama/pulsern",
+  "version": "1.0.4",
+  "description": "Run the PulseRN React Native debugger in a local web browser.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "pulsern": "./dist/server.js",
+    "pulsern-mcp": "./dist/mcp-server.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.5"
+  },
+  "scripts": {
+    "build": "vite build --config vite.config.ts && esbuild src/server.ts --bundle --platform=node --format=esm --target=node20 --external:ws --outfile=dist/server.js --banner:js='#!/usr/bin/env node' && esbuild ../../packages/mcp/src/server.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/mcp-server.js --banner:js='#!/usr/bin/env node' && chmod +x dist/server.js dist/mcp-server.js",
+    "lint": "eslint src vite.config.ts",
+    "test": "vitest run --config vitest.config.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.17.0",
+    "@types/ws": "^8.18.1",
+    "@vitejs/plugin-react": "^4.7.0",
+    "esbuild": "^0.25.0",
+    "vite": "^7.1.1",
+    "vitest": "^3.2.4",
+    "zod": "^3.25.76"
+  }
+}

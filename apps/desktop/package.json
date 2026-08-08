@@ -29,6 +29,7 @@
   "dependencies": {
     "@jridgewell/trace-mapping": "^0.3.31",
     "@monaco-editor/react": "^4.7.0",
+    "@pulse-rn/api-contract": "workspace:*",
     "@pulse-rn/mcp": "workspace:*",
     "@pulse-rn/protocol": "workspace:*",
     "@pulse-rn/shared": "workspace:*",

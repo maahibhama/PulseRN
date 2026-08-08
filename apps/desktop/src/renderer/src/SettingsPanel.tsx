@@ -59,6 +59,7 @@ export function SettingsPanel({
   appearance,
   onAppearanceChange,
 }: SettingsPanelProps) {
+  const isWeb = window.pulseRNRuntime === 'web';
   const [maintenance, setMaintenance] = useState<DatabaseMaintenanceReport>();
   const [maintenanceError, setMaintenanceError] = useState('');
   const [maintaining, setMaintaining] = useState(false);
@@ -640,101 +641,105 @@ export function SettingsPanel({
           </label>
         </section>
 
-        <section className="settings-card">
-          <header>
-            <strong>Updates</strong>
-            <small>PulseRN {updateState?.currentVersion ?? '—'}</small>
-          </header>
-          <label className="setting-row">
-            <span>
-              <strong>Update channel</strong>
-              <small>Stable receives production releases; beta includes previews.</small>
-            </span>
-            <select
-              value={settings.updateChannel}
-              onChange={(event) =>
-                void onChange({
-                  updateChannel: event.target.value as AppSettings['updateChannel'],
-                })
+        {!isWeb && (
+          <section className="settings-card">
+            <header>
+              <strong>Updates</strong>
+              <small>PulseRN {updateState?.currentVersion ?? '—'}</small>
+            </header>
+            <label className="setting-row">
+              <span>
+                <strong>Update channel</strong>
+                <small>Stable receives production releases; beta includes previews.</small>
+              </span>
+              <select
+                value={settings.updateChannel}
+                onChange={(event) =>
+                  void onChange({
+                    updateChannel: event.target.value as AppSettings['updateChannel'],
+                  })
+                }
+              >
+                <option value="stable">Stable</option>
+                <option value="beta">Beta</option>
+              </select>
+            </label>
+            <Toggle
+              checked={settings.checkForUpdatesAutomatically}
+              description="Check GitHub Releases after PulseRN starts. Downloads and installation still require your approval."
+              label="Check automatically"
+              onChange={(checkForUpdatesAutomatically) =>
+                void onChange({ checkForUpdatesAutomatically })
               }
-            >
-              <option value="stable">Stable</option>
-              <option value="beta">Beta</option>
-            </select>
-          </label>
-          <Toggle
-            checked={settings.checkForUpdatesAutomatically}
-            description="Check GitHub Releases after PulseRN starts. Downloads and installation still require your approval."
-            label="Check automatically"
-            onChange={(checkForUpdatesAutomatically) =>
-              void onChange({ checkForUpdatesAutomatically })
-            }
-          />
-          <div className="update-status-row">
-            <span>
-              <strong>
-                {updateState?.status === 'available'
-                  ? `Version ${updateState.availableVersion ?? ''} is available`
-                  : updateState?.status === 'downloaded'
-                    ? 'Ready to install'
-                    : updateState?.status === 'downloading'
-                      ? 'Downloading update'
-                      : updateState?.status === 'checking'
-                        ? 'Checking for updates'
-                        : updateState?.status === 'up-to-date'
-                          ? 'PulseRN is up to date'
-                          : updateState?.status === 'error'
-                            ? 'Update check failed'
-                            : updateState?.enabled
-                              ? 'Ready to check'
-                              : 'Automatic installation unavailable'}
-              </strong>
-              <small>{updateError || updateState?.message}</small>
-              {updateState?.status === 'downloading' && (
-                <progress max={100} value={updateState.progress ?? 0} />
-              )}
-            </span>
-            <div className="connection-actions">
-              {updateState?.status === 'available' ? (
-                <button onClick={() => void runUpdateOperation('download')}>Download</button>
-              ) : updateState?.status === 'downloaded' ? (
-                <button onClick={() => void runUpdateOperation('install')}>
-                  Restart and install
-                </button>
-              ) : (
-                <button
-                  disabled={
-                    !updateState?.enabled ||
-                    updateState.status === 'checking' ||
-                    updateState.status === 'downloading'
-                  }
-                  onClick={() => void runUpdateOperation('check')}
-                >
-                  Check now
-                </button>
-              )}
+            />
+            <div className="update-status-row">
+              <span>
+                <strong>
+                  {updateState?.status === 'available'
+                    ? `Version ${updateState.availableVersion ?? ''} is available`
+                    : updateState?.status === 'downloaded'
+                      ? 'Ready to install'
+                      : updateState?.status === 'downloading'
+                        ? 'Downloading update'
+                        : updateState?.status === 'checking'
+                          ? 'Checking for updates'
+                          : updateState?.status === 'up-to-date'
+                            ? 'PulseRN is up to date'
+                            : updateState?.status === 'error'
+                              ? 'Update check failed'
+                              : updateState?.enabled
+                                ? 'Ready to check'
+                                : 'Automatic installation unavailable'}
+                </strong>
+                <small>{updateError || updateState?.message}</small>
+                {updateState?.status === 'downloading' && (
+                  <progress max={100} value={updateState.progress ?? 0} />
+                )}
+              </span>
+              <div className="connection-actions">
+                {updateState?.status === 'available' ? (
+                  <button onClick={() => void runUpdateOperation('download')}>Download</button>
+                ) : updateState?.status === 'downloaded' ? (
+                  <button onClick={() => void runUpdateOperation('install')}>
+                    Restart and install
+                  </button>
+                ) : (
+                  <button
+                    disabled={
+                      !updateState?.enabled ||
+                      updateState.status === 'checking' ||
+                      updateState.status === 'downloading'
+                    }
+                    onClick={() => void runUpdateOperation('check')}
+                  >
+                    Check now
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        )}
 
-        <section className="settings-card">
-          <header>
-            <strong>Appearance · macOS</strong>
-            <small>Native application behavior</small>
-          </header>
-          <Toggle
-            checked={settings.launchAtLogin}
-            description="Open PulseRN automatically when you sign in."
-            label="Launch at login"
-            onChange={(launchAtLogin) => void onChange({ launchAtLogin })}
-          />
-          <Toggle
-            checked={settings.keepRunningInBackground}
-            description="Closing the window hides PulseRN while keeping device connections alive."
-            label="Keep running after window closes"
-            onChange={(keepRunningInBackground) => void onChange({ keepRunningInBackground })}
-          />
-        </section>
+        {!isWeb && (
+          <section className="settings-card">
+            <header>
+              <strong>Appearance · macOS</strong>
+              <small>Native application behavior</small>
+            </header>
+            <Toggle
+              checked={settings.launchAtLogin}
+              description="Open PulseRN automatically when you sign in."
+              label="Launch at login"
+              onChange={(launchAtLogin) => void onChange({ launchAtLogin })}
+            />
+            <Toggle
+              checked={settings.keepRunningInBackground}
+              description="Closing the window hides PulseRN while keeping device connections alive."
+              label="Keep running after window closes"
+              onChange={(keepRunningInBackground) => void onChange({ keepRunningInBackground })}
+            />
+          </section>
+        )}
 
         <section className="settings-card logo-library">
           <header>
