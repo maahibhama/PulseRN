@@ -6,17 +6,19 @@
 
 [Website and documentation](https://maahibhama.github.io/PulseRN-Site/)
 
-PulseRN is an open-source desktop debugging foundation for React Native. Its central idea is a unified, chronological timeline that will correlate app interactions, navigation, Redux, network, rendering, performance, and errors.
+PulseRN is an open-source React Native debugger available as a cross-platform desktop application
+and a Node-powered browser interface. It brings JavaScript, native platform, network, navigation,
+Redux, storage, performance, and error activity into one chronological debugging timeline.
 
-> Status: Phases 1–22 are accepted and Phase 23 implementation is complete. PulseRN includes the
-> scalable local debugger, hardened SDK and inspectors, secure pairing, native Hermes debugging,
-> validated preferences, cross-platform packaging, credential-gated signing and updates, checksums,
-> SPDX SBOMs, GitHub provenance, and the public project support/release surface. Phase 23 acceptance
-> requires one tag-driven native release-candidate workflow to pass.
+> Status: PulseRN provides a production-ready local debugger, React Native SDK, browser CLI,
+> native iOS Simulator and Android Emulator log capture, secure device pairing, native Hermes
+> debugging, persistent sessions, cross-platform packaging, signed-release support, checksums, SPDX
+> SBOMs, GitHub provenance, and coordinated CLI, SDK, and desktop release automation.
 
 ## What works today
 
 - Electron desktop app with a sandboxed renderer and narrow preload bridge
+- Node-powered browser debugger with the same inspectors, persistence, and native-log capture as the desktop app
 - Loopback-default WebSocket server with opt-in, one-time LAN pairing, revocable trusted devices, and optional TLS
 - Versioned JSON protocol with Zod validation and negotiation
 - React Native SDK with development-build protection, reconnection, batching, sequencing, bounded offline buffering, socket backpressure protection, transport health diagnostics, payload limits, and field redaction
@@ -27,6 +29,7 @@ PulseRN is an open-source desktop debugging foundation for React Native. Its cen
 - Guarded desktop update checks, explicit download/install controls, and signing-aware release builds
 - Console interception for log, info, warn, error, and debug
 - Console repeat collapsing, level/source presets, multiline search, lazy structured values, session boundaries, redaction/truncation indicators, copy/source/stack inspection, and capture/drop limits
+- Native iOS Simulator and Android Emulator logs associated with the connected app process, including live status, level/search/source filters, batching, truncation, rate limits, restart reattachment, and session persistence
 - Fetch and XMLHttpRequest lifecycle inspection with optional Axios interceptors while preserving
   the completed protocol v1 event
 - Network in-flight progress, redirect chains, initiators, correlations, waterfall timing,
@@ -57,6 +60,7 @@ PulseRN is an open-source desktop debugging foundation for React Native. Its cen
 - Compact, rounded light and dark application icons that follow the selected theme, including live macOS system-theme changes
 - Expo development-build and bare React Native Community CLI examples covering Console, Network, Redux, Navigation, Performance, AsyncStorage, MMKV, and Errors
 - Optional persistent SDK device identity for stable device history across app launches
+- One-version GitHub Actions release coordination for the CLI, SDK, and macOS, Windows, and Linux desktop applications
 
 ## Screenshots
 
