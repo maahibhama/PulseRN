@@ -5,6 +5,12 @@ on:
     tags:
       - 'cli-v[0-9]+.[0-9]+.[0-9]+'
       - 'cli-v[0-9]+.[0-9]+.[0-9]+-*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing CLI release tag to publish (for example, cli-v1.0.4)
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -12,12 +18,21 @@ permissions:
 env:
   NODE_VERSION: '22'
   PNPM_VERSION: '10.14.0'
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      - name: Validate release tag
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^cli-v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Invalid CLI release tag: $RELEASE_TAG"
+            exit 1
+          fi
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
       - uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
@@ -31,10 +46,10 @@ jobs:
       - run: pnpm test
       - run: pnpm lint
       - run: pnpm --filter @maahibhama/pulsern build
-      - run: pnpm release:verify:cli "${GITHUB_REF_NAME}"
+      - run: pnpm release:verify:cli "${RELEASE_TAG}"
       - name: Pack release tarball and checksum
         run: |
-          version="${GITHUB_REF_NAME#cli-v}"
+          version="${RELEASE_TAG#cli-v}"
           mkdir -p release-cli
           pnpm --filter @maahibhama/pulsern pack --pack-destination release-cli
           mv "release-cli/maahibhama-pulsern-$version.tgz" "release-cli/pulsern-$version.tgz"
@@ -45,12 +60,12 @@ jobs:
           )
       - name: Verify formula and standalone package
         run: |
-          version="${GITHUB_REF_NAME#cli-v}"
+          version="${RELEASE_TAG#cli-v}"
           tarball="$GITHUB_WORKSPACE/release-cli/pulsern-$version.tgz"
           expected="$(awk '{print $1}' release-cli/SHA256SUMS.txt)"
           formula="$(sed -n 's/^[[:space:]]*sha256 "\([a-f0-9]\{64\}\)"/\1/p' Formula/pulsern-cli.rb)"
           test "$expected" = "$formula"
-          grep -F "releases/download/$GITHUB_REF_NAME/pulsern-$version.tgz" Formula/pulsern-cli.rb
+          grep -F "releases/download/$RELEASE_TAG/pulsern-$version.tgz" Formula/pulsern-cli.rb
           prefix="$(mktemp -d)"
           npm install --omit=dev --prefix "$prefix" "$tarball"
           "$prefix/node_modules/.bin/pulsern" --version | grep -Fx "$version"
@@ -64,7 +79,7 @@ jobs:
           fi
       - uses: actions/upload-artifact@v4
         with:
-          name: pulsern-cli-${{ github.ref_name }}
+          name: pulsern-cli-${{ env.RELEASE_TAG }}
           path: |
             release-cli/pulsern-*.tgz
             release-cli/SHA256SUMS.txt
@@ -81,7 +96,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: pulsern-cli-${{ github.ref_name }}
+          name: pulsern-cli-${{ env.RELEASE_TAG }}
           path: release-cli
       - uses: actions/setup-node@v4
         with:
@@ -91,7 +106,7 @@ jobs:
         run: npm install --global npm@^11.5.1
       - name: Publish the verified tarball with provenance
         run: |
-          version="${GITHUB_REF_NAME#cli-v}"
+          version="${RELEASE_TAG#cli-v}"
           dist_tag=latest
           if [[ "$version" == *-* ]]; then
             dist_tag=next
@@ -110,13 +125,13 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: pulsern-cli-${{ github.ref_name }}
+          name: pulsern-cli-${{ env.RELEASE_TAG }}
           path: release-cli
       - name: Create GitHub CLI release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          version="${GITHUB_REF_NAME#cli-v}"
+          version="${RELEASE_TAG#cli-v}"
           prerelease=()
           if [[ "$version" == *-* ]]; then
             prerelease=(--prerelease)
@@ -142,7 +157,7 @@ jobs:
           Node.js 22.5 or newer is required. Verify the attached npm tarball with
           \`SHA256SUMS.txt\`.
           EOF
-          gh release create "$GITHUB_REF_NAME" \
+          gh release create "$RELEASE_TAG" \
             "release-cli/pulsern-$version.tgz" \
             "release-cli/SHA256SUMS.txt" \
             --repo "$GITHUB_REPOSITORY" \
@@ -158,13 +173,13 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: pulsern-cli-${{ github.ref_name }}
+          name: pulsern-cli-${{ env.RELEASE_TAG }}
           path: release-cli
       - name: Compare workflow, npm, and GitHub artifacts
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          version="${GITHUB_REF_NAME#cli-v}"
+          version="${RELEASE_TAG#cli-v}"
           expected="$(sha256sum "release-cli/pulsern-$version.tgz" | awk '{print $1}')"
 
           npm_url=""
@@ -177,7 +192,7 @@ jobs:
           curl --fail --location --retry 3 "$npm_url" --output npm-pulsern.tgz
           test "$(sha256sum npm-pulsern.tgz | awk '{print $1}')" = "$expected"
 
-          gh release download "$GITHUB_REF_NAME" \
+          gh release download "$RELEASE_TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --pattern "pulsern-$version.tgz" \
             --dir github-release
@@ -194,11 +209,13 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
       - name: Audit and install the released formula
         run: |
           brew tap maahibhama/pulsern "$GITHUB_WORKSPACE"
           brew audit --strict --new maahibhama/pulsern/pulsern-cli
           brew install maahibhama/pulsern/pulsern-cli
           brew test maahibhama/pulsern/pulsern-cli
-          pulsern --version | grep -Fx "${GITHUB_REF_NAME#cli-v}"
+          pulsern --version | grep -Fx "${RELEASE_TAG#cli-v}"
           pulsern --help | grep -F "PulseRN local web debugger"
