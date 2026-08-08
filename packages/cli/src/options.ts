@@ -10,6 +10,7 @@ export interface CliOptions {
   dataDir: string;
   open: boolean;
   resetBrowserToken: boolean;
+  telemetry?: boolean;
 }
 
 function platformDataDirectory(): string {
@@ -42,6 +43,7 @@ Usage: pulsern [options]
   --data-dir <path>        Persistent data directory
   --no-open                Do not open the browser
   --reset-browser-token    Revoke saved browser sessions
+  --telemetry <on|off>     Opt in or out of anonymous usage analytics (default: off)
   --help                   Show this help
   --version                Show the version
 `;
@@ -56,6 +58,7 @@ export function parseOptions(args: string[]): CliOptions | 'help' | 'version' {
     '--metro-port',
     '--host',
     '--data-dir',
+    '--telemetry',
   ]);
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index]!;
@@ -71,6 +74,10 @@ export function parseOptions(args: string[]): CliOptions | 'help' | 'version' {
     values.set(argument, value);
     index += 1;
   }
+  const telemetryValue = values.get('--telemetry') ?? process.env['PULSERN_TELEMETRY'];
+  if (telemetryValue && telemetryValue !== 'on' && telemetryValue !== 'off') {
+    throw new Error('--telemetry and PULSERN_TELEMETRY must be on or off.');
+  }
   return {
     port: port(values.get('--port') ?? '3000', '--port'),
     sdkPort: port(values.get('--sdk-port') ?? '9090', '--sdk-port'),
@@ -80,5 +87,6 @@ export function parseOptions(args: string[]): CliOptions | 'help' | 'version' {
     dataDir: resolve(values.get('--data-dir') ?? platformDataDirectory()),
     open: !flags.has('--no-open'),
     resetBrowserToken: flags.has('--reset-browser-token'),
+    telemetry: telemetryValue ? telemetryValue === 'on' : undefined,
   };
 }

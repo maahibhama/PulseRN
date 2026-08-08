@@ -103,8 +103,24 @@ jobs:
       - name: Publish SDK with provenance
         working-directory: packages/sdk
         run: |
+          version="${RELEASE_TAG#sdk-v}"
           dist_tag=latest
-          if [[ "$RELEASE_TAG" == *-* ]]; then
+          if [[ "$version" == *-* ]]; then
             dist_tag=next
           fi
           npm publish --access public --provenance --tag "$dist_tag"
+
+      - name: Verify npm distribution tag
+        run: |
+          version="${RELEASE_TAG#sdk-v}"
+          dist_tag=latest
+          if [[ "$version" == *-* ]]; then
+            dist_tag=next
+          fi
+          for attempt in 1 2 3 4 5; do
+            published="$(npm view "@pulse-rn/sdk@$dist_tag" version 2>/dev/null || true)"
+            if [[ "$published" == "$version" ]]; then exit 0; fi
+            sleep $((attempt * 5))
+          done
+          echo "::error::@pulse-rn/sdk@$dist_tag did not resolve to $version."
+          exit 1

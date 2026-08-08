@@ -22,6 +22,8 @@ import { DiagnosticService } from '../../../apps/desktop/src/main/diagnostic-ser
 import { McpBridge } from '../../../apps/desktop/src/main/mcp-bridge.js';
 import { DevToolWebSocketServer } from '../../../apps/desktop/src/main/websocket-server.js';
 import { NativeLogManager } from '../../../apps/desktop/src/main/native-log-manager.js';
+import { AnalyticsClient } from '../../../apps/desktop/src/main/analytics.js';
+import { createDemoSession } from '../../../apps/desktop/src/main/demo-session.js';
 import {
   createSessionArchive,
   decodeSessionArchive,
@@ -127,6 +129,7 @@ class WebRuntime {
   readonly debugger: DebuggerManager;
   readonly mcp: McpBridge;
   readonly nativeLogs: NativeLogManager;
+  readonly analytics: AnalyticsClient;
   private sdkServer?: DevToolWebSocketServer;
   private lastMaintenanceAt = 0;
   private readonly subscribers = new Set<WebSocket>();
@@ -142,6 +145,17 @@ class WebRuntime {
       launchAtLogin: false,
       keepRunningInBackground: false,
       checkForUpdatesAutomatically: false,
+      ...(options.telemetry === undefined
+        ? {}
+        : { anonymousUsageAnalytics: options.telemetry, analyticsConsentDecided: true }),
+    });
+    this.analytics = new AnalyticsClient({
+      statePath: join(dataDirectory, 'analytics.json'),
+      version: VERSION,
+      distribution: 'cli',
+      enabled: () => this.settings.get().anonymousUsageAnalytics,
+      apiKey: process.env['PULSERN_POSTHOG_KEY'],
+      host: process.env['PULSERN_POSTHOG_HOST'],
     });
     this.appearance = new AppearanceStore(
       join(dataDirectory, 'appearance.json'),
@@ -161,7 +175,12 @@ class WebRuntime {
         this.sessions.append(events);
         this.publish('snapshot', this.sessions.snapshot());
       },
-      (statuses) => this.publish('native-logs', statuses),
+      (statuses) => {
+        this.publish('native-logs', statuses);
+        if (statuses.some((status) => status.state === 'capturing')) {
+          void this.analytics.capture('native_capture_started').catch(() => undefined);
+        }
+      },
     );
     this.diagnostics = new DiagnosticService(this.database, this.sessions);
     this.debugger = new DebuggerManager(
@@ -191,6 +210,11 @@ class WebRuntime {
     this.maintain(true);
     await this.restartSdkServer();
     if (this.settings.get().mcpEnabled) await this.mcp.start();
+    void this.analytics.capture('install_started').catch(() => undefined);
+    void this.analytics.capture('weekly_active').catch(() => undefined);
+    if (!this.settings.get().onboardingDismissed) {
+      void this.analytics.capture('onboarding_opened').catch(() => undefined);
+    }
   }
 
   private maintain(force = false): unknown {
@@ -245,6 +269,9 @@ class WebRuntime {
           this.nativeLogs.start(device);
           this.publish('snapshot', this.sessions.snapshot());
           this.publish('connection', this.connectionInfo());
+          void this.analytics
+            .capture('first_app_connected', { sdkVersion: device.device.sdkVersion })
+            .catch(() => undefined);
         },
         onDisconnected: (connectionId, info) => {
           this.nativeLogs.stop(connectionId);
@@ -257,6 +284,9 @@ class WebRuntime {
           this.maintain();
           this.sessions.append(events);
           this.publish('snapshot', this.sessions.snapshot());
+          if (events.length > 0) {
+            void this.analytics.capture('first_event_persisted').catch(() => undefined);
+          }
         },
         onHealth: (connectionId, health) => {
           this.sessions.updateHealth(connectionId, health);
@@ -356,6 +386,20 @@ class WebRuntime {
         return result;
       },
       listSessions: () => database.listSessions(),
+      createDemoSession: () => {
+        const demo = createDemoSession();
+        database.recordSession(demo.device);
+        database.insertMany(demo.events);
+        database.endSession(demo.device.sessionId, {
+          code: 1000,
+          reason: 'Offline demo session',
+          disconnectedAt: Date.now(),
+        });
+        this.sessions.hydrate(database.recent());
+        this.publish('snapshot', this.sessions.snapshot());
+        void this.analytics.capture('demo_opened').catch(() => undefined);
+        return database.listSessions().find((entry) => entry.sessionId === demo.device.sessionId)!;
+      },
       renameSession: (sessionId: never, displayName: never) =>
         database.renameSession(sessionId, displayName),
       deleteSession: (sessionId: never) => {
@@ -487,6 +531,9 @@ class WebRuntime {
       updateSettings: async (patch: never) => {
         const previous = this.settings.get();
         const next = this.settings.update(patch);
+        if (!next.anonymousUsageAnalytics && previous.anonymousUsageAnalytics) {
+          await this.analytics.reset();
+        }
         if (next.mcpEnabled !== previous.mcpEnabled) {
           try {
             if (next.mcpEnabled) await this.mcp.start();

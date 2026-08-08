@@ -258,6 +258,8 @@ export interface AppSettings {
   updateChannel: 'stable' | 'beta';
   motion: 'system' | 'reduced' | 'full';
   onboardingDismissed: boolean;
+  anonymousUsageAnalytics: boolean;
+  analyticsConsentDecided: boolean;
   checkForUpdatesAutomatically: boolean;
   launchAtLogin: boolean;
   keepRunningInBackground: boolean;
@@ -549,6 +551,7 @@ export interface PulseRNDesktopApi {
   getNetworkCurl(eventId: string): Promise<string>;
   exportNetworkHar(sessionId?: string): Promise<NetworkExportResult>;
   listSessions(): Promise<StoredSession[]>;
+  createDemoSession(): Promise<StoredSession>;
   renameSession(sessionId: string, displayName: string): Promise<StoredSession>;
   deleteSession(sessionId: string): Promise<{ sessions: number; events: number }>;
   listStoredDevices(): Promise<StoredDevice[]>;

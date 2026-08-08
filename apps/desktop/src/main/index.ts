@@ -26,6 +26,8 @@ import { DiagnosticService } from './diagnostic-service.js';
 import { networkEventPayloadSchema } from '@pulse-rn/protocol';
 import { AppearanceStore, themeDefinitionSchema } from './appearance.js';
 import { NativeLogManager } from './native-log-manager.js';
+import { AnalyticsClient } from './analytics.js';
+import { createDemoSession } from './demo-session.js';
 
 const SNAPSHOT_CHANNEL = 'pulse-rn:snapshot';
 const DEVICES_CHANNEL = 'pulse-rn:devices';
@@ -159,6 +161,7 @@ const eventRequestSchema = z.discriminatedUnion('operation', [
     sessionId: z.string().trim().min(1).max(256).optional(),
   }),
   z.object({ operation: z.literal('sessions') }),
+  z.object({ operation: z.literal('demo') }),
   z.object({
     operation: z.literal('renameSession'),
     sessionId: z.string().trim().min(1).max(256),
@@ -191,6 +194,7 @@ let updateManager: UpdateManager | undefined;
 let mcpBridge: McpBridge | undefined;
 let diagnosticService: DiagnosticService | undefined;
 let nativeLogManager: NativeLogManager | undefined;
+let analyticsClient: AnalyticsClient | undefined;
 let automaticUpdateTimer: ReturnType<typeof setTimeout> | undefined;
 let isQuitting = false;
 let shutdownComplete = false;
@@ -307,6 +311,9 @@ async function restartServer(settings = settingsStore?.get()): Promise<void> {
         sessions.connect(device);
         nativeLogManager?.start(device);
         publish();
+        void analyticsClient
+          ?.capture('first_app_connected', { sdkVersion: device.device.sdkVersion })
+          .catch(() => undefined);
       },
       onDisconnected(connectionId, info) {
         nativeLogManager?.stop(connectionId);
@@ -319,6 +326,9 @@ async function restartServer(settings = settingsStore?.get()): Promise<void> {
         maintainDatabase();
         sessions.append(events);
         publish();
+        if (events.length > 0) {
+          void analyticsClient?.capture('first_event_persisted').catch(() => undefined);
+        }
       },
       onHealth(connectionId, health) {
         sessions.updateHealth(connectionId, health);
@@ -429,6 +439,19 @@ function createWindow(): void {
 
 app.whenReady().then(async () => {
   settingsStore = new SettingsStore(join(app.getPath('userData'), 'settings.json'));
+  analyticsClient = new AnalyticsClient({
+    statePath: join(app.getPath('userData'), 'analytics.json'),
+    version: app.getVersion(),
+    distribution: 'desktop',
+    enabled: () => settingsStore?.get().anonymousUsageAnalytics ?? false,
+    apiKey: process.env['PULSERN_POSTHOG_KEY'],
+    host: process.env['PULSERN_POSTHOG_HOST'],
+  });
+  void analyticsClient.capture('install_started').catch(() => undefined);
+  void analyticsClient.capture('weekly_active').catch(() => undefined);
+  if (!settingsStore.get().onboardingDismissed) {
+    void analyticsClient.capture('onboarding_opened').catch(() => undefined);
+  }
   appearanceStore = new AppearanceStore(
     join(app.getPath('userData'), 'appearance.json'),
     settingsStore.get().theme,
@@ -485,6 +508,9 @@ app.whenReady().then(async () => {
     },
     (statuses) => {
       if (window && !window.isDestroyed()) window.webContents.send(NATIVE_LOGS_CHANNEL, statuses);
+      if (statuses.some((status) => status.state === 'capturing')) {
+        void analyticsClient?.capture('native_capture_started').catch(() => undefined);
+      }
     },
   );
   diagnosticService = new DiagnosticService(database, sessions);
@@ -585,6 +611,20 @@ app.whenReady().then(async () => {
       }
       case 'sessions':
         return database.listSessions();
+      case 'demo': {
+        const demo = createDemoSession();
+        database.recordSession(demo.device);
+        database.insertMany(demo.events);
+        database.endSession(demo.device.sessionId, {
+          code: 1000,
+          reason: 'Offline demo session',
+          disconnectedAt: Date.now(),
+        });
+        sessions.hydrate(database.recent());
+        publish();
+        void analyticsClient?.capture('demo_opened').catch(() => undefined);
+        return database.listSessions().find((entry) => entry.sessionId === demo.device.sessionId)!;
+      }
       case 'renameSession':
         return database.renameSession(input.sessionId, input.displayName);
       case 'deleteSession': {
@@ -855,6 +895,9 @@ app.whenReady().then(async () => {
     if (value === undefined) return settingsStore.get();
     const previous = settingsStore.get();
     const settings = settingsStore.update(value);
+    if (!settings.anonymousUsageAnalytics && previous.anonymousUsageAnalytics) {
+      await analyticsClient?.reset();
+    }
     if (settings.mcpEnabled !== previous.mcpEnabled) {
       try {
         if (settings.mcpEnabled) await mcpBridge?.start();
@@ -1160,7 +1203,10 @@ app.whenReady().then(async () => {
       ])
       .parse(value ?? { operation: 'state' });
     if (input.operation === 'state') return updateManager.snapshot();
-    if (input.operation === 'check') return updateManager.check();
+    if (input.operation === 'check') {
+      void analyticsClient?.capture('release_update_checked').catch(() => undefined);
+      return updateManager.check();
+    }
     if (input.operation === 'download') return updateManager.download();
     const confirmation = window
       ? await dialog.showMessageBox(window, {
