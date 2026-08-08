@@ -626,7 +626,7 @@ class WebRuntime {
         enabled: false,
         status: 'disabled',
         currentVersion: VERSION,
-        message: 'Updates are managed by npm. Run npx pulsern@latest.',
+        message: 'Updates are managed by npm. Run npx @maahibhama/pulsern@latest.',
       }),
       getDebuggerState: () => debuggerManager.snapshot(),
       discoverDebuggerTargets: () => debuggerManager.discover(),

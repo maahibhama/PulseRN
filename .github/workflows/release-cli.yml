@@ -30,13 +30,14 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm lint
-      - run: pnpm --filter pulsern build
+      - run: pnpm --filter @maahibhama/pulsern build
       - run: pnpm release:verify:cli "${GITHUB_REF_NAME}"
       - name: Pack release tarball and checksum
         run: |
           version="${GITHUB_REF_NAME#cli-v}"
           mkdir -p release-cli
-          pnpm --filter pulsern pack --pack-destination release-cli
+          pnpm --filter @maahibhama/pulsern pack --pack-destination release-cli
+          mv "release-cli/maahibhama-pulsern-$version.tgz" "release-cli/pulsern-$version.tgz"
           test -f "release-cli/pulsern-$version.tgz"
           (
             cd release-cli
@@ -125,7 +126,7 @@ jobs:
           Run without installing the Electron application:
 
           \`\`\`bash
-          npx pulsern@$version
+          npx @maahibhama/pulsern@$version
           \`\`\`
 
           Homebrew:
@@ -167,7 +168,7 @@ jobs:
 
           npm_url=""
           for attempt in 1 2 3 4 5; do
-            npm_url="$(npm view "pulsern@$version" dist.tarball 2>/dev/null || true)"
+            npm_url="$(npm view "@maahibhama/pulsern@$version" dist.tarball 2>/dev/null || true)"
             if [[ -n "$npm_url" ]]; then break; fi
             sleep $((attempt * 5))
           done

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { mkdtemp, readFile, rename, rm, stat } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -10,10 +10,10 @@ const formulaUrl = new URL('../Formula/pulsern-cli.rb', import.meta.url);
 const metadata = JSON.parse(await readFile(new URL('package.json', packageDirectory), 'utf8'));
 
 if (tag && tag !== `cli-v${metadata.version}`) {
-  throw new Error(`CLI tag ${tag} does not match pulsern@${metadata.version}.`);
+  throw new Error(`CLI tag ${tag} does not match @maahibhama/pulsern@${metadata.version}.`);
 }
 if (
-  metadata.name !== 'pulsern' ||
+  metadata.name !== '@maahibhama/pulsern' ||
   metadata.bin?.pulsern !== './dist/server.js' ||
   metadata.bin?.['pulsern-mcp'] !== './dist/mcp-server.js'
 ) {
@@ -53,14 +53,16 @@ try {
 
   const packed = spawnSync(
     'pnpm',
-    ['--filter', 'pulsern', 'pack', '--pack-destination', directory],
+    ['--filter', '@maahibhama/pulsern', 'pack', '--pack-destination', directory],
     {
       cwd: new URL('..', import.meta.url),
       encoding: 'utf8',
     },
   );
   if (packed.status !== 0) throw new Error(packed.stderr || 'pnpm pack validation failed.');
+  const packedTarball = join(directory, `maahibhama-pulsern-${metadata.version}.tgz`);
   const tarball = join(directory, `pulsern-${metadata.version}.tgz`);
+  await rename(packedTarball, tarball);
   const digest = createHash('sha256')
     .update(await readFile(tarball))
     .digest('hex');
@@ -76,7 +78,7 @@ try {
   }
 
   console.log(
-    `Verified pulsern@${metadata.version} (${result.entryCount} files, sha256 ${digest}).`,
+    `Verified @maahibhama/pulsern@${metadata.version} (${result.entryCount} files, sha256 ${digest}).`,
   );
 } finally {
   await rm(directory, { recursive: true, force: true });

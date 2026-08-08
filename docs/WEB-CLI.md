@@ -3,7 +3,7 @@
 Run PulseRN's browser edition without installing the Electron application:
 
 ```bash
-npx pulsern
+npx @maahibhama/pulsern
 ```
 
 The CLI requires Node.js 22.5 or newer because it reuses PulseRN's built-in SQLite implementation.
@@ -16,7 +16,7 @@ Native SDK, Android emulator, physical devices, and Metro. Stop it with `Ctrl+C`
 Run the published package without a permanent installation:
 
 ```bash
-npx pulsern
+npx @maahibhama/pulsern
 ```
 
 Homebrew can install Node and the CLI together:
@@ -30,7 +30,7 @@ To manage Node separately with Homebrew:
 
 ```bash
 brew install node
-npx pulsern
+npx @maahibhama/pulsern
 ```
 
 Contributors working from a repository checkout use:
@@ -79,7 +79,7 @@ SQLite history, settings, trusted devices, themes, fonts, and TLS credentials ar
 platform-specific PulseRN web data directory printed at startup. Electron and web data directories
 are intentionally separate; use `.pulsern` session archives to move history between them.
 
-`npx pulsern@latest` runs the newest published CLI release. Electron's native updater and
+`npx @maahibhama/pulsern@latest` runs the newest published CLI release. Electron's native updater and
 launch-at-login settings are intentionally hidden in the browser edition.
 
 Each `cli-vX.Y.Z` GitHub Release also includes the exact npm tarball and `SHA256SUMS.txt` for manual

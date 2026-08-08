@@ -145,7 +145,7 @@ SDK package version or a tarball that leaks internal workspace packages.
 
 # CLI releases
 
-The local web debugger is published as the unscoped `pulsern` npm package, a GitHub Release
+The local web debugger is published as the scoped `@maahibhama/pulsern` npm package, a GitHub Release
 tarball, and the `pulsern-cli` Homebrew formula. Prepare all version sources, the formula checksum,
 the release commit, and the `cli-vX.Y.Z` tag with:
 
@@ -169,5 +169,5 @@ and shares the same artifact between npm and GitHub publishing. GitHub receives
 `pulsern-X.Y.Z.tgz` and `SHA256SUMS.txt`. Stable versions publish to npm's `latest` channel;
 prereleases publish to `next`.
 
-npm Trusted Publishing for `pulsern` must authorize `release-cli.yml` in the `npm` environment.
+npm Trusted Publishing for `@maahibhama/pulsern` must authorize `release-cli.yml` in the `npm` environment.
 The GitHub workflow needs `contents: write` only for creating the versioned CLI Release.

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
@@ -111,8 +111,12 @@ async function updateVersions() {
 async function packAndUpdateFormula() {
   const directory = await mkdtemp(join(tmpdir(), 'pulsern-cli-release-'));
   try {
-    execute('pnpm', ['--filter', 'pulsern', 'build']);
-    execute('pnpm', ['--filter', 'pulsern', 'pack', '--pack-destination', directory]);
+    execute('pnpm', ['--filter', '@maahibhama/pulsern', 'build']);
+    execute('pnpm', ['--filter', '@maahibhama/pulsern', 'pack', '--pack-destination', directory]);
+    await rename(
+      join(directory, `maahibhama-pulsern-${version}.tgz`),
+      join(directory, `pulsern-${version}.tgz`),
+    );
     const tarball = join(directory, `pulsern-${version}.tgz`);
     const digest = createHash('sha256')
       .update(await readFile(tarball))
@@ -157,12 +161,12 @@ if ((localTagExists || remoteTagExists) && !replaceTag) {
   );
 }
 if (replaceTag) {
-  const npmVersion = execute('npm', ['view', `pulsern@${version}`, 'version'], {
+  const npmVersion = execute('npm', ['view', `@maahibhama/pulsern@${version}`, 'version'], {
     capture: true,
     allowedStatuses: [1],
   });
   if (npmVersion.status === 0 && npmVersion.stdout === version) {
-    throw new Error(`pulsern@${version} is already published and cannot be replaced.`);
+    throw new Error(`@maahibhama/pulsern@${version} is already published and cannot be replaced.`);
   }
   if (npmVersion.status !== 0 && !/\bE404\b|404 Not Found/i.test(npmVersion.stderr)) {
     throw new Error(`Could not confirm npm publication state.\n${npmVersion.stderr}`);

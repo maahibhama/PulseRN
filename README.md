@@ -132,7 +132,7 @@ React Native developers with Node.js 22.5 or newer can run the same debugger UI 
 the Electron application. Run the published CLI directly:
 
 ```bash
-npx pulsern
+npx @maahibhama/pulsern
 ```
 
 On macOS, Homebrew can install both a compatible Node runtime and the PulseRN CLI:
@@ -146,11 +146,11 @@ Alternatively, install Node first and continue using `npx`:
 
 ```bash
 brew install node
-npx pulsern
+npx @maahibhama/pulsern
 ```
 
 The command opens `http://localhost:3000`, receives SDK connections on port `9090`, stores history
-locally, and runs until you press `Ctrl+C`. Use `npx pulsern --help` for custom ports, Metro host
+locally, and runs until you press `Ctrl+C`. Use `npx @maahibhama/pulsern --help` for custom ports, Metro host
 configuration, a custom data directory, or headless startup. See the
 [local web debugger guide](docs/WEB-CLI.md) for emulator, physical-device, security, and persistence
 details.
