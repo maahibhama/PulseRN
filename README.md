@@ -138,9 +138,14 @@ npx @maahibhama/pulsern
 On macOS, Homebrew can install both a compatible Node runtime and the PulseRN CLI:
 
 ```bash
+brew tap maahibhama/pulsern https://github.com/maahibhama/PulseRN
 brew install maahibhama/pulsern/pulsern-cli
 pulsern
 ```
+
+The first command adds the PulseRN repository as a Homebrew tap. It only needs to be run once on a
+computer. After installation, run `pulsern` whenever you want to start the debugger. PulseRN opens
+the browser automatically and keeps running in the terminal until you press `Ctrl+C`.
 
 Alternatively, install Node first and continue using `npx`:
 
@@ -150,8 +155,9 @@ npx @maahibhama/pulsern
 ```
 
 The command opens `http://localhost:3000`, receives SDK connections on port `9090`, stores history
-locally, and runs until you press `Ctrl+C`. Use `npx @maahibhama/pulsern --help` for custom ports, Metro host
-configuration, a custom data directory, or headless startup. See the
+locally, and runs until you press `Ctrl+C`. Use `pulsern --help` after a Homebrew installation, or
+`npx @maahibhama/pulsern --help` when using npx, for custom ports, Metro host configuration, a
+custom data directory, or headless startup. See the
 [local web debugger guide](docs/WEB-CLI.md) for emulator, physical-device, security, and persistence
 details.
 

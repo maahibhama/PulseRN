@@ -22,8 +22,33 @@ npx @maahibhama/pulsern
 Homebrew can install Node and the CLI together:
 
 ```bash
+brew tap maahibhama/pulsern https://github.com/maahibhama/PulseRN
 brew install maahibhama/pulsern/pulsern-cli
 pulsern
+```
+
+The explicit tap command connects Homebrew to the main PulseRN repository and only needs to be run
+once per computer. Homebrew installs a compatible Node runtime automatically. On later launches,
+start the debugger with:
+
+```bash
+pulsern
+```
+
+PulseRN opens the authenticated browser page automatically and remains in the foreground. Keep that
+terminal open while debugging and press `Ctrl+C` to stop all PulseRN services cleanly. If the browser
+does not open, copy the `PulseRN web` address printed in the terminal.
+
+Update or remove the Homebrew installation with:
+
+```bash
+brew update
+brew upgrade pulsern-cli
+```
+
+```bash
+brew uninstall pulsern-cli
+brew untap maahibhama/pulsern
 ```
 
 To manage Node separately with Homebrew:
@@ -44,6 +69,9 @@ The `pnpm dev:web` command builds from source and is not intended for end users.
 
 ## Connections
 
+Start `pulsern`, then configure the React Native SDK with the matching address printed in the
+terminal:
+
 - Browser UI: `http://localhost:3000`
 - SDK loopback and iOS simulator: `ws://127.0.0.1:9090`
 - Android emulator: `ws://10.0.2.2:9090`
@@ -55,6 +83,14 @@ complete the existing pairing flow. Plain `ws://` LAN traffic is not encrypted; 
 networks you do not fully trust.
 
 ## Options
+
+Homebrew users pass options directly to `pulsern`, for example:
+
+```bash
+pulsern --no-open
+pulsern --port 3001
+pulsern --help
+```
 
 ```text
 --port <number>          Browser/API port; default 3000
@@ -79,8 +115,9 @@ SQLite history, settings, trusted devices, themes, fonts, and TLS credentials ar
 platform-specific PulseRN web data directory printed at startup. Electron and web data directories
 are intentionally separate; use `.pulsern` session archives to move history between them.
 
-`npx @maahibhama/pulsern@latest` runs the newest published CLI release. Electron's native updater and
-launch-at-login settings are intentionally hidden in the browser edition.
+Homebrew users receive new CLI releases with `brew update && brew upgrade pulsern-cli`.
+`npx @maahibhama/pulsern@latest` runs the newest published CLI release for npx users. Electron's
+native updater and launch-at-login settings are intentionally hidden in the browser edition.
 
 Each `cli-vX.Y.Z` GitHub Release also includes the exact npm tarball and `SHA256SUMS.txt` for manual
 verification.

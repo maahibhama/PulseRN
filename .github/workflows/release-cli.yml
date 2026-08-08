@@ -148,6 +148,7 @@ jobs:
           Homebrew:
 
           \`\`\`bash
+          brew tap maahibhama/pulsern https://github.com/maahibhama/PulseRN
           brew install maahibhama/pulsern/pulsern-cli
           pulsern
           \`\`\`
