@@ -161,11 +161,25 @@ custom data directory, or headless startup. See the
 [local web debugger guide](docs/WEB-CLI.md) for emulator, physical-device, security, and persistence
 details.
 
-Maintainers can prepare and publish a complete version-tag release with:
+## Release CLI, SDK, and desktop together
 
-```bash
-pnpm release:desktop 0.1.0
-```
+Maintainers can publish all three products from one GitHub Actions workflow:
+
+1. Open **GitHub → Actions → Release all**.
+2. Select **Run workflow**.
+3. Enter one version without a `v` prefix, for example `1.0.7`.
+
+The coordinated workflow updates and commits every shared release version, including the CLI and
+SDK runtime constants, desktop package metadata, Homebrew Formula URL, Cask, and lockfile. It then
+starts the existing release workflows in parallel with these tags:
+
+- `cli-v1.0.7` publishes `@maahibhama/pulsern` and the CLI GitHub/Homebrew artifacts.
+- `sdk-v1.0.7` publishes `@pulse-rn/sdk`.
+- `v1.0.7` builds and publishes the macOS, Windows, and Linux desktop applications.
+
+The requested version must not already have any of these release tags. Individual release
+workflows remain available for recovery or when only one product needs to be published. The
+coordinator is defined in [`.github/workflows/release-all.yml`](.github/workflows/release-all.yml).
 
 ## Develop locally
 
