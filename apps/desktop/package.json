@@ -1,6 +1,6 @@
 {
   "name": "@pulse-rn/desktop",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "PulseRN Electron desktop debugger.",
   "author": "PulseRN contributors",
   "homepage": "https://github.com/maahibhama/PulseRN",
