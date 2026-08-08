@@ -3,6 +3,10 @@
   "version": "1.0.4",
   "description": "Run the PulseRN React Native debugger in a local web browser.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/maahibhama/PulseRN.git"
+  },
   "type": "module",
   "bin": {
     "pulsern": "./dist/server.js",
