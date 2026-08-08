@@ -57,8 +57,8 @@ function execute(command, commandArgs, options = {}) {
   }
   return {
     status: result.status,
-    stdout: options.capture ? (result.stdout ?? '').trim() : '',
-    stderr: options.capture ? (result.stderr ?? '').trim() : '',
+    stdout: options.capture ? (result.stdout ?? '').trimEnd() : '',
+    stderr: options.capture ? (result.stderr ?? '').trimEnd() : '',
   };
 }
 
