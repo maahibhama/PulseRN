@@ -37,7 +37,7 @@ import {
 import { networkEventPayloadSchema } from '../../protocol/src/index.js';
 import { HELP, parseOptions, type CliOptions } from './options.js';
 
-const VERSION = '1.0.6';
+const VERSION = '1.0.7';
 const MAX_REQUEST_BYTES = 22 * 1024 * 1024;
 const publicDirectory = fileURLToPath(new URL('./public', import.meta.url));
 const mcpServerPath = fileURLToPath(new URL('./mcp-server.js', import.meta.url));

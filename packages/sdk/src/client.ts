@@ -41,7 +41,7 @@ import type {
 } from './types.js';
 import { pulseRNEventCategories, validatePulseRNConfig } from './configuration.js';
 
-const SDK_VERSION = '1.0.6';
+const SDK_VERSION = '1.0.7';
 const CONNECTING = 0;
 const OPEN = 1;
 type RegisteredStorageProvider = StorageProvider & {
