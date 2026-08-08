@@ -39,11 +39,16 @@ jobs:
           fetch-depth: 0
       - name: Create and push release tag
         run: |
+          version="${RELEASE_TAG#cli-v}"
+          package_version="$(node -p "require('./packages/cli/package.json').version")"
+          if [[ "$version" != "$package_version" ]]; then
+            echo "::error::Tag $RELEASE_TAG does not match CLI package version $package_version."
+            exit 1
+          fi
           if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
             echo "::error::Release tag already exists: $RELEASE_TAG"
             exit 1
           fi
-          version="${RELEASE_TAG#cli-v}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag -a "$RELEASE_TAG" -m "PulseRN CLI $version"
@@ -65,6 +70,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.RELEASE_TAG }}
+      - name: Verify tag matches CLI package version
+        run: |
+          version="${RELEASE_TAG#cli-v}"
+          package_version="$(node -p "require('./packages/cli/package.json').version")"
+          test "$version" = "$package_version" || {
+            echo "::error::Tag $RELEASE_TAG does not match CLI package version $package_version."
+            exit 1
+          }
       - uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}

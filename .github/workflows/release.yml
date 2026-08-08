@@ -7,8 +7,8 @@ on:
       - 'v[0-9]+.[0-9]+.[0-9]+-*'
   workflow_dispatch:
     inputs:
-      version:
-        description: Version to prepare and publish (for example 1.0.3)
+      tag:
+        description: Desktop release tag to create (for example v1.0.5)
         required: true
         type: string
 
@@ -18,70 +18,51 @@ permissions:
 env:
   NODE_VERSION: '22'
   PNPM_VERSION: '10.14.0'
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
-  prepare:
+  prepare-tag:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    outputs:
-      release_tag: ${{ steps.release.outputs.release_tag }}
     steps:
+      - name: Validate release tag
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Invalid desktop release tag: $RELEASE_TAG"
+            exit 1
+          fi
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && github.ref_name || github.ref }}
+          ref: ${{ github.ref }}
           fetch-depth: 0
-
-      - id: release
-        name: Resolve or prepare release tag
-        env:
-          REQUESTED_VERSION: ${{ inputs.version }}
+      - name: Verify package versions and push tag
         run: |
-          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
-            version="${REQUESTED_VERSION#v}"
-            if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-              echo "::error::Version must use the form X.Y.Z or X.Y.Z-prerelease."
-              exit 1
-            fi
-            echo "version=$version" >> "$GITHUB_OUTPUT"
-            echo "release_tag=v$version" >> "$GITHUB_OUTPUT"
-          else
-            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-            echo "release_tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+          version="${RELEASE_TAG#v}"
+          root_version="$(node -p "require('./package.json').version")"
+          desktop_version="$(node -p "require('./apps/desktop/package.json').version")"
+          if [[ "$version" != "$root_version" || "$version" != "$desktop_version" ]]; then
+            echo "::error::Tag $RELEASE_TAG does not match root=$root_version and desktop=$desktop_version."
+            exit 1
           fi
-
-      - uses: pnpm/action-setup@v4
-        if: github.event_name == 'workflow_dispatch'
-        with:
-          version: ${{ env.PNPM_VERSION }}
-
-      - uses: actions/setup-node@v4
-        if: github.event_name == 'workflow_dispatch'
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-
-      - if: github.event_name == 'workflow_dispatch'
-        run: pnpm install --frozen-lockfile
-
-      - name: Commit version and create tag
-        if: github.event_name == 'workflow_dispatch'
-        env:
-          VERSION: ${{ steps.release.outputs.version }}
-        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "::error::Release tag already exists: $RELEASE_TAG"
+            exit 1
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          pnpm release:desktop "$VERSION" --yes --skip-checks
+          git tag -a "$RELEASE_TAG" -m "PulseRN $version"
+          git push origin "$RELEASE_TAG"
 
   verify:
-    needs: prepare
+    needs: prepare-tag
+    if: always() && (github.event_name == 'push' || needs.prepare-tag.result == 'success')
     runs-on: ubuntu-latest
-    env:
-      RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.prepare.outputs.release_tag }}
+          ref: ${{ env.RELEASE_TAG }}
       - uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
@@ -97,14 +78,12 @@ jobs:
       - run: pnpm build
 
   macos:
-    needs: [prepare, verify]
+    needs: verify
     runs-on: macos-14
-    env:
-      RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.prepare.outputs.release_tag }}
+          ref: ${{ env.RELEASE_TAG }}
       - uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
@@ -167,10 +146,8 @@ jobs:
           if-no-files-found: error
 
   windows:
-    needs: [prepare, verify]
+    needs: verify
     runs-on: windows-latest
-    env:
-      RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
     strategy:
       fail-fast: false
       matrix:
@@ -178,7 +155,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.prepare.outputs.release_tag }}
+          ref: ${{ env.RELEASE_TAG }}
       - uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
@@ -239,14 +216,12 @@ jobs:
           if-no-files-found: error
 
   linux:
-    needs: [prepare, verify]
+    needs: verify
     runs-on: ubuntu-latest
-    env:
-      RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.prepare.outputs.release_tag }}
+          ref: ${{ env.RELEASE_TAG }}
       - uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
@@ -280,10 +255,8 @@ jobs:
           if-no-files-found: error
 
   publish:
-    needs: [prepare, macos, windows, linux]
+    needs: [macos, windows, linux]
     runs-on: ubuntu-latest
-    env:
-      RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
     permissions:
       attestations: write
       contents: write
@@ -291,7 +264,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.prepare.outputs.release_tag }}
+          ref: ${{ env.RELEASE_TAG }}
       - uses: actions/download-artifact@v4
         with:
           pattern: desktop-*
