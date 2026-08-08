@@ -27,6 +27,17 @@ export interface DesktopSnapshot {
   events: DevToolEventEnvelope[];
 }
 
+export interface NativeLogCaptureStatus {
+  connectionId: string;
+  platform: 'ios' | 'android';
+  state: 'starting' | 'capturing' | 'waiting' | 'error';
+  targetId?: string;
+  pid?: number;
+  process?: string;
+  droppedLogs: number;
+  message?: string;
+}
+
 export type UpdateStatus =
   | 'disabled'
   | 'idle'
@@ -518,6 +529,8 @@ export interface PulseRNDesktopApi {
   getSnapshot(): Promise<DesktopSnapshot>;
   onSnapshot(listener: (snapshot: DesktopSnapshot) => void): () => void;
   onDevices(listener: (devices: ConnectedDevice[]) => void): () => void;
+  getNativeLogStatuses(): Promise<NativeLogCaptureStatus[]>;
+  onNativeLogStatuses(listener: (statuses: NativeLogCaptureStatus[]) => void): () => void;
   queryEvents(input?: EventQuery): Promise<EventPage>;
   getEvent(id: string): Promise<EventPage['events'][number] | undefined>;
   listSavedFilters(): Promise<SavedEventFilter[]>;

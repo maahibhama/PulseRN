@@ -5,6 +5,7 @@ type JsonObject = Record<string, JsonValue | undefined>;
 
 export type DevToolEventCategory =
   | 'console'
+  | 'native-log'
   | 'network'
   | 'redux'
   | 'navigation'
@@ -281,6 +282,7 @@ export interface DeviceInfo {
   appName: string;
   appVersion?: string;
   sdkVersion: string;
+  nativeTargetId?: string;
 }
 
 export interface ClientHello {

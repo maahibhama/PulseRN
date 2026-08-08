@@ -4,6 +4,7 @@ import type { DevToolConfig } from './types.js';
 const CATEGORIES: DevToolEventCategory[] = [
   'system',
   'console',
+  'native-log',
   'network',
   'redux',
   'navigation',

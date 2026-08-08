@@ -70,7 +70,16 @@ export const PULSERN_MCP_TOOLS: readonly PulseRNTool[] = [
       deviceId: string(),
       category: {
         type: 'string',
-        enum: ['console', 'network', 'redux', 'navigation', 'performance', 'storage', 'error'],
+        enum: [
+          'console',
+          'native-log',
+          'network',
+          'redux',
+          'navigation',
+          'performance',
+          'storage',
+          'error',
+        ],
       },
       type: string(),
       text: string(),

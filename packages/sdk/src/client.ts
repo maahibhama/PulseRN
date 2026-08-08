@@ -608,6 +608,9 @@ export class DevToolClient {
           ? { platformVersion: this.config.device.platformVersion }
           : {}),
         ...(this.config.device?.model ? { model: this.config.device.model } : {}),
+        ...(this.config.device?.nativeTargetId
+          ? { nativeTargetId: this.config.device.nativeTargetId }
+          : {}),
         appName: this.config.appName,
         ...(this.config.appVersion ? { appVersion: this.config.appVersion } : {}),
         sdkVersion: SDK_VERSION,

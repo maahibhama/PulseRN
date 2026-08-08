@@ -21,6 +21,7 @@ import { DebuggerManager } from '../../../apps/desktop/src/main/debugger-manager
 import { DiagnosticService } from '../../../apps/desktop/src/main/diagnostic-service.js';
 import { McpBridge } from '../../../apps/desktop/src/main/mcp-bridge.js';
 import { DevToolWebSocketServer } from '../../../apps/desktop/src/main/websocket-server.js';
+import { NativeLogManager } from '../../../apps/desktop/src/main/native-log-manager.js';
 import {
   createSessionArchive,
   decodeSessionArchive,
@@ -125,6 +126,7 @@ class WebRuntime {
   readonly diagnostics: DiagnosticService;
   readonly debugger: DebuggerManager;
   readonly mcp: McpBridge;
+  readonly nativeLogs: NativeLogManager;
   private sdkServer?: DevToolWebSocketServer;
   private lastMaintenanceAt = 0;
   private readonly subscribers = new Set<WebSocket>();
@@ -152,6 +154,15 @@ class WebRuntime {
     );
     this.database = new EventDatabase(join(dataDirectory, 'pulse-rn.sqlite'));
     this.sessions.hydrate(this.database.recent());
+    this.nativeLogs = new NativeLogManager(
+      (events) => {
+        this.database.insertMany(events);
+        this.maintain();
+        this.sessions.append(events);
+        this.publish('snapshot', this.sessions.snapshot());
+      },
+      (statuses) => this.publish('native-logs', statuses),
+    );
     this.diagnostics = new DiagnosticService(this.database, this.sessions);
     this.debugger = new DebuggerManager(
       join(dataDirectory, 'debugger.json'),
@@ -231,10 +242,12 @@ class WebRuntime {
         onConnected: (device) => {
           this.database.recordSession(device);
           this.sessions.connect(device);
+          this.nativeLogs.start(device);
           this.publish('snapshot', this.sessions.snapshot());
           this.publish('connection', this.connectionInfo());
         },
         onDisconnected: (connectionId, info) => {
+          this.nativeLogs.stop(connectionId);
           const device = this.sessions.disconnect(connectionId);
           if (device) this.database.endSession(device.sessionId, info);
           this.publish('snapshot', this.sessions.snapshot());
@@ -297,6 +310,7 @@ class WebRuntime {
     const debuggerManager = this.debugger;
     return {
       getSnapshot: () => this.sessions.snapshot(),
+      getNativeLogStatuses: () => this.nativeLogs.snapshot(),
       queryEvents: (input: never) => database.query(input),
       getEvent: (id: never) => database.findById(id),
       listSavedFilters: () => database.listSavedFilters(),
@@ -662,6 +676,7 @@ class WebRuntime {
   async close(): Promise<void> {
     for (const socket of this.subscribers) socket.close(1001, 'Server shutting down');
     this.debugger.close();
+    this.nativeLogs.close();
     await this.mcp.stop();
     await this.sdkServer?.close();
     this.database.close();

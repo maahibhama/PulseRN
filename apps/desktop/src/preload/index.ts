@@ -21,6 +21,7 @@ const DEBUGGER_CHANNEL = 'pulse-rn:debugger';
 const CONNECTION_CHANNEL = 'pulse-rn:connection';
 const UPDATE_CHANNEL = 'pulse-rn:update';
 const MCP_CHANNEL = 'pulse-rn:mcp';
+const NATIVE_LOGS_CHANNEL = 'pulse-rn:native-logs';
 const connectedDeviceSchema = z.object({
   connectionId: z.string(),
   deviceId: z.string(),
@@ -40,6 +41,16 @@ const connectedDeviceSchema = z.object({
 const snapshotSchema = z.object({
   devices: z.array(connectedDeviceSchema),
   events: z.array(eventEnvelopeSchema),
+});
+const nativeLogStatusSchema = z.object({
+  connectionId: z.string(),
+  platform: z.enum(['ios', 'android']),
+  state: z.enum(['starting', 'capturing', 'waiting', 'error']),
+  targetId: z.string().optional(),
+  pid: z.number().int().positive().optional(),
+  process: z.string().optional(),
+  droppedLogs: z.number().int().nonnegative(),
+  message: z.string().optional(),
 });
 const eventCursorSchema = z.object({
   timestamp: z.number().finite().nonnegative(),
@@ -553,6 +564,18 @@ const api: PulseRNDesktopApi = {
     };
     ipcRenderer.on(DEVICES_CHANNEL, handler);
     return () => ipcRenderer.removeListener(DEVICES_CHANNEL, handler);
+  },
+  async getNativeLogStatuses() {
+    const value: unknown = await ipcRenderer.invoke(NATIVE_LOGS_CHANNEL);
+    return z.array(nativeLogStatusSchema).parse(value);
+  },
+  onNativeLogStatuses(listener) {
+    const handler = (_event: Electron.IpcRendererEvent, value: unknown) => {
+      const result = z.array(nativeLogStatusSchema).safeParse(value);
+      if (result.success) listener(result.data);
+    };
+    ipcRenderer.on(NATIVE_LOGS_CHANNEL, handler);
+    return () => ipcRenderer.removeListener(NATIVE_LOGS_CHANNEL, handler);
   },
   async queryEvents(input = {}) {
     const request = eventQuerySchema.parse(input);

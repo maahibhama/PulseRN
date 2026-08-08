@@ -1,7 +1,15 @@
 import type { PulseRNDesktopApi } from '../../preload/api.js';
 
 type Subscription =
-  'snapshot' | 'devices' | 'settings' | 'appearance' | 'connection' | 'debugger' | 'mcp' | 'update';
+  | 'snapshot'
+  | 'devices'
+  | 'native-logs'
+  | 'settings'
+  | 'appearance'
+  | 'connection'
+  | 'debugger'
+  | 'mcp'
+  | 'update';
 
 interface LiveMessage {
   type: Subscription;
@@ -94,6 +102,8 @@ export function createWebPulseRNClient(): PulseRNDesktopApi {
     getSnapshot: () => call('getSnapshot'),
     onSnapshot: (listener) => subscribe('snapshot', listener as (value: never) => void),
     onDevices: (listener) => subscribe('devices', listener as (value: never) => void),
+    getNativeLogStatuses: () => call('getNativeLogStatuses'),
+    onNativeLogStatuses: (listener) => subscribe('native-logs', listener as (value: never) => void),
     queryEvents: (input = {}) => call('queryEvents', [input]),
     getEvent: (id) => call('getEvent', [id]),
     listSavedFilters: () => call('listSavedFilters'),

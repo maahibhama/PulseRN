@@ -4798,3 +4798,100 @@ body {
   background: var(--code-background);
   font-family: var(--font-code);
 }
+
+.native-logs-header,
+.native-log-actions,
+.native-capture-status,
+.native-log-toolbar,
+.native-level-filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.native-logs-header {
+  justify-content: space-between;
+}
+.native-capture-statuses {
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.native-capture-status {
+  min-height: 28px;
+  color: var(--muted);
+}
+.native-capture-status .status {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--warning);
+}
+.native-capture-status.capturing .status {
+  background: var(--success);
+}
+.native-capture-status.error .status {
+  background: var(--danger);
+}
+.native-log-toolbar {
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.native-level-filters label {
+  text-transform: capitalize;
+  font-size: 12px;
+  color: var(--muted);
+}
+.native-log-toolbar input[aria-label='Search native logs'] {
+  flex: 1;
+  min-width: 180px;
+}
+.native-log-columns,
+.native-log-entry {
+  display: grid;
+  grid-template-columns: 110px 70px minmax(120px, 180px) 1fr;
+  gap: 12px;
+  align-items: center;
+}
+.native-log-columns {
+  padding: 8px 18px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+.native-log-list {
+  overflow: auto;
+  height: calc(100vh - 315px);
+}
+.native-log-entry {
+  width: 100%;
+  padding: 8px 18px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font-family: inherit;
+}
+.native-log-entry:hover,
+.native-log-entry.selected {
+  background: var(--selection);
+}
+.native-log-entry time,
+.native-log-entry code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.native-log-entry strong {
+  text-transform: uppercase;
+  font-size: 11px;
+}
+.native-log-entry.warn strong {
+  color: var(--warning);
+}
+.native-log-entry.error strong,
+.native-log-entry.fatal strong {
+  color: var(--danger);
+}
