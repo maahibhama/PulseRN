@@ -53,6 +53,8 @@ jobs:
     needs: prepare-tag
     if: always() && (github.event_name == 'push' || needs.prepare-tag.result == 'success')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Validate release tag
         run: |
@@ -76,7 +78,6 @@ jobs:
       - run: pnpm test
       - run: pnpm lint
       - run: pnpm --filter @maahibhama/pulsern build
-      - run: pnpm release:verify:cli "${RELEASE_TAG}"
       - name: Pack release tarball and checksum
         run: |
           version="${RELEASE_TAG#cli-v}"
@@ -88,6 +89,19 @@ jobs:
             cd release-cli
             sha256sum "pulsern-$version.tgz" > SHA256SUMS.txt
           )
+      - name: Update Homebrew formula release metadata
+        run: |
+          version="${RELEASE_TAG#cli-v}"
+          checksum="$(awk '{print $1}' release-cli/SHA256SUMS.txt)"
+          sed -i -E \
+            "s|releases/download/cli-v[^/]+/pulsern-[^\"]+\.tgz|releases/download/$RELEASE_TAG/pulsern-$version.tgz|" \
+            Formula/pulsern-cli.rb
+          sed -i -E \
+            "s|^[[:space:]]*sha256 \"[a-f0-9]{64}\"|  sha256 \"$checksum\"|" \
+            Formula/pulsern-cli.rb
+          grep -F "releases/download/$RELEASE_TAG/pulsern-$version.tgz" Formula/pulsern-cli.rb
+          grep -F "sha256 \"$checksum\"" Formula/pulsern-cli.rb
+      - run: pnpm release:verify:cli "${RELEASE_TAG}"
       - name: Verify formula and standalone package
         run: |
           version="${RELEASE_TAG#cli-v}"
@@ -107,6 +121,17 @@ jobs:
             echo "::error::Packed runtime metadata contains a workspace dependency."
             exit 1
           fi
+      - name: Commit Homebrew formula release metadata
+        run: |
+          if git diff --quiet -- Formula/pulsern-cli.rb; then
+            echo "Homebrew formula checksum is already current."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/pulsern-cli.rb
+          git commit -m "chore(cli): update ${RELEASE_TAG} formula checksum"
+          git push origin "HEAD:${{ github.event.repository.default_branch }}"
       - uses: actions/upload-artifact@v4
         with:
           name: pulsern-cli-${{ env.RELEASE_TAG }}
@@ -241,7 +266,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ github.event.repository.default_branch }}
       - name: Audit and install the released formula
         run: |
           brew tap maahibhama/pulsern "$GITHUB_WORKSPACE"
