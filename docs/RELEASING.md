@@ -142,3 +142,32 @@ run and reserve `--skip-checks` for emergencies because the packed-package valid
 Stable tags publish to npm's `latest` channel. Tags containing a prerelease suffix, such as
 `sdk-v0.2.0-beta.1`, publish to `next`. The workflow rejects a tag that does not exactly match the
 SDK package version or a tarball that leaks internal workspace packages.
+
+# CLI releases
+
+The local web debugger is published as the unscoped `pulsern` npm package, a GitHub Release
+tarball, and the `pulsern-cli` Homebrew formula. Prepare all version sources, the formula checksum,
+the release commit, and the `cli-vX.Y.Z` tag with:
+
+```bash
+pnpm release:cli 1.0.4
+```
+
+Preview the complete flow without changing files, commits, tags, or remotes:
+
+```bash
+pnpm release:cli 1.0.4 --dry-run
+```
+
+The release script requires a clean worktree, updates the CLI package/runtime/formula versions,
+builds the npm tarball, records its immutable Homebrew SHA-256, validates the package, runs repository
+checks, and pushes the release tag. Use `--replace-tag` only to recover a failed release before
+either npm or GitHub has published that version.
+
+The workflow builds once, installs the tarball in a clean npm prefix, verifies the committed formula,
+and shares the same artifact between npm and GitHub publishing. GitHub receives
+`pulsern-X.Y.Z.tgz` and `SHA256SUMS.txt`. Stable versions publish to npm's `latest` channel;
+prereleases publish to `next`.
+
+npm Trusted Publishing for `pulsern` must authorize `release-cli.yml` in the `npm` environment.
+The GitHub workflow needs `contents: write` only for creating the versioned CLI Release.

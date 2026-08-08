@@ -72,13 +72,18 @@ function tomlString(value: string): string {
 }
 
 function codexConfig(info: McpInfo): string {
+  const environment = {
+    ...info.env,
+    PULSERN_MCP_CLIENT: 'Codex',
+  };
   return `[mcp_servers.pulsern]
 command = ${tomlString(info.command)}
 args = [${info.args.map(tomlString).join(', ')}]
 
 [mcp_servers.pulsern.env]
-ELECTRON_RUN_AS_NODE = "1"
-PULSERN_MCP_CLIENT = "Codex"`;
+${Object.entries(environment)
+  .map(([key, value]) => `${key} = ${tomlString(value)}`)
+  .join('\n')}`;
 }
 
 export function McpPanel({

@@ -126,6 +126,35 @@ sudo apt install ./PulseRN-<version>-linux-x64.deb
 See [desktop installation](docs/INSTALLATION.md) for verification, upgrades, and uninstall
 instructions.
 
+## Run in a browser
+
+React Native developers with Node.js 22.5 or newer can run the same debugger UI without installing
+the Electron application. Run the published CLI directly:
+
+```bash
+npx pulsern
+```
+
+On macOS, Homebrew can install both a compatible Node runtime and the PulseRN CLI:
+
+```bash
+brew install maahibhama/pulsern/pulsern-cli
+pulsern
+```
+
+Alternatively, install Node first and continue using `npx`:
+
+```bash
+brew install node
+npx pulsern
+```
+
+The command opens `http://localhost:3000`, receives SDK connections on port `9090`, stores history
+locally, and runs until you press `Ctrl+C`. Use `npx pulsern --help` for custom ports, Metro host
+configuration, a custom data directory, or headless startup. See the
+[local web debugger guide](docs/WEB-CLI.md) for emulator, physical-device, security, and persistence
+details.
+
 Maintainers can prepare and publish a complete version-tag release with:
 
 ```bash
@@ -138,6 +167,14 @@ pnpm release:desktop 0.1.0
 pnpm install
 pnpm dev:desktop
 ```
+
+Contributors can build and run the browser edition from the checked-out source:
+
+```bash
+pnpm dev:web
+```
+
+`pnpm dev:web` is a development command, not an end-user installation method.
 
 In a second terminal:
 

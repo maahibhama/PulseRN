@@ -6,7 +6,12 @@ export default defineConfig({
   main: {
     plugins: [
       externalizeDepsPlugin({
-        exclude: ['@pulse-rn/mcp', '@pulse-rn/protocol', '@pulse-rn/shared'],
+        exclude: [
+          '@pulse-rn/api-contract',
+          '@pulse-rn/mcp',
+          '@pulse-rn/protocol',
+          '@pulse-rn/shared',
+        ],
       }),
     ],
   },

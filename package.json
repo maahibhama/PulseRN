@@ -12,6 +12,8 @@
     "build": "turbo run build",
     "dev": "turbo run dev --parallel",
     "dev:desktop": "pnpm --filter @pulse-rn/desktop dev",
+    "dev:web": "pnpm --filter pulsern build && node packages/cli/dist/server.js",
+    "build:web": "pnpm --filter pulsern build",
     "dist:desktop": "pnpm --filter @pulse-rn/desktop run dist",
     "dist:linux": "pnpm --filter @pulse-rn/desktop run dist:linux",
     "dist:mac": "pnpm --filter @pulse-rn/desktop run dist:mac",
@@ -26,9 +28,11 @@
     "pack:desktop": "pnpm --filter @pulse-rn/desktop run pack",
     "pack:sdk": "pnpm --filter @pulse-rn/sdk pack",
     "release:desktop": "node scripts/release.mjs",
+    "release:cli": "node scripts/release-cli.mjs",
     "release:sdk": "node scripts/release-sdk.mjs",
     "release:verify": "node scripts/verify-release-version.mjs",
     "release:verify:sdk": "node scripts/verify-sdk-package.mjs",
+    "release:verify:cli": "node scripts/verify-cli-package.mjs",
     "release:metadata": "node scripts/generate-release-metadata.mjs"
   },
   "devDependencies": {
