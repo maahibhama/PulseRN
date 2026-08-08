@@ -93,7 +93,7 @@ jobs:
         run: |
           version="${GITHUB_REF_NAME#cli-v}"
           dist_tag=latest
-          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+          if [[ "$version" == *-* ]]; then
             dist_tag=next
           fi
           test -f "release-cli/pulsern-$version.tgz"
@@ -118,7 +118,7 @@ jobs:
         run: |
           version="${GITHUB_REF_NAME#cli-v}"
           prerelease=()
-          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+          if [[ "$version" == *-* ]]; then
             prerelease=(--prerelease)
           fi
           cat > release-notes.md <<EOF
