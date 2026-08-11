@@ -143,6 +143,8 @@ export function createWebPulseRNClient(): PulseRNDesktopApi {
       }
       return call('requestStorage', [input]);
     },
+    requestNotification: (input) => call('requestNotification', [input]),
+    sendRemoteNotification: (input) => call('sendRemoteNotification', [input]),
     listStorageAudit: () => call('listStorageAudit'),
     createStorageSnapshot: (input) => call('createStorageSnapshot', [input]),
     listStorageSnapshots: (providerId, key) => call('listStorageSnapshots', [providerId, key]),

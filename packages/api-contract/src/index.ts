@@ -7,6 +7,8 @@ import type {
   SourceSearchResult,
   StorageOperation,
   StorageResult,
+  NotificationInput,
+  NotificationResult,
 } from '@pulse-rn/protocol';
 
 export interface ConnectedDevice {
@@ -19,7 +21,32 @@ export interface ConnectedDevice {
   remoteAddress?: string;
   connectedAt: number;
   device: DeviceInfo;
+  capabilities?: string[];
   health?: ClientHealth & { receivedAt: number };
+}
+
+export interface RemoteNotificationRequest {
+  provider: 'apns' | 'fcm';
+  token: string;
+  payload: Record<string, unknown>;
+  credentials:
+    | {
+        provider: 'apns';
+        key: string;
+        keyId: string;
+        teamId: string;
+        topic: string;
+        environment: 'sandbox' | 'production';
+      }
+    | { provider: 'fcm'; serviceAccountJson: string; projectId?: string };
+}
+export interface RemoteNotificationResult {
+  success: boolean;
+  provider: 'apns' | 'fcm';
+  status: number;
+  durationMs: number;
+  messageId?: string;
+  error?: { code: string; message: string };
 }
 
 export interface DesktopSnapshot {
@@ -561,6 +588,12 @@ export interface PulseRNDesktopApi {
   runDatabaseMaintenance(): Promise<DatabaseMaintenanceReport>;
   clearStoredEvents(): Promise<DatabaseMaintenanceReport>;
   requestStorage(input: StorageRequestInput): Promise<StorageResult>;
+  requestNotification(input: {
+    connectionId: string;
+    operation: 'capabilities' | 'present';
+    notification?: NotificationInput;
+  }): Promise<NotificationResult>;
+  sendRemoteNotification(input: RemoteNotificationRequest): Promise<RemoteNotificationResult>;
   listStorageAudit(): Promise<StorageAuditRecord[]>;
   createStorageSnapshot(input: {
     connectionId: string;

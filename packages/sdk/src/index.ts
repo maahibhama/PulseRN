@@ -1,5 +1,11 @@
 import { DevToolClient } from './client.js';
-import type { CaptureErrorOptions, DevToolConfig, TrackEventInput } from './types.js';
+import type {
+  CaptureErrorOptions,
+  DevToolConfig,
+  NotificationAdapter,
+  NotificationLifecycleEvent,
+  TrackEventInput,
+} from './types.js';
 import type { PulseRNIdentityStorage, PulseRNSessionOptions } from './identity.js';
 import { getOrCreatePulseRNIdentity } from './identity.js';
 export { getOrCreatePulseRNDeviceId, getOrCreatePulseRNIdentity } from './identity.js';
@@ -35,6 +41,12 @@ export const ReactNativeDevTool = {
   },
   captureError(error: unknown, options?: CaptureErrorOptions): void {
     activeClient?.captureError(error, options);
+  },
+  registerNotificationAdapter(adapter: NotificationAdapter): () => void {
+    return activeClient?.registerNotificationAdapter(adapter) ?? (() => undefined);
+  },
+  reportNotificationEvent(event: NotificationLifecycleEvent): void {
+    activeClient?.reportNotificationEvent(event);
   },
   get client(): DevToolClient | undefined {
     return activeClient;
@@ -115,6 +127,8 @@ export type {
   DroppedEventReason,
   PulseRNEnvironment,
   TrackEventInput,
+  NotificationAdapter,
+  NotificationLifecycleEvent,
   WebSocketFactory,
   WebSocketLike,
 } from './types.js';

@@ -16,6 +16,7 @@ export const eventCategorySchema = z.enum([
   'error',
   'device',
   'interaction',
+  'notification',
   'system',
 ]);
 export type DevToolEventCategory = z.infer<typeof eventCategorySchema>;
@@ -449,6 +450,16 @@ export const errorEventPayloadSchema = z.object({
 export type ErrorContextEvent = z.infer<typeof errorContextEventSchema>;
 export type ErrorEventPayload = z.infer<typeof errorEventPayloadSchema>;
 
+export const notificationPayloadSchema = z.object({
+  requestId: identifier.optional(),
+  stage: z.enum(['permission', 'received', 'presented', 'opened', 'media', 'failed']),
+  permission: z.enum(['unknown', 'denied', 'provisional', 'authorized']).optional(),
+  success: z.boolean().optional(),
+  message: z.string().max(10_000).optional(),
+  metadata: jsonValue.optional(),
+});
+export type NotificationPayload = z.infer<typeof notificationPayloadSchema>;
+
 export const eventEnvelopeSchema = z
   .object({
     id: identifier,
@@ -484,9 +495,11 @@ export const eventEnvelopeSchema = z
                       ? workletEventPayloadSchema
                       : event.category === 'storage'
                         ? storageEventPayloadSchema
-                        : event.category === 'error'
-                          ? errorEventPayloadSchema
-                          : undefined;
+                        : event.category === 'notification'
+                          ? notificationPayloadSchema
+                          : event.category === 'error'
+                            ? errorEventPayloadSchema
+                            : undefined;
     if (payloadSchema && !payloadSchema.safeParse(event.payload).success) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -631,6 +644,7 @@ export const clientHelloSchema = z.object({
   deviceId: identifier,
   appId: identifier,
   device: deviceInfoSchema,
+  capabilities: z.array(identifier).max(100).optional(),
   authToken: z.string().max(1024).optional(),
   pairingCode: z.string().max(64).optional(),
   reconnectToken: z.string().max(1024).optional(),
@@ -728,6 +742,52 @@ export const storageResultSchema = z.object({
 });
 export type StorageResult = z.infer<typeof storageResultSchema>;
 
+export const notificationInputSchema = z.object({
+  title: z.string().min(1).max(1_024),
+  body: z.string().max(10_000),
+  subtitle: z.string().max(1_024).optional(),
+  sound: z.string().max(256).optional(),
+  badge: z.number().int().nonnegative().optional(),
+  deepLink: z.string().max(10_000).optional(),
+  mediaUrl: z
+    .string()
+    .url()
+    .max(10_000)
+    .refine((value) => value.startsWith('https://'), 'Media URL must use HTTPS')
+    .optional(),
+  data: jsonValue.optional(),
+});
+export type NotificationInput = z.infer<typeof notificationInputSchema>;
+
+export const notificationCapabilitiesSchema = z.object({
+  platform: z.enum(['ios', 'android', 'unknown']),
+  permission: z.enum(['unknown', 'denied', 'provisional', 'authorized']),
+  localNotifications: z.boolean(),
+  richMedia: z.boolean(),
+  notificationServiceExtension: z.boolean().optional(),
+  pushToken: z.string().max(16_384).optional(),
+  tokenType: z.enum(['apns', 'fcm']).optional(),
+});
+export type NotificationCapabilities = z.infer<typeof notificationCapabilitiesSchema>;
+
+export const notificationCommandSchema = z.object({
+  kind: z.literal('notification-command'),
+  requestId: identifier,
+  operation: z.enum(['capabilities', 'present']),
+  notification: notificationInputSchema.optional(),
+});
+export type NotificationCommand = z.infer<typeof notificationCommandSchema>;
+
+export const notificationResultSchema = z.object({
+  kind: z.literal('notification-result'),
+  requestId: identifier,
+  operation: z.enum(['capabilities', 'present']),
+  success: z.boolean(),
+  capabilities: notificationCapabilitiesSchema.optional(),
+  error: z.object({ code: identifier, message: z.string().max(10_000) }).optional(),
+});
+export type NotificationResult = z.infer<typeof notificationResultSchema>;
+
 export const eventBatchSchema = z.object({
   kind: z.literal('event-batch'),
   events: z.array(eventEnvelopeSchema).min(1).max(500),
@@ -737,11 +797,13 @@ export type EventBatch = z.infer<typeof eventBatchSchema>;
 export const serverMessageSchema = z.discriminatedUnion('kind', [
   serverHelloSchema,
   storageCommandSchema,
+  notificationCommandSchema,
 ]);
 export const clientMessageSchema = z.discriminatedUnion('kind', [
   clientHelloSchema,
   eventBatchSchema,
   storageResultSchema,
+  notificationResultSchema,
   clientHealthSchema,
 ]);
 

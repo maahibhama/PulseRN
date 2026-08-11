@@ -1963,6 +1963,12 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
+  - RNNotifee (9.1.8):
+    - React-Core
+    - RNNotifeeCore
+  - RNNotifeeCore (9.1.8):
+    - RNNotifeeCore/NotifeeCore (= 9.1.8)
+  - RNNotifeeCore/NotifeeCore (9.1.8)
   - RNReanimated (4.5.3):
     - hermes-engine
     - RCTRequired
@@ -2215,6 +2221,8 @@ DEPENDENCIES:
   - ReactCommon/turbomodule/core (from `../node_modules/react-native/ReactCommon`)
   - ReactNativeDependencies (from `../node_modules/react-native/third-party-podspecs/ReactNativeDependencies.podspec`)
   - "RNCAsyncStorage (from `../node_modules/@react-native-async-storage/async-storage`)"
+  - "RNNotifee (from `../node_modules/@notifee/react-native`)"
+  - "RNNotifeeCore (from `../node_modules/@notifee/react-native/RNNotifeeCore.podspec`)"
   - RNReanimated (from `../node_modules/react-native-reanimated`)
   - RNWorklets (from `../node_modules/react-native-worklets`)
   - Yoga (from `../node_modules/react-native/ReactCommon/yoga`)
@@ -2381,6 +2389,10 @@ EXTERNAL SOURCES:
     :podspec: "../node_modules/react-native/third-party-podspecs/ReactNativeDependencies.podspec"
   RNCAsyncStorage:
     :path: "../node_modules/@react-native-async-storage/async-storage"
+  RNNotifee:
+    :path: "../node_modules/@notifee/react-native"
+  RNNotifeeCore:
+    :path: "../node_modules/@notifee/react-native/RNNotifeeCore.podspec"
   RNReanimated:
     :path: "../node_modules/react-native-reanimated"
   RNWorklets:
@@ -2468,10 +2480,12 @@ SPEC CHECKSUMS:
   ReactCommon: 9002f006f571256348994183f7d4387aa7cf84e8
   ReactNativeDependencies: 2bd6854ade79bf1b60586d1ab7813a389df1b6bf
   RNCAsyncStorage: 2ad919e88b8bc2cd80e8697ce66d04d006743283
+  RNNotifee: 223aca9580ebc74fb1d16963bebfe702f39a3d1f
+  RNNotifeeCore: 908097edf7d7dd54b64821ba1a68012f7a2a4cd5
   RNReanimated: 845db857d35d0d4107f1b56d6342f9aea72c78ef
   RNWorklets: 0d054886517869a2b186c48f9d0041c2abdecc9c
   Yoga: 9891cfb1c680f64de9c41b09e7453dea33454d2b
 
-PODFILE CHECKSUM: 7b7d56f3337acc523bd2499a6bccaef9a73f01d6
+PODFILE CHECKSUM: 0cc5e0d214fca5e255d6c43276d680a3d14f4a6b
 
 COCOAPODS: 1.16.2

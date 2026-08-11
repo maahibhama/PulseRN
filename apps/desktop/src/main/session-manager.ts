@@ -14,6 +14,7 @@ export interface ConnectedDevice {
   remoteAddress?: string;
   connectedAt: number;
   device: DeviceInfo;
+  capabilities?: string[];
   health?: ConnectionHealth;
 }
 

@@ -4,7 +4,11 @@ import { createHash, randomUUID } from 'node:crypto';
 import { networkInterfaces } from 'node:os';
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme } from 'electron';
 import electronUpdater from 'electron-updater';
-import { eventCategorySchema, storageOperationSchema } from '@pulse-rn/protocol';
+import {
+  eventCategorySchema,
+  notificationInputSchema,
+  storageOperationSchema,
+} from '@pulse-rn/protocol';
 import { z } from 'zod';
 import { EventDatabase } from './database.js';
 import { SessionManager } from './session-manager.js';
@@ -28,6 +32,7 @@ import { AppearanceStore, themeDefinitionSchema } from './appearance.js';
 import { NativeLogManager } from './native-log-manager.js';
 import { AnalyticsClient } from './analytics.js';
 import { createDemoSession } from './demo-session.js';
+import { sendRemoteNotification } from './push-service.js';
 
 const SNAPSHOT_CHANNEL = 'pulse-rn:snapshot';
 const DEVICES_CHANNEL = 'pulse-rn:devices';
@@ -41,6 +46,7 @@ const CONNECTION_CHANNEL = 'pulse-rn:connection';
 const UPDATE_CHANNEL = 'pulse-rn:update';
 const MCP_CHANNEL = 'pulse-rn:mcp';
 const NATIVE_LOGS_CHANNEL = 'pulse-rn:native-logs';
+const PUSH_CHANNEL = 'pulse-rn:push';
 const DARK_APP_ICON = join(__dirname, '../../resources/pulse-rn-app-icon-dark.png');
 const LIGHT_APP_ICON = join(__dirname, '../../resources/pulse-rn-app-icon-light.png');
 const e2eUserDataDirectory = process.env['PULSE_RN_E2E_USER_DATA_DIR'];
@@ -789,6 +795,45 @@ app.whenReady().then(async () => {
       throw error;
     }
   });
+  ipcMain.handle(PUSH_CHANNEL, async (_event, value: unknown) => {
+    const input = z
+      .discriminatedUnion('operation', [
+        z.object({
+          operation: z.literal('local'),
+          connectionId: z.string().min(1).max(256),
+          action: z.enum(['capabilities', 'present']),
+          notification: notificationInputSchema.optional(),
+        }),
+        z.object({
+          operation: z.literal('remote'),
+          request: z.object({
+            provider: z.enum(['apns', 'fcm']),
+            token: z.string().min(1).max(16_384),
+            payload: z.record(z.unknown()),
+            credentials: z.union([
+              z.object({
+                provider: z.literal('apns'),
+                key: z.string().min(1).max(100_000),
+                keyId: z.string().min(1).max(256),
+                teamId: z.string().min(1).max(256),
+                topic: z.string().min(1).max(1_024),
+                environment: z.enum(['sandbox', 'production']),
+              }),
+              z.object({
+                provider: z.literal('fcm'),
+                serviceAccountJson: z.string().min(1).max(1_000_000),
+                projectId: z.string().max(1_024).optional(),
+              }),
+            ]),
+          }),
+        }),
+      ])
+      .parse(value);
+    if (input.operation === 'remote') return sendRemoteNotification(input.request);
+    const activeServer = server;
+    if (!activeServer) throw new Error('PulseRN server is not ready.');
+    return activeServer.requestNotification(input.connectionId, input.action, input.notification);
+  });
   ipcMain.handle(STORAGE_LOCAL_CHANNEL, async (_event, value: unknown) => {
     const input = storageLocalRequestSchema.parse(value);
     if (!database) throw new Error('PulseRN database is not ready.');
@@ -1385,6 +1430,7 @@ app.on('before-quit', (event) => {
     ipcMain.removeHandler(SNAPSHOT_CHANNEL);
     ipcMain.removeHandler(EVENTS_CHANNEL);
     ipcMain.removeHandler(STORAGE_CHANNEL);
+    ipcMain.removeHandler(PUSH_CHANNEL);
     ipcMain.removeHandler(SETTINGS_CHANNEL);
     ipcMain.removeHandler(APPEARANCE_CHANNEL);
     ipcMain.removeHandler(DEBUGGER_CHANNEL);

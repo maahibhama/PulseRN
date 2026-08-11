@@ -12,6 +12,7 @@ const CATEGORIES: DevToolEventCategory[] = [
   'animation',
   'worklet',
   'storage',
+  'notification',
   'error',
   'device',
   'interaction',

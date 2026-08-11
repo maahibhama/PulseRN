@@ -100,6 +100,36 @@ PulseRN.
 Category enablement, deterministic sampling, payload/queue/network budgets, redaction, diagnostic
 callbacks, and dropped-event callbacks are all typed root APIs.
 
+## Push Lab adapter
+
+Push Lab stays independent of notification libraries. Register a development-only adapter after
+creating the client:
+
+```ts
+client.registerNotificationAdapter({
+  async getCapabilities() {
+    return {
+      platform: Platform.OS,
+      permission: 'authorized', // map this from your notification library
+      localNotifications: true,
+      richMedia: true,
+      pushToken: await getNativePushToken(),
+      tokenType: Platform.OS === 'ios' ? 'apns' : 'fcm',
+      notificationServiceExtension: Platform.OS === 'ios',
+    };
+  },
+  async present(notification) {
+    await yourNotificationLibrary.presentLocalNotification(notification);
+  },
+});
+```
+
+The adapter should map `title`, `body`, `subtitle`, `sound`, `badge`, `deepLink`, `mediaUrl`, and
+`data` to Expo Notifications, Notifee, or an application-owned native module. iOS remote rich media
+still requires the app's notification service extension; PulseRN does not install one.
+Call `client.reportNotificationEvent(...)` from the library's receive, open, permission, and media
+callbacks to correlate the lifecycle in Push Lab and the Timeline.
+
 See the repository's [SDK integration guide](https://github.com/maahibhama/PulseRN/blob/main/docs/SDK-INTEGRATION.md)
 for Redux, navigation, AsyncStorage, MMKV, performance, and error-capture examples.
 

@@ -1,4 +1,24 @@
-import type { DeviceInfo, DevToolEventCategory, JsonValue } from './protocol-types.js';
+import type {
+  DeviceInfo,
+  DevToolEventCategory,
+  JsonValue,
+  NotificationCapabilities,
+  NotificationInput,
+} from './protocol-types.js';
+
+export interface NotificationAdapter {
+  getCapabilities(): NotificationCapabilities | Promise<NotificationCapabilities>;
+  present(notification: NotificationInput): void | Promise<void>;
+}
+
+export interface NotificationLifecycleEvent extends Record<string, JsonValue | undefined> {
+  requestId?: string;
+  stage: 'permission' | 'received' | 'presented' | 'opened' | 'media' | 'failed';
+  permission?: 'unknown' | 'denied' | 'provisional' | 'authorized';
+  success?: boolean;
+  message?: string;
+  metadata?: JsonValue;
+}
 
 export type PulseRNEnvironment = 'development' | 'test' | 'production';
 export type ClientConnectionState =

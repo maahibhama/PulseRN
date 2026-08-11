@@ -22,6 +22,7 @@ describe('single-entry SDK API', () => {
     expect(getActiveRoute).toBeTypeOf('function');
     expect(getOrCreatePulseRNDeviceId).toBeTypeOf('function');
     expect(ReactNativeDevTool.configure).toBeTypeOf('function');
+    expect(ReactNativeDevTool.registerNotificationAdapter).toBeTypeOf('function');
   });
 
   it('creates an unconnected client without native integration dependencies', () => {

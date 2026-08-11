@@ -4921,3 +4921,206 @@ body {
 .native-log-entry.fatal strong {
   color: var(--danger);
 }
+.push-lab {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-column: 2 / -1;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  background: var(--background);
+}
+.push-lab > .panel-header {
+  height: auto;
+  min-height: 72px;
+  padding: 12px 18px;
+  background: var(--panel);
+}
+.push-lab > .panel-header h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 18px;
+  line-height: 1.25;
+}
+.push-lab > .panel-header p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+.push-grid {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-columns: minmax(430px, 2fr) minmax(240px, 1fr);
+  gap: 12px;
+  padding: 12px;
+  overflow: hidden;
+}
+.push-form,
+.push-attempts {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  scrollbar-gutter: stable;
+}
+.push-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+}
+.push-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+.push-form input,
+.push-form textarea,
+.push-form select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  outline: none;
+  background: var(--code-background);
+  color: var(--text);
+  padding: 7px 9px;
+  font: 12px/1.4 var(--font-ui);
+}
+.push-form input,
+.push-form select {
+  height: 32px;
+}
+.push-form textarea {
+  min-height: 66px;
+  resize: vertical;
+}
+.push-form .code {
+  font-family: var(--font-code);
+}
+.push-form :where(input, textarea, select):focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.push-form button {
+  min-height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-soft);
+  color: var(--text);
+  padding: 6px 10px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.push-form button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  color: var(--accent);
+}
+.push-form button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+.push-form .segmented {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.push-form .segmented button.active {
+  border-color: var(--accent);
+  background: var(--selection);
+  color: var(--accent);
+}
+.push-form button.primary {
+  border-color: transparent;
+  background: var(--accent-gradient);
+  color: #fff;
+  font-weight: 700;
+}
+.push-form button.primary:hover:not(:disabled) {
+  color: #fff;
+  filter: brightness(1.08);
+}
+.push-form label > button {
+  align-self: flex-start;
+  margin-top: 2px;
+}
+.push-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+.payload-editor {
+  min-height: 220px;
+}
+.push-capabilities {
+  margin: 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-soft);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.push-form > .muted,
+.push-form > .warning,
+.push-form > [role='status'] {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.push-attempts {
+  padding: 14px;
+}
+.push-attempts h3 {
+  margin: 0 0 12px;
+  color: var(--text);
+  font-size: 13px;
+}
+.push-attempts > .muted {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+.push-attempt {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+}
+.push-attempt time {
+  color: var(--muted);
+  font-family: var(--font-code);
+}
+.push-attempt strong {
+  color: var(--accent);
+  text-transform: capitalize;
+}
+.push-attempt span {
+  grid-column: 1 / -1;
+  color: var(--text);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.warning {
+  color: var(--warning, #d9a441);
+}
+@media (max-width: 1050px) {
+  .push-grid {
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+  }
+  .push-form,
+  .push-attempts {
+    overflow: visible;
+  }
+}

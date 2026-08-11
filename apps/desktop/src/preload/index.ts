@@ -7,6 +7,8 @@ import {
   eventEnvelopeSchema,
   storageOperationSchema,
   storageResultSchema,
+  notificationInputSchema,
+  notificationResultSchema,
 } from '@pulse-rn/protocol';
 import type { AppSettings, DebuggerState, McpInfo, PulseRNDesktopApi } from './api.js';
 
@@ -22,6 +24,7 @@ const CONNECTION_CHANNEL = 'pulse-rn:connection';
 const UPDATE_CHANNEL = 'pulse-rn:update';
 const MCP_CHANNEL = 'pulse-rn:mcp';
 const NATIVE_LOGS_CHANNEL = 'pulse-rn:native-logs';
+const PUSH_CHANNEL = 'pulse-rn:push';
 const connectedDeviceSchema = z.object({
   connectionId: z.string(),
   deviceId: z.string(),
@@ -32,6 +35,7 @@ const connectedDeviceSchema = z.object({
   remoteAddress: z.string().optional(),
   connectedAt: z.number().finite().nonnegative(),
   device: deviceInfoSchema,
+  capabilities: z.array(z.string()).max(100).optional(),
   health: clientHealthSchema
     .extend({
       receivedAt: z.number().finite().nonnegative(),
@@ -749,6 +753,35 @@ const api: PulseRNDesktopApi = {
     const request = storageRequestSchema.parse(input);
     const value: unknown = await ipcRenderer.invoke(STORAGE_CHANNEL, request);
     return storageResultSchema.parse(value);
+  },
+  async requestNotification(input) {
+    const request = z
+      .object({
+        connectionId: z.string().min(1).max(256),
+        operation: z.enum(['capabilities', 'present']),
+        notification: notificationInputSchema.optional(),
+      })
+      .parse(input);
+    const value: unknown = await ipcRenderer.invoke(PUSH_CHANNEL, {
+      operation: 'local',
+      connectionId: request.connectionId,
+      action: request.operation,
+      notification: request.notification,
+    });
+    return notificationResultSchema.parse(value);
+  },
+  async sendRemoteNotification(request) {
+    const value: unknown = await ipcRenderer.invoke(PUSH_CHANNEL, { operation: 'remote', request });
+    return z
+      .object({
+        success: z.boolean(),
+        provider: z.enum(['apns', 'fcm']),
+        status: z.number(),
+        durationMs: z.number(),
+        messageId: z.string().optional(),
+        error: z.object({ code: z.string(), message: z.string() }).optional(),
+      })
+      .parse(value);
   },
   async listStorageAudit() {
     const value: unknown = await ipcRenderer.invoke(STORAGE_LOCAL_CHANNEL, {

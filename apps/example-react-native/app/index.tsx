@@ -1,4 +1,5 @@
 import Constants from 'expo-constants';
+import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
@@ -25,6 +26,15 @@ import { createMMKV } from 'react-native-mmkv';
 import { applyMiddleware, createStore } from 'redux';
 import { navigationTracker } from '../navigation';
 import { runLineDebuggerDemo, runUnhandledDebuggerDemo } from '../debugger-demo';
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
 
 // Android Emulator reaches the host through 10.0.2.2. Set EXPO_PUBLIC_PULSE_RN_HOST
 // to the development machine's LAN address for physical devices.
@@ -168,9 +178,17 @@ export default function HomeScreen() {
         animation: true,
         worklet: true,
         storage: true,
+        notification: true,
         error: true,
       },
-      sampling: { performance: 1, animation: 1, worklet: 1, console: 1, network: 1 },
+      sampling: {
+        performance: 1,
+        animation: 1,
+        worklet: 1,
+        console: 1,
+        network: 1,
+        notification: 1,
+      },
     });
     const unregisterStorage = client.registerStorageProvider(
       createAsyncStorageProvider(AsyncStorage),
@@ -180,6 +198,85 @@ export default function HomeScreen() {
         id: 'mmkv-example',
         name: 'MMKV · example',
       }),
+    );
+    const unregisterNotifications = client.registerNotificationAdapter({
+      async getCapabilities() {
+        let permissions = await Notifications.getPermissionsAsync();
+        if (permissions.status === 'undetermined') {
+          permissions = await Notifications.requestPermissionsAsync();
+        }
+        let pushToken: string | undefined;
+        let tokenType: 'apns' | 'fcm' | undefined;
+        try {
+          const token = await Notifications.getDevicePushTokenAsync();
+          pushToken = String(token.data);
+          tokenType = Platform.OS === 'ios' ? 'apns' : 'fcm';
+        } catch {
+          // Simulators and native projects without APNs/FCM configuration may not have a token.
+        }
+        const permission =
+          permissions.status === 'granted'
+            ? 'authorized'
+            : permissions.status === 'denied'
+              ? 'denied'
+              : 'unknown';
+        client.reportNotificationEvent({ stage: 'permission', permission });
+        return {
+          platform: Platform.OS === 'ios' || Platform.OS === 'android' ? Platform.OS : 'unknown',
+          permission,
+          localNotifications: permissions.status === 'granted',
+          richMedia: true,
+          pushToken,
+          tokenType,
+          notificationServiceExtension: false,
+        };
+      },
+      async present(notification) {
+        const customData =
+          notification.data &&
+          typeof notification.data === 'object' &&
+          !Array.isArray(notification.data)
+            ? notification.data
+            : {};
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: notification.title,
+            body: notification.body,
+            subtitle: notification.subtitle,
+            sound: notification.sound ?? 'default',
+            badge: notification.badge,
+            data: {
+              ...customData,
+              ...(notification.deepLink ? { deepLink: notification.deepLink } : {}),
+              ...(notification.mediaUrl ? { mediaUrl: notification.mediaUrl } : {}),
+            },
+            ...(Platform.OS === 'ios' && notification.mediaUrl
+              ? {
+                  attachments: [
+                    { identifier: 'pulse-rn-media', url: notification.mediaUrl, type: null },
+                  ],
+                }
+              : {}),
+          },
+          trigger: null,
+        });
+      },
+    });
+    const receivedSubscription = Notifications.addNotificationReceivedListener((notification) => {
+      client.reportNotificationEvent({
+        stage: 'received',
+        success: true,
+        metadata: { identifier: notification.request.identifier },
+      });
+    });
+    const responseSubscription = Notifications.addNotificationResponseReceivedListener(
+      (response) => {
+        client.reportNotificationEvent({
+          stage: 'opened',
+          success: true,
+          metadata: { identifier: response.notification.request.identifier },
+        });
+      },
     );
     client.connect();
     void AsyncStorage.multiSet([
@@ -223,6 +320,9 @@ export default function HomeScreen() {
       ReactNativeDevTool.performance.endScreen('Home');
       unregisterStorage();
       unregisterMMKV();
+      unregisterNotifications();
+      receivedSubscription.remove();
+      responseSubscription.remove();
       unsubscribe();
       client.disconnect();
     };

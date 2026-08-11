@@ -1,4 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import notifee, {
+  AndroidImportance,
+  AndroidStyle,
+  AuthorizationStatus,
+  EventType,
+} from '@notifee/react-native';
 import {
   createAnimationWorkletProfiler,
   createDevToolMiddleware,
@@ -24,6 +30,7 @@ import {
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { createMMKV } from 'react-native-mmkv';
@@ -42,6 +49,8 @@ const pairingCode: string | undefined = undefined;
 const reconnectToken: string | undefined = undefined;
 // Set to true when PulseRN desktop TLS is enabled and this device trusts its certificate.
 const secure = false;
+const PUSH_TOKEN_STORAGE_KEY = 'pulse-rn:push-token';
+const NOTIFICATION_PERMISSION_STORAGE_KEY = 'pulse-rn:notification-permission';
 const mmkv = createMMKV({ id: 'pulse-rn-cli-example' });
 const animationProfiler = createAnimationWorkletProfiler(ReactNativeDevTool, {
   isDevelopment: __DEV__,
@@ -104,6 +113,33 @@ const reduxMiddleware = createDevToolMiddleware({
   redactedFields: ['token'],
 });
 const demoStore = createStore(demoReducer, applyMiddleware(reduxMiddleware));
+
+export async function savePushToken(token: string | undefined): Promise<void> {
+  const normalizedToken = token?.trim();
+  if (normalizedToken) {
+    await AsyncStorage.setItem(PUSH_TOKEN_STORAGE_KEY, normalizedToken);
+  } else {
+    await AsyncStorage.removeItem(PUSH_TOKEN_STORAGE_KEY);
+  }
+}
+
+function notificationPermission(
+  authorizationStatus: AuthorizationStatus,
+): 'unknown' | 'denied' | 'provisional' | 'authorized' {
+  return authorizationStatus === AuthorizationStatus.AUTHORIZED
+    ? 'authorized'
+    : authorizationStatus === AuthorizationStatus.PROVISIONAL
+      ? 'provisional'
+      : authorizationStatus === AuthorizationStatus.DENIED
+        ? 'denied'
+        : 'unknown';
+}
+
+async function saveNotificationPermission(
+  permission: ReturnType<typeof notificationPermission>,
+): Promise<void> {
+  await AsyncStorage.setItem(NOTIFICATION_PERMISSION_STORAGE_KEY, permission);
+}
 
 type Screen = 'home' | 'details';
 
@@ -172,6 +208,7 @@ function App() {
         animation: true,
         worklet: true,
         storage: true,
+        notification: true,
         error: true,
       },
       sampling: {
@@ -180,6 +217,7 @@ function App() {
         worklet: 1,
         console: 1,
         network: 1,
+        notification: 1,
       },
     });
     const unregisterAsyncStorage = client.registerStorageProvider(
@@ -191,6 +229,122 @@ function App() {
         name: 'MMKV · CLI example',
       }),
     );
+    const unregisterNotifications = client.registerNotificationAdapter({
+      async getCapabilities() {
+        const settings = await notifee.requestPermission();
+        const pushToken =
+          (await AsyncStorage.getItem(PUSH_TOKEN_STORAGE_KEY)) ?? undefined;
+        const permission = notificationPermission(settings.authorizationStatus);
+        await saveNotificationPermission(permission);
+        client.reportNotificationEvent({ stage: 'permission', permission });
+        return {
+          platform:
+            Platform.OS === 'ios' || Platform.OS === 'android'
+              ? Platform.OS
+              : 'unknown',
+          permission,
+          localNotifications:
+            settings.authorizationStatus === AuthorizationStatus.AUTHORIZED ||
+            settings.authorizationStatus === AuthorizationStatus.PROVISIONAL,
+          richMedia: true,
+          pushToken,
+          tokenType:
+            pushToken && (Platform.OS === 'ios' || Platform.OS === 'android')
+              ? Platform.OS === 'ios'
+                ? 'apns'
+                : 'fcm'
+              : undefined,
+          notificationServiceExtension: Platform.OS === 'ios',
+        };
+      },
+      async present(notification) {
+        const channelId =
+          Platform.OS === 'android'
+            ? await notifee.createChannel({
+                id: 'pulse-rn-tests',
+                name: 'PulseRN Tests',
+                importance: AndroidImportance.HIGH,
+                sound: 'default',
+              })
+            : undefined;
+        const customData =
+          notification.data &&
+          typeof notification.data === 'object' &&
+          !Array.isArray(notification.data)
+            ? Object.fromEntries(
+                Object.entries(notification.data).map(([key, value]) => [
+                  key,
+                  typeof value === 'string' ? value : JSON.stringify(value),
+                ]),
+              )
+            : {};
+        await notifee.displayNotification({
+          title: notification.title,
+          subtitle: notification.subtitle,
+          body: notification.body,
+          data: {
+            ...customData,
+            ...(notification.deepLink
+              ? { deepLink: notification.deepLink }
+              : {}),
+            ...(notification.mediaUrl
+              ? { mediaUrl: notification.mediaUrl }
+              : {}),
+          },
+          android: channelId
+            ? {
+                channelId,
+                pressAction: { id: 'default' },
+                ...(notification.mediaUrl
+                  ? {
+                      style: {
+                        type: AndroidStyle.BIGPICTURE,
+                        picture: notification.mediaUrl,
+                      },
+                    }
+                  : {}),
+              }
+            : undefined,
+          ios: {
+            sound: notification.sound ?? 'default',
+            badgeCount: notification.badge,
+            ...(notification.mediaUrl
+              ? {
+                  attachments: [
+                    { id: 'pulse-rn-media', url: notification.mediaUrl },
+                  ],
+                }
+              : {}),
+          },
+        });
+      },
+    });
+    const unsubscribeNotificationEvents = notifee.onForegroundEvent(
+      ({ type, detail }) => {
+        if (type === EventType.DELIVERED) {
+          client.reportNotificationEvent({
+            stage: 'received',
+            success: true,
+            metadata: { id: detail.notification?.id ?? 'unknown' },
+          });
+        } else if (
+          type === EventType.PRESS ||
+          type === EventType.ACTION_PRESS
+        ) {
+          client.reportNotificationEvent({
+            stage: 'opened',
+            success: true,
+            metadata: { id: detail.notification?.id ?? 'unknown' },
+          });
+        }
+      },
+    );
+
+    void notifee.requestPermission().then(settings => {
+      const permission = notificationPermission(settings.authorizationStatus);
+      void saveNotificationPermission(permission);
+      client.reportNotificationEvent({ stage: 'permission', permission });
+    });
 
     client.connect();
     void AsyncStorage.multiSet([
@@ -242,6 +396,8 @@ function App() {
     return () => {
       unregisterAsyncStorage();
       unregisterMMKV();
+      unregisterNotifications();
+      unsubscribeNotificationEvents();
       client.disconnect();
     };
   }, []);
@@ -308,6 +464,8 @@ function HomeScreen({ onOpenDetails }: { onOpenDetails: () => void }) {
   const [reduxCount, setReduxCount] = useState(demoStore.getState().count);
   const [debuggerResult, setDebuggerResult] = useState('Not run');
   const [animationResult, setAnimationResult] = useState('Not run');
+  const [pushToken, setPushToken] = useState('');
+  const [pushTokenStatus, setPushTokenStatus] = useState('No saved push token');
   const animatedProgress = useSharedValue(0);
   const activeAnimationId = useSharedValue('');
   const lastReportedBucket = useSharedValue(-1);
@@ -357,6 +515,24 @@ function HomeScreen({ onOpenDetails }: { onOpenDetails: () => void }) {
       unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    void AsyncStorage.getItem(PUSH_TOKEN_STORAGE_KEY).then(token => {
+      if (token) {
+        setPushToken(token);
+        setPushTokenStatus('Push token restored from local storage');
+      }
+    });
+  }, []);
+
+  const persistPushToken = async () => {
+    await savePushToken(pushToken);
+    setPushTokenStatus(
+      pushToken.trim()
+        ? 'Push token saved locally · refresh the device in Push Lab'
+        : 'Saved push token cleared',
+    );
+  };
 
   const sendConsoleDemo = () => {
     const circular: Record<string, unknown> = {
@@ -578,6 +754,25 @@ function HomeScreen({ onOpenDetails }: { onOpenDetails: () => void }) {
         <Text style={styles.eyebrow}>PULSERN SDK · COMMUNITY CLI</Text>
         <Text style={styles.title}>PulseRN native demos</Text>
         <Text style={styles.body}>Desktop endpoint: ws://{host}:9090</Text>
+        <View style={styles.pushTokenCard}>
+          <Text style={styles.pushTokenLabel}>APNs / FCM device token</Text>
+          <TextInput
+            autoCapitalize="none"
+            autoCorrect={false}
+            multiline
+            onChangeText={setPushToken}
+            placeholder="Paste the token reported by your messaging SDK"
+            placeholderTextColor="#596275"
+            style={styles.pushTokenInput}
+            value={pushToken}
+          />
+          <DemoButton
+            label={pushToken.trim() ? 'Save push token' : 'Clear saved token'}
+            onPress={() => void persistPushToken()}
+            color="#326d91"
+          />
+          <Text style={styles.pushTokenStatus}>{pushTokenStatus}</Text>
+        </View>
         <DemoButton label="Emit console demo" onPress={sendConsoleDemo} />
         <Text style={styles.counter}>{sent} console demos emitted</Text>
         <DemoButton
@@ -705,6 +900,28 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   body: { color: '#8e97a9', fontSize: 15, marginBottom: 14, marginTop: 12 },
+  pushTokenCard: {
+    backgroundColor: '#11151c',
+    borderColor: '#292f3b',
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 4,
+    padding: 14,
+  },
+  pushTokenLabel: { color: '#cbd1dc', fontSize: 13, fontWeight: '700' },
+  pushTokenInput: {
+    backgroundColor: '#0d1016',
+    borderColor: '#292f3b',
+    borderRadius: 8,
+    borderWidth: 1,
+    color: '#cbd1dc',
+    fontSize: 12,
+    marginTop: 10,
+    minHeight: 68,
+    padding: 10,
+    textAlignVertical: 'top',
+  },
+  pushTokenStatus: { color: '#687085', fontSize: 11, marginTop: 9 },
   button: {
     alignItems: 'center',
     borderRadius: 10,

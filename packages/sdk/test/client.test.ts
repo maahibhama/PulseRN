@@ -20,6 +20,49 @@ function createSocket(): WebSocketLike & { bufferedAmount: number; sent: string[
 }
 
 describe('DevToolClient', () => {
+  it('handles notification capability and presentation commands through the adapter', async () => {
+    const socket = createSocket();
+    const present = vi.fn();
+    const client = new DevToolClient({ appName: 'Example', isDevelopment: true }, () => socket);
+    client.registerNotificationAdapter({
+      getCapabilities: () => ({
+        platform: 'ios',
+        permission: 'authorized',
+        localNotifications: true,
+        richMedia: true,
+        pushToken: 'apns-token',
+        tokenType: 'apns',
+      }),
+      present,
+    });
+    client.connect();
+    socket.onopen?.();
+    expect(JSON.parse(socket.sent[0] ?? '{}').capabilities).toContain('notification-testing');
+    socket.onmessage?.({
+      data: JSON.stringify({
+        kind: 'server-hello',
+        accepted: true,
+        protocolVersion: PROTOCOL_VERSION,
+        connectionId: 'connection-1',
+        serverTime: Date.now(),
+      }),
+    });
+    socket.onmessage?.({
+      data: JSON.stringify({
+        kind: 'notification-command',
+        requestId: 'push-1',
+        operation: 'present',
+        notification: { title: 'Hello', body: 'World' },
+      }),
+    });
+    await vi.waitFor(() => expect(present).toHaveBeenCalledWith({ title: 'Hello', body: 'World' }));
+    expect(
+      socket.sent
+        .map((value) => JSON.parse(value) as { kind: string })
+        .some((value) => value.kind === 'notification-result'),
+    ).toBe(true);
+    client.disconnect();
+  });
   it('exchanges a one-time pairing code for a reconnect token', () => {
     vi.useFakeTimers();
     const first = createSocket();

@@ -15,6 +15,7 @@ import { SettingsPanel } from './SettingsPanel.js';
 import { NativeLogsPanel } from './NativeLogsPanel.js';
 import { SessionsPanel } from './SessionsPanel.js';
 import { StoragePanel } from './StoragePanel.js';
+import { PushLabPanel } from './PushLabPanel.js';
 import darkAppIcon from '../../../resources/pulse-rn-app-icon-dark.png';
 import lightAppIcon from '../../../resources/pulse-rn-app-icon-light.png';
 import { deviceLabel, findSelectedEvent, useDesktopStore } from './store.js';
@@ -43,6 +44,7 @@ type ViewName =
   | 'Performance'
   | 'Animations'
   | 'Storage'
+  | 'Push Lab'
   | 'Errors'
   | 'Debugger'
   | 'Sessions'
@@ -60,6 +62,7 @@ const navItems: { name: ViewName; icon: string; available: boolean }[] = [
   { name: 'Performance', icon: '⌁', available: true },
   { name: 'Animations', icon: '◌', available: true },
   { name: 'Storage', icon: '▤', available: true },
+  { name: 'Push Lab', icon: '↥', available: true },
   { name: 'Errors', icon: '△', available: true },
   { name: 'Debugger', icon: '⏵', available: true },
   { name: 'Sessions', icon: '◫', available: true },
@@ -75,6 +78,7 @@ const inspectorCategories: Partial<Record<ViewName, DevToolEventCategory[]>> = {
   Navigation: ['navigation'],
   Performance: ['performance', 'network', 'redux', 'navigation'],
   Animations: ['animation', 'worklet', 'interaction', 'error'],
+  'Push Lab': ['notification'],
   Errors: ['error'],
 };
 
@@ -997,6 +1001,8 @@ export function App() {
         />
       ) : activeView === 'Storage' ? (
         <StoragePanel devices={devices} />
+      ) : activeView === 'Push Lab' ? (
+        <PushLabPanel devices={devices} />
       ) : activeView === 'Errors' ? (
         <ErrorsPanel
           events={inspectorPage.events}

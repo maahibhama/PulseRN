@@ -14,6 +14,8 @@ import type {
   StorageCommand,
   StorageEventPayload,
   StorageResult,
+  NotificationCommand,
+  NotificationResult,
 } from './protocol-types.js';
 import { installAxiosInterceptor, type AxiosInstanceLike } from './axios-instrumentation';
 import { installConsoleInterceptor } from './console-instrumentation';
@@ -38,6 +40,8 @@ import type {
   TrackEventInput,
   WebSocketFactory,
   WebSocketLike,
+  NotificationAdapter,
+  NotificationLifecycleEvent,
 } from './types.js';
 import { pulseRNEventCategories, validatePulseRNConfig } from './configuration.js';
 
@@ -118,6 +122,7 @@ export class DevToolClient {
   private recentEvents: ErrorContextEvent[] = [];
   private currentScreen?: string;
   private readonly storageProviders = new Map<string, RegisteredStorageProvider>();
+  private notificationAdapter?: NotificationAdapter;
   private readonly storageBackups = new Map<
     string,
     { providerId: string; key: string; value: string | null }
@@ -525,6 +530,22 @@ export class DevToolClient {
     };
   }
 
+  registerNotificationAdapter(adapter: NotificationAdapter): () => void {
+    this.notificationAdapter = adapter;
+    return () => {
+      if (this.notificationAdapter === adapter) this.notificationAdapter = undefined;
+    };
+  }
+
+  reportNotificationEvent(event: NotificationLifecycleEvent): void {
+    this.track({
+      category: 'notification',
+      type: `notification.${event.stage}`,
+      payload: event,
+      ...(event.requestId ? { correlationId: event.requestId } : {}),
+    });
+  }
+
   private networkOptions(): Partial<NetworkCaptureOptions> {
     return {
       captureRequestBodies: this.config.captureRequestBodies ?? true,
@@ -601,6 +622,7 @@ export class DevToolClient {
       sessionId: this.sessionId,
       deviceId: this.deviceId,
       appId: this.appId,
+      capabilities: ['notification-testing'],
       device: {
         name: this.config.device?.name ?? 'React Native device',
         platform: this.config.device?.platform ?? 'unknown',
@@ -629,6 +651,10 @@ export class DevToolClient {
       if (!result.success) return;
       if (result.data.kind === 'storage-command') {
         if (this.negotiated) void this.handleStorageCommand(result.data);
+        return;
+      }
+      if (result.data.kind === 'notification-command') {
+        if (this.negotiated) void this.handleNotificationCommand(result.data);
         return;
       }
       if (!result.data.accepted) {
@@ -789,6 +815,49 @@ export class DevToolClient {
       ...(response.error ? { error: response.error } : {}),
     };
     this.track({ category: 'storage', type: `storage.${command.operation}`, payload });
+  }
+
+  private async handleNotificationCommand(command: NotificationCommand): Promise<void> {
+    let response: NotificationResult;
+    try {
+      if (!this.notificationAdapter) throw new Error('No notification adapter is registered.');
+      const capabilities = await this.notificationAdapter.getCapabilities();
+      if (command.operation === 'present') {
+        if (!command.notification) throw new Error('Notification content is required.');
+        if (!capabilities.localNotifications)
+          throw new Error('Local notifications are unsupported.');
+        await this.notificationAdapter.present(command.notification);
+        this.track({
+          category: 'notification',
+          type: 'notification.presented',
+          correlationId: command.requestId,
+          payload: { requestId: command.requestId, stage: 'presented', success: true },
+        });
+      }
+      response = {
+        kind: 'notification-result',
+        requestId: command.requestId,
+        operation: command.operation,
+        success: true,
+        capabilities,
+      };
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : 'Notification operation failed.';
+      response = {
+        kind: 'notification-result',
+        requestId: command.requestId,
+        operation: command.operation,
+        success: false,
+        error: { code: 'notification_adapter_error', message },
+      };
+      this.track({
+        category: 'notification',
+        type: 'notification.failed',
+        correlationId: command.requestId,
+        payload: { requestId: command.requestId, stage: 'failed', success: false, message },
+      });
+    }
+    this.socket?.send(JSON.stringify(response));
   }
 
   private async backupStorageValue(

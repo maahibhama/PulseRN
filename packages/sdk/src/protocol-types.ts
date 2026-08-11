@@ -13,6 +13,7 @@ export type DevToolEventCategory =
   | 'animation'
   | 'worklet'
   | 'storage'
+  | 'notification'
   | 'error'
   | 'device'
   | 'interaction'
@@ -292,9 +293,44 @@ export interface ClientHello {
   deviceId: string;
   appId: string;
   device: DeviceInfo;
+  capabilities?: string[];
   authToken?: string;
   pairingCode?: string;
   reconnectToken?: string;
+}
+
+export interface NotificationInput extends JsonObject {
+  title: string;
+  body: string;
+  subtitle?: string;
+  sound?: string;
+  badge?: number;
+  deepLink?: string;
+  mediaUrl?: string;
+  data?: JsonValue;
+}
+export interface NotificationCapabilities extends JsonObject {
+  platform: 'ios' | 'android' | 'unknown';
+  permission: 'unknown' | 'denied' | 'provisional' | 'authorized';
+  localNotifications: boolean;
+  richMedia: boolean;
+  notificationServiceExtension?: boolean;
+  pushToken?: string;
+  tokenType?: 'apns' | 'fcm';
+}
+export interface NotificationCommand {
+  kind: 'notification-command';
+  requestId: string;
+  operation: 'capabilities' | 'present';
+  notification?: NotificationInput;
+}
+export interface NotificationResult {
+  kind: 'notification-result';
+  requestId: string;
+  operation: 'capabilities' | 'present';
+  success: boolean;
+  capabilities?: NotificationCapabilities;
+  error?: { code: string; message: string };
 }
 
 export interface EventBatch {

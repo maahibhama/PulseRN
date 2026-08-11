@@ -12,6 +12,9 @@ import {
   type StorageCommand,
   type StorageOperation,
   type StorageResult,
+  type NotificationCommand,
+  type NotificationInput,
+  type NotificationResult,
 } from '@pulse-rn/protocol';
 import { WebSocketServer, type WebSocket } from 'ws';
 import type { ConnectedDevice, DisconnectInfo } from './session-manager.js';
@@ -78,6 +81,15 @@ export class DevToolWebSocketServer {
     {
       connectionId: string;
       resolve(value: StorageResult): void;
+      reject(error: Error): void;
+      timer: ReturnType<typeof setTimeout>;
+    }
+  >();
+  private readonly pendingNotifications = new Map<
+    string,
+    {
+      connectionId: string;
+      resolve(value: NotificationResult): void;
       reject(error: Error): void;
       timer: ReturnType<typeof setTimeout>;
     }
@@ -173,6 +185,31 @@ export class DevToolWebSocketServer {
     });
   }
 
+  requestNotification(
+    connectionId: string,
+    operation: 'capabilities' | 'present',
+    notification?: NotificationInput,
+  ): Promise<NotificationResult> {
+    const socket = this.sockets.get(connectionId);
+    if (!socket || socket.readyState !== socket.OPEN)
+      return Promise.reject(new Error('The selected device is no longer connected.'));
+    const requestId = createId('notification');
+    const command: NotificationCommand = {
+      kind: 'notification-command',
+      requestId,
+      operation,
+      ...(notification ? { notification } : {}),
+    };
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingNotifications.delete(requestId);
+        reject(new Error('Notification request timed out.'));
+      }, 10_000);
+      this.pendingNotifications.set(requestId, { connectionId, resolve, reject, timer });
+      socket.send(JSON.stringify(command));
+    });
+  }
+
   private handleConnection(socket: WebSocket, request: IncomingMessage): void {
     const connectionId = createId('connection');
     let negotiated = false;
@@ -248,6 +285,7 @@ export class DevToolWebSocketServer {
             remoteAddress: request.socket.remoteAddress,
             connectedAt: Date.now(),
             device: message.device,
+            capabilities: message.capabilities,
           });
           socket.send(
             JSON.stringify({
@@ -283,6 +321,14 @@ export class DevToolWebSocketServer {
             pending.resolve(message);
           }
         }
+        if (message.kind === 'notification-result') {
+          const pending = this.pendingNotifications.get(message.requestId);
+          if (pending?.connectionId === connectionId) {
+            clearTimeout(pending.timer);
+            this.pendingNotifications.delete(message.requestId);
+            pending.resolve(message);
+          }
+        }
       } catch (error) {
         this.callbacks.onInvalidMessage(error instanceof Error ? error.message : 'Invalid JSON');
       }
@@ -297,6 +343,12 @@ export class DevToolWebSocketServer {
         clearTimeout(pending.timer);
         pending.reject(new Error('Device disconnected during storage request.'));
         this.pendingStorage.delete(requestId);
+      }
+      for (const [requestId, pending] of this.pendingNotifications) {
+        if (pending.connectionId !== connectionId) continue;
+        clearTimeout(pending.timer);
+        pending.reject(new Error('Device disconnected during notification request.'));
+        this.pendingNotifications.delete(requestId);
       }
       if (negotiated) {
         this.callbacks.onDisconnected(connectionId, {

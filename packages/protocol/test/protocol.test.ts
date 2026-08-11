@@ -17,9 +17,45 @@ import {
   storageEventPayloadSchema,
   storageResultSchema,
   serverHelloSchema,
+  notificationCommandSchema,
+  notificationResultSchema,
 } from '../src/index.js';
 
 describe('protocol', () => {
+  it('validates notification testing commands and HTTPS rich media', () => {
+    expect(
+      notificationCommandSchema.safeParse({
+        kind: 'notification-command',
+        requestId: 'push-1',
+        operation: 'present',
+        notification: { title: 'Hello', body: 'World', mediaUrl: 'https://example.com/image.jpg' },
+      }).success,
+    ).toBe(true);
+    expect(
+      notificationCommandSchema.safeParse({
+        kind: 'notification-command',
+        requestId: 'push-1',
+        operation: 'present',
+        notification: { title: 'Hello', body: 'World', mediaUrl: 'http://example.com/image.jpg' },
+      }).success,
+    ).toBe(false);
+    expect(
+      notificationResultSchema.safeParse({
+        kind: 'notification-result',
+        requestId: 'push-1',
+        operation: 'capabilities',
+        success: true,
+        capabilities: {
+          platform: 'ios',
+          permission: 'authorized',
+          localNotifications: true,
+          richMedia: true,
+          pushToken: 'token',
+          tokenType: 'apns',
+        },
+      }).success,
+    ).toBe(true);
+  });
   it('negotiates the current version', () => {
     expect(negotiateProtocolVersion(['0.9.0', PROTOCOL_VERSION])).toBe(PROTOCOL_VERSION);
     expect(negotiateProtocolVersion(['0.9.0'])).toBeUndefined();
