@@ -6,7 +6,7 @@
 [![React Native](https://img.shields.io/badge/React%20Native-0.76%2B-61dafb)](docs/COMPATIBILITY.md)
 [![macOS · Windows · Linux](https://img.shields.io/badge/desktop-macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-7b5cff)](docs/INSTALLATION.md)
 
-[Website and documentation](https://maahibhama.github.io/PulseRN-Site/)
+[Website and documentation](https://www.pulsern.xyz)
 
 **See JavaScript, native logs, network, Redux, navigation, storage, performance, and errors together
 on one React Native debugging timeline.**
