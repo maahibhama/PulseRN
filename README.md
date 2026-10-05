@@ -20,7 +20,7 @@ npx @maahibhama/pulsern
 npm install --save-dev @pulse-rn/sdk
 ```
 
-[Five-minute quick start](docs/QUICKSTART.md) · [Download desktop](https://github.com/maahibhama/PulseRN/releases/latest) · [Explore the offline demo](docs/QUICKSTART.md#explore-before-integrating)
+[Five-minute quick start](docs/QUICKSTART.md) · [Download desktop](https://github.com/maahibhama/PulseRN/releases/latest) · [Explore the offline demo](docs/QUICKSTART.md#explore-before-integrating) · [Directory eligibility](docs/REACT_NATIVE_DIRECTORY.md)
 
 > Status: PulseRN provides a production-ready local debugger, React Native SDK, browser CLI,
 > native iOS Simulator and Android Emulator log capture, secure device pairing, native Hermes
